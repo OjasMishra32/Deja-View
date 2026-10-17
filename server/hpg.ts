@@ -3,6 +3,10 @@
 // Every ssh/rsync call multiplexes over $HPG_SOCKET (opened once by a teammate with password + Duo).
 // ProxyCommand=/usr/bin/false makes ssh fail instead of opening a fresh connection when the master is gone,
 // so nothing here can ever prompt for a password or reach the host directly.
+//
+// VULTR_HOST points the same code at a rented GPU box (vultr/README.md) running the same warm worker: there ssh logs
+// in by itself with a key (still BatchMode, so never a prompt) and keeps its own master for reuse, and there is no
+// Slurm, so nothing builds sbatch/squeue/sacct/scancel commands for it.
 
 import { lstat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -13,6 +17,7 @@ import { exec, lastLines, type ExecResult } from './media.ts';
 export interface HpgConfig {
   /** False when THIRDWHEEL_HPG is 0/off/false/no: nothing here spawns ssh or rsync. */
   enabled: boolean;
+  /** ControlMaster socket: the one a person opened (HiPerGator), or the one ssh keeps for itself (key login). */
   socket: string;
   user: string;
   host: string;
@@ -25,10 +30,20 @@ export interface HpgConfig {
   connectTimeout: number;
   /** Local repository root (source of pipeline/ and hpg/). */
   repoDir: string;
+  /** Where the GPU is, for log lines and errors. */
+  site: string;
+  /** False on a plain GPU box: the batch backend is off and no Slurm command is ever built. */
+  slurm: boolean;
+  /** 'socket': only through a ControlMaster someone opened. 'key': ssh connects itself with `identity` or the agent. */
+  login: 'socket' | 'key';
+  /** Key login: the private key file; empty uses ssh's defaults and agent. */
+  identity: string;
+  /** Key login: extra ssh arguments (VULTR_SSH_OPTS, split on spaces), e.g. ["-p", "2222"]. */
+  sshExtra: string[];
 }
 
 export function hpgConfig(env: Record<string, string | undefined> = process.env): HpgConfig {
-  return {
+  const cfg: HpgConfig = {
     enabled: !/^(0|off|false|no)$/i.test((env.THIRDWHEEL_HPG ?? '').trim()),
     socket: expandHome(env.HPG_SOCKET || '~/.ssh/cm-hpg'),
     user: env.HPG_USER || 'sbernalorta',
@@ -41,6 +56,30 @@ export function hpgConfig(env: Record<string, string | undefined> = process.env)
     rsync: env.HPG_RSYNC_BIN || 'rsync',
     connectTimeout: Number(env.HPG_CONNECT_TIMEOUT || 10),
     repoDir: ROOT,
+    site: 'HiPerGator',
+    slurm: true,
+    login: 'socket',
+    identity: '',
+    sshExtra: [],
+  };
+  const vultr = (env.VULTR_HOST ?? '').trim();
+  if (!vultr) return cfg;
+  // The rented box replaces HiPerGator for the whole lane; the HPG_* lines in .env can stay as they are.
+  return {
+    ...cfg,
+    site: 'Vultr',
+    host: vultr,
+    user: env.VULTR_USER || 'root',
+    root: (env.VULTR_ROOT || '/root/dejaview').replace(/\/+$/, ''),
+    // %C is ssh's hash of host, port and user: a new box never reuses the old box's master.
+    socket: expandHome(env.VULTR_SOCKET || '~/.ssh/cm-vultr-%C'),
+    account: '',
+    qos: '',
+    partition: '',
+    slurm: false,
+    login: 'key',
+    identity: env.VULTR_SSH_KEY ? expandHome(env.VULTR_SSH_KEY) : '',
+    sshExtra: (env.VULTR_SSH_OPTS ?? '').trim().split(/\s+/).filter(Boolean),
   };
 }
 
@@ -70,6 +109,21 @@ export function remoteTarget(cfg: HpgConfig): string {
 }
 
 export function sshOptions(cfg: HpgConfig): string[] {
+  if (cfg.login === 'key') {
+    // The first call opens a master at cfg.socket and later calls (polls every 2 s) reuse it for 10 minutes.
+    // accept-new records a fresh box's host key on first contact and still refuses a changed one.
+    return [
+      '-o', 'BatchMode=yes',
+      '-o', 'ControlMaster=auto',
+      '-o', `ControlPath=${cfg.socket}`,
+      '-o', 'ControlPersist=10m',
+      '-o', 'StrictHostKeyChecking=accept-new',
+      '-o', 'ServerAliveInterval=15',
+      '-o', `ConnectTimeout=${cfg.connectTimeout}`,
+      ...(cfg.identity ? ['-i', cfg.identity, '-o', 'IdentitiesOnly=yes'] : []),
+      ...cfg.sshExtra,
+    ];
+  }
   return [
     '-S', cfg.socket,
     '-o', 'BatchMode=yes',
@@ -87,10 +141,9 @@ export function checkArgv(cfg: HpgConfig): string[] {
   return [cfg.ssh, '-S', cfg.socket, '-O', 'check', remoteTarget(cfg)];
 }
 
-/** The -e value for rsync. rsync splits it on whitespace, so the socket path is quoted when needed. */
+/** The -e value for rsync. rsync splits it on whitespace, so paths with spaces (socket, key) are quoted. */
 export function rsyncShell(cfg: HpgConfig): string {
-  const sock = /\s/.test(cfg.socket) ? `"${cfg.socket}"` : cfg.socket;
-  return `${cfg.ssh} -S ${sock} -o BatchMode=yes -o ControlMaster=no -o ProxyCommand=/usr/bin/false -o ConnectTimeout=${cfg.connectTimeout}`;
+  return [cfg.ssh, ...sshOptions(cfg).map((w) => (/\s/.test(w) ? `"${w}"` : w))].join(' ');
 }
 
 export interface RsyncOptions {
@@ -134,7 +187,17 @@ export function batchJobDir(cfg: HpgConfig, jobId: string): string {
   return assertRemotePath(`${jobsRoot(cfg)}/batch/${jobId}`);
 }
 
+export function noSlurmReason(cfg: HpgConfig): string {
+  return `there is no Slurm on ${cfg.site}; batch jobs only run on HiPerGator`;
+}
+
+/** Every Slurm command goes through this: on a box without Slurm it throws before anything is built. */
+function requireSlurm(cfg: HpgConfig): void {
+  if (!cfg.slurm) throw new Error(noSlurmReason(cfg));
+}
+
 export function sbatchCommand(cfg: HpgConfig, remoteJobDir: string, jobName: string): string {
+  requireSlurm(cfg);
   assertRemotePath(remoteJobDir);
   const name = jobName.replace(/[^A-Za-z0-9_.-]/g, '-').slice(0, 64);
   const args = [
@@ -179,6 +242,7 @@ function jobDirReport(dirExpr: string): string {
 }
 
 export function pollBatchCommand(cfg: HpgConfig, slurmId: string, remoteJobDir: string): string {
+  requireSlurm(cfg);
   if (!/^\d+$/.test(slurmId)) throw new Error(`invalid slurm job id: ${slurmId}`);
   assertRemotePath(remoteJobDir);
   return [
@@ -375,6 +439,7 @@ export function enqueueWorkerCommand(cfg: HpgConfig, jobId: string): string {
 
 async function socketPresent(cfg: HpgConfig): Promise<boolean> {
   if (!cfg.enabled) return false;
+  if (cfg.login === 'key') return true; // ssh opens (and then reuses) its own connection
   try {
     const st = await lstat(cfg.socket);
     return st.isSocket();
@@ -390,15 +455,23 @@ function tildePath(p: string): string {
 
 export function offlineReason(cfg: HpgConfig): string {
   if (!cfg.enabled) return 'disabled (THIRDWHEEL_HPG=off)';
+  if (cfg.login === 'key') {
+    const key = cfg.identity ? ` -i ${tildePath(cfg.identity)}` : '';
+    const extra = cfg.sshExtra.length ? ` ${cfg.sshExtra.join(' ')}` : '';
+    return `offline, cannot log in to ${remoteTarget(cfg)} over SSH (check VULTR_HOST and the key: ssh${key}${extra} ${remoteTarget(cfg)} true)`;
+  }
   const sock = tildePath(cfg.socket);
   return `offline, no SSH session at ${sock} (log in once: ssh -o ControlMaster=auto -o ControlPath=${sock} -o ControlPersist=24h ${remoteTarget(cfg)})`;
 }
 
-/** True when the ControlMaster socket exists and its master answers `ssh -O check`. */
+/** True when the ControlMaster socket exists and its master answers `ssh -O check` (key login: when `true` runs). */
 export async function socketAlive(cfg: HpgConfig = hpgConfig()): Promise<boolean> {
   if (!(await socketPresent(cfg))) return false;
   try {
-    const r = await exec(checkArgv(cfg), { timeoutMs: 5000 });
+    const r =
+      cfg.login === 'key'
+        ? await exec(sshArgv(cfg, 'true'), { timeoutMs: (cfg.connectTimeout + 5) * 1000 })
+        : await exec(checkArgv(cfg), { timeoutMs: 5000 });
     return r.code === 0;
   } catch {
     return false;
@@ -409,10 +482,10 @@ async function requireSocket(cfg: HpgConfig): Promise<void> {
   if (!(await socketPresent(cfg))) throw new HpgOfflineError(offlineReason(cfg));
 }
 
-function sshFailure(what: string, r: ExecResult): Error {
+function sshFailure(cfg: HpgConfig, what: string, r: ExecResult): Error {
   const text = lastLines(r.stderr || r.stdout, 3);
   if (r.code === 255 || /Control socket|mux_client|ProxyCommand|Connection refused|closed by remote/i.test(text)) {
-    return new HpgOfflineError(`HiPerGator connection failed during ${what}: ${text || `ssh exit ${r.code}`}`);
+    return new HpgOfflineError(`${cfg.site} connection failed during ${what}: ${text || `ssh exit ${r.code}`}`);
   }
   return new Error(`${what} failed (exit ${r.code})${text ? `: ${text}` : ''}`);
 }
@@ -422,14 +495,15 @@ export async function run(cmd: string, opts: { timeoutMs?: number; cfg?: HpgConf
   const cfg = opts.cfg ?? hpgConfig();
   await requireSocket(cfg);
   const r = await exec(sshArgv(cfg, cmd), { timeoutMs: opts.timeoutMs ?? 60_000 });
-  if (r.code === 255) throw sshFailure('ssh', r);
+  if (r.code === 255) throw sshFailure(cfg, 'ssh', r);
   return r;
 }
 
 /** Like run() but rejects on a non-zero exit. */
 export async function runOk(cmd: string, what: string, opts: { timeoutMs?: number; cfg?: HpgConfig } = {}): Promise<string> {
-  const r = await run(cmd, opts);
-  if (r.code !== 0) throw sshFailure(what, r);
+  const cfg = opts.cfg ?? hpgConfig();
+  const r = await run(cmd, { ...opts, cfg });
+  if (r.code !== 0) throw sshFailure(cfg, what, r);
   return r.stdout;
 }
 
@@ -437,14 +511,14 @@ export async function rsyncUp(localDir: string, remoteDir: string, opts: RsyncOp
   const cfg = opts.cfg ?? hpgConfig();
   await requireSocket(cfg);
   const r = await exec(rsyncUpArgv(cfg, localDir, remoteDir, opts), { timeoutMs: opts.timeoutMs ?? 30 * 60_000 });
-  if (r.code !== 0) throw sshFailure(`upload to ${remoteDir}`, r);
+  if (r.code !== 0) throw sshFailure(cfg, `upload to ${remoteDir}`, r);
 }
 
 export async function rsyncDown(remoteDir: string, localDir: string, opts: RsyncOptions & { cfg?: HpgConfig; timeoutMs?: number } = {}): Promise<void> {
   const cfg = opts.cfg ?? hpgConfig();
   await requireSocket(cfg);
   const r = await exec(rsyncDownArgv(cfg, remoteDir, localDir, opts), { timeoutMs: opts.timeoutMs ?? 30 * 60_000 });
-  if (r.code !== 0) throw sshFailure(`download from ${remoteDir}`, r);
+  if (r.code !== 0) throw sshFailure(cfg, `download from ${remoteDir}`, r);
 }
 
 /** Mirrors pipeline/ and hpg/ into $HPG_ROOT/repo. */
@@ -453,7 +527,7 @@ export async function syncRepo(cfg: HpgConfig = hpgConfig()): Promise<void> {
   await runOk(`mkdir -p ${shq(`${cfg.root}/repo`)} ${shq(`${jobsRoot(cfg)}/incoming`)} ${shq(`${jobsRoot(cfg)}/batch`)}`, 'mkdir', { cfg });
   for (const argv of syncRepoArgvs(cfg)) {
     const r = await exec(argv, { timeoutMs: 10 * 60_000 });
-    if (r.code !== 0) throw sshFailure('repo sync', r);
+    if (r.code !== 0) throw sshFailure(cfg, 'repo sync', r);
   }
 }
 
@@ -479,7 +553,7 @@ export async function pollBatch(slurmId: string, remoteJobDir: string, cfg: HpgC
 }
 
 export async function cancelBatch(slurmId: string, cfg: HpgConfig = hpgConfig()): Promise<void> {
-  if (!/^\d+$/.test(slurmId)) return;
+  if (!cfg.slurm || !/^\d+$/.test(slurmId)) return;
   await run(`scancel ${slurmId}`, { cfg, timeoutMs: 20_000 }).catch(() => {});
 }
 

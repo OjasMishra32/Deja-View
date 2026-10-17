@@ -1,4 +1,6 @@
 // hpg-worker and hpg-batch backends. Both share one lane: the class allocation allows one GPU at a time.
+// With VULTR_HOST set (server/hpg.ts) hpg-worker drives the same warm worker on a rented box and hpg-batch is off:
+// there is no Slurm there.
 
 import { mkdir } from 'node:fs/promises';
 import type { SceneMode } from '../../shared/types.ts';
@@ -9,6 +11,7 @@ import {
   enqueueWorkerCommand,
   hpgConfig,
   jobsRoot,
+  noSlurmReason,
   pollBatch,
   pollWorkerJob,
   rsyncDown,
@@ -61,7 +64,7 @@ async function syncRepoThrottled(cfg: HpgConfig, force = false): Promise<void> {
 }
 
 /** Retries transient connection errors a few times before giving up. */
-async function withRetries<T>(fn: () => Promise<T>, signal: AbortSignal, what: string, tries = 4): Promise<T> {
+async function withRetries<T>(fn: () => Promise<T>, signal: AbortSignal, what: string, site: string, tries = 4): Promise<T> {
   let last: unknown;
   for (let i = 0; i < tries; i++) {
     throwIfAborted(signal);
@@ -73,7 +76,7 @@ async function withRetries<T>(fn: () => Promise<T>, signal: AbortSignal, what: s
       await sleep(2000 * (i + 1), signal);
     }
   }
-  throw new Error(`lost the connection to HiPerGator while ${what}: ${(last as Error)?.message ?? last}`);
+  throw new Error(`lost the connection to ${site} while ${what}: ${(last as Error)?.message ?? last}`);
 }
 
 /** The job's failure: the pipeline's product sentence (progress.json `error`) when there is one, else technical text. */
@@ -118,19 +121,22 @@ export function hpgWorkerDriver(opts: HpgDriverOptions): BackendDriver {
     const jobId = ctx.state.jobId;
     const jr = jobsRoot(cfg);
     if (ctx.resume) {
-      if (!ctx.state.remoteDir) throw new ResumeImpossible('the job never reached HiPerGator');
+      if (!ctx.state.remoteDir) throw new ResumeImpossible(`the job never reached ${cfg.site}`);
+      // Queued before a switch between HiPerGator and the backup box (VULTR_HOST): it is not here, so start over.
+      if (!ctx.state.remoteDir.startsWith(`${jr}/`)) throw new ResumeImpossible(`the job was queued under ${ctx.state.remoteDir}, not on ${cfg.site}`);
     } else {
       ctx.report({ status: 'uploading', stage: 'Sending to the GPU cluster', progress: 0 });
-      await withRetries(() => syncRepoThrottled(cfg), ctx.signal, 'syncing the pipeline');
-      await withRetries(() => runOk(`mkdir -p ${shq(`${jr}/incoming`)}`, 'mkdir', { cfg }), ctx.signal, 'preparing the job');
+      await withRetries(() => syncRepoThrottled(cfg), ctx.signal, 'syncing the pipeline', cfg.site);
+      await withRetries(() => runOk(`mkdir -p ${shq(`${jr}/incoming`)}`, 'mkdir', { cfg }), ctx.signal, 'preparing the job', cfg.site);
       await withRetries(
         () => rsyncUp(ctx.jobDir, `${jr}/incoming/${jobId}`, { cfg, exclude: UPLOAD_EXCLUDES }),
         ctx.signal,
         'uploading the inputs',
+        cfg.site,
       );
-      await withRetries(() => runOk(enqueueWorkerCommand(cfg, jobId), 'enqueue', { cfg }), ctx.signal, 'queueing the job');
+      await withRetries(() => runOk(enqueueWorkerCommand(cfg, jobId), 'enqueue', { cfg }), ctx.signal, 'queueing the job', cfg.site);
       await ctx.saveState({ remoteDir: `${jr}/queue/${jobId}` });
-      ctx.log(`queued for the HiPerGator worker as ${jobId}`);
+      ctx.log(`queued for the ${cfg.site} worker as ${jobId}`);
     }
 
     const t0 = Date.now();
@@ -151,10 +157,10 @@ export function hpgWorkerDriver(opts: HpgDriverOptions): BackendDriver {
     };
     try {
       while (true) {
-        p = await withRetries(() => pollWorkerJob(jobId, cfg), ctx.signal, 'checking the job');
+        p = await withRetries(() => pollWorkerJob(jobId, cfg), ctx.signal, 'checking the job', cfg.site);
         if (p.worker.alive) lastFresh = Date.now();
         if (p.where === 'missing') {
-          if (sawJob || ++missing > 3) throw new Error('the job disappeared from the HiPerGator job folders');
+          if (sawJob || ++missing > 3) throw new Error(`the job disappeared from the ${cfg.site} job folders`);
         } else {
           sawJob = true;
           missing = 0;
@@ -190,7 +196,7 @@ export function hpgWorkerDriver(opts: HpgDriverOptions): BackendDriver {
           } else ctx.report({ status: 'running', stage: 'Running on the GPU cluster' });
         }
         if (Date.now() - lastFresh > staleMs) {
-          throw new Error(`the HiPerGator worker stopped sending heartbeats (${Math.round((Date.now() - lastFresh) / 1000)} s)`);
+          throw new Error(`the ${cfg.site} worker stopped sending heartbeats (${Math.round((Date.now() - lastFresh) / 1000)} s)`);
         }
         if (Date.now() - t0 > maxJob) {
           await cancel();
@@ -208,12 +214,12 @@ export function hpgWorkerDriver(opts: HpgDriverOptions): BackendDriver {
     let where = p.where === 'missing' ? 'done' : p.where;
     for (let i = 0; ; i++) {
       try {
-        await withRetries(() => rsyncDown(`${jr}/${where}/${jobId}/out`, ctx.outDir, { cfg }), ctx.signal, 'downloading the result');
+        await withRetries(() => rsyncDown(`${jr}/${where}/${jobId}/out`, ctx.outDir, { cfg }), ctx.signal, 'downloading the result', cfg.site);
         break;
       } catch (e) {
         // The folder may have moved (running/ -> done/) between the last poll and rsync: find it and try again.
         if (i >= 2 || ctx.signal.aborted) throw e;
-        const again = await withRetries(() => pollWorkerJob(jobId, cfg), ctx.signal, 'finding the result');
+        const again = await withRetries(() => pollWorkerJob(jobId, cfg), ctx.signal, 'finding the result', cfg.site);
         if (again.where === 'missing' || again.where === where) throw e;
         ctx.log(`the finished job moved to ${again.where}/; downloading from there`);
         where = again.where;
@@ -224,7 +230,7 @@ export function hpgWorkerDriver(opts: HpgDriverOptions): BackendDriver {
 
   return {
     name: 'hpg-worker',
-    label: 'HiPerGator worker',
+    label: `${cfgOf().site} worker`,
     place: 'the GPU cluster',
     lane: 'hpg',
     canResume: true,
@@ -255,6 +261,11 @@ export function hpgBatchDriver(opts: HpgDriverOptions): BackendDriver {
 
   async function run_(ctx: RunContext): Promise<void> {
     const cfg = cfgOf();
+    if (!cfg.slurm) {
+      // A Slurm job from before the switch cannot be followed from a box without Slurm: the runner starts over.
+      if (ctx.resume) throw new ResumeImpossible(noSlurmReason(cfg));
+      throw new Error(noSlurmReason(cfg));
+    }
     const jobId = ctx.state.jobId;
     let slurmId = ctx.state.slurmId;
     let remoteDir = ctx.state.remoteDir;
@@ -264,10 +275,10 @@ export function hpgBatchDriver(opts: HpgDriverOptions): BackendDriver {
     } else {
       remoteDir = batchJobDir(cfg, jobId);
       ctx.report({ status: 'uploading', stage: 'Sending to the GPU cluster', progress: 0 });
-      await withRetries(() => syncRepoThrottled(cfg, true), ctx.signal, 'syncing the pipeline');
-      await withRetries(() => rsyncUp(ctx.jobDir, remoteDir!, { cfg, exclude: UPLOAD_EXCLUDES }), ctx.signal, 'uploading the inputs');
+      await withRetries(() => syncRepoThrottled(cfg, true), ctx.signal, 'syncing the pipeline', cfg.site);
+      await withRetries(() => rsyncUp(ctx.jobDir, remoteDir!, { cfg, exclude: UPLOAD_EXCLUDES }), ctx.signal, 'uploading the inputs', cfg.site);
       throwIfAborted(ctx.signal);
-      slurmId = await withRetries(() => submitBatch(remoteDir!, `tw-${ctx.scene.id}`, cfg), ctx.signal, 'submitting');
+      slurmId = await withRetries(() => submitBatch(remoteDir!, `tw-${ctx.scene.id}`, cfg), ctx.signal, 'submitting', cfg.site);
       await ctx.saveState({ remoteDir, slurmId });
       ctx.log(`submitted Slurm job ${slurmId} (${cfg.partition || 'default partition'})`);
     }
@@ -278,7 +289,7 @@ export function hpgBatchDriver(opts: HpgDriverOptions): BackendDriver {
     let p: BatchPoll;
     try {
       while (true) {
-        p = await withRetries(() => pollBatch(slurmId!, remoteDir!, cfg), ctx.signal, 'checking the job');
+        p = await withRetries(() => pollBatch(slurmId!, remoteDir!, cfg), ctx.signal, 'checking the job', cfg.site);
         if (p.state === 'UNKNOWN') {
           unknownSince ??= Date.now();
           if (Date.now() - unknownSince > 3 * 60_000) throw new Error(`Slurm does not know job ${slurmId}`);
@@ -318,7 +329,7 @@ export function hpgBatchDriver(opts: HpgDriverOptions): BackendDriver {
 
     ctx.report({ status: 'downloading', stage: 'Downloading the world', progress: 1 });
     await mkdir(ctx.outDir, { recursive: true });
-    await withRetries(() => rsyncDown(`${remoteDir}/out`, ctx.outDir, { cfg }), ctx.signal, 'downloading the result');
+    await withRetries(() => rsyncDown(`${remoteDir}/out`, ctx.outDir, { cfg }), ctx.signal, 'downloading the result', cfg.site);
     if (p.logTail) ctx.logRaw(p.logTail);
   }
 
@@ -330,6 +341,9 @@ export function hpgBatchDriver(opts: HpgDriverOptions): BackendDriver {
     canResume: true,
     supports: (m) => ALL_MODES.includes(m),
     available: async () => {
+      // Checked before any probe, so a box without Slurm never even gets an ssh call from this backend.
+      const cfg = cfgOf();
+      if (!cfg.slurm) return { ok: false, reason: noSlurmReason(cfg) };
       const o = await onlineOrReason(opts.probe);
       if (!o.ok) return o;
       // The warm worker already holds the group's GPU; a batch job would take the second one.
