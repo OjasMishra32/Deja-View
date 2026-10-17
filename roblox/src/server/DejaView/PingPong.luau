@@ -200,6 +200,23 @@ local function buildTable(tableCf: CFrame, length: number, width: number, visibl
 	board.Text = ""
 	board.Parent = gui
 
+	local probeGui = Instance.new("BillboardGui")
+	probeGui.Name = "ClientProbeGui"
+	probeGui.Size = UDim2.fromOffset(420, 44)
+	probeGui.AlwaysOnTop = true
+	probeGui.StudsOffset = Vector3.new(0, 1.4, 0)
+	probeGui.Parent = anchor
+	local probe = Instance.new("TextLabel")
+	probe.Name = "ClientProbe"
+	probe.Size = UDim2.fromScale(1, 1)
+	probe.BackgroundTransparency = 1
+	probe.Font = Enum.Font.Code
+	probe.TextSize = 18
+	probe.TextColor3 = Color3.fromRGB(120, 255, 150)
+	probe.TextStrokeTransparency = 0.2
+	probe.Text = "server up, waiting for a client"
+	probe.Parent = probeGui
+
 	local signGui = Instance.new("BillboardGui")
 	signGui.Name = "RealPingPongSign"
 	signGui.Size = UDim2.fromOffset(360, 72)
@@ -273,7 +290,8 @@ local function launch(to: string, p0: Vector3, flight: number, aim: number)
 	state.rally = state.rally or 0
 	lastHitter = other(to)
 	lastBounce = nil
-	local v = Sim.assistReturn(p0, other(to), aim, flight, len, wid)
+	-- aim at the receiver's half, never back at the hitter
+	local v = Sim.assistReturn(p0, to, aim, flight, len, wid)
 	state.v = v
 	ball.CFrame = frame * CFrame.new(state.p)
 	broadcastState()
@@ -601,8 +619,30 @@ function PingPong.join(player: Player)
 	if side then
 		return
 	end
-	for _, s in { "A", "B" } do
-		if not sides[s] then
+	-- the side you get is the end you actually stand on
+	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if hrp then
+		local lp = frame:PointToObjectSpace(hrp.Position)
+		local want = if lp.Z < 0 then "A" else "B"
+		if not sides[want] then
+			side = want
+		end
+	end
+	if not side then
+		for _, s in { "A", "B" } do
+			if not sides[s] then
+				side = s
+				break
+			end
+		end
+	end
+	if side then
+		local s = side
+		local firstJoin = sides.A == nil and sides.B == nil
+		do
+			if firstJoin and (state == nil or not state.live) then
+				serverSide = s
+			end
 			sides[s] = player
 			if PPSide then
 				PPSide:FireClient(player, s)
@@ -654,7 +694,13 @@ function PingPong.start()
 		PingPong.join(player)
 	end)
 	PPWho.OnServerInvoke = function(player)
-		return playerSide(player)
+		local side = playerSide(player)
+		local probe = folder and folder:FindFirstChild("ClientProbe", true)
+		if probe and probe:IsA("TextLabel") then
+			probe.Text = string.format("CLIENT CONNECTED: %s (%s)", player.DisplayName, side or "no side")
+		end
+		print("[PingPong] PPWho from", player.Name, "side", side)
+		return side
 	end
 
 	PPHit.OnServerEvent:Connect(function(player, payload)

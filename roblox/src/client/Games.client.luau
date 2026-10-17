@@ -4,16 +4,51 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local PingPongView = require(script.Parent.Modules.PingPongView)
 
 local player = Players.LocalPlayer
+
+-- Diagnostic HUD, drawn before anything else so a stall is visible on screen.
+local diagGui = Instance.new("ScreenGui")
+diagGui.Name = "PPDiag"
+diagGui.ResetOnSpawn = false
+diagGui.IgnoreGuiInset = true
+diagGui.Parent = player:WaitForChild("PlayerGui")
+local diag = Instance.new("TextLabel")
+diag.Size = UDim2.fromOffset(620, 22)
+diag.Position = UDim2.fromOffset(12, 120)
+diag.BackgroundTransparency = 0.35
+diag.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+diag.Font = Enum.Font.Code
+diag.TextSize = 14
+diag.TextColor3 = Color3.fromRGB(120, 255, 150)
+diag.TextXAlignment = Enum.TextXAlignment.Left
+diag.Text = "PP CLIENT v5: start"
+diag.Parent = diagGui
+local function dbg(text: string)
+	diag.Text = "PP CLIENT v5: " .. text
+	print("[PingPong] " .. text)
+end
+
+local PingPongView = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PingPongView"))
+
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
-local PPPaddle = Remotes:WaitForChild("PPPaddle") :: UnreliableRemoteEvent
-local PPHit = Remotes:WaitForChild("PPHit") :: RemoteEvent
-local PPState = Remotes:WaitForChild("PPState") :: RemoteEvent
-local PPSide = Remotes:WaitForChild("PPSide") :: RemoteEvent
-local PPJoin = Remotes:WaitForChild("PPJoin") :: RemoteEvent
-local PPWho = Remotes:WaitForChild("PPWho") :: RemoteFunction
+local function need(name: string, class: string): any
+	dbg("waiting for " .. name)
+	local r = Remotes:WaitForChild(name, 15)
+	if not r then
+		dbg("MISSING " .. name)
+		error("missing remote " .. name)
+	end
+	dbg("got " .. name .. " (" .. r.ClassName .. ")")
+	return r
+end
+local PPPaddle = need("PPPaddle", "UnreliableRemoteEvent") :: UnreliableRemoteEvent
+local PPHit = need("PPHit", "RemoteEvent") :: RemoteEvent
+local PPState = need("PPState", "RemoteEvent") :: RemoteEvent
+local PPSide = need("PPSide", "RemoteEvent") :: RemoteEvent
+local PPJoin = need("PPJoin", "RemoteEvent") :: RemoteEvent
+local PPWho = need("PPWho", "RemoteFunction") :: RemoteFunction
+dbg("remotes ready")
 
 local GRIP = CFrame.new(0, 0, -0.35) * CFrame.Angles(math.rad(-20), 0, 0)
 local PADDLE_SEND = 1 / 30
@@ -361,6 +396,7 @@ PPState.OnClientEvent:Connect(function(msg)
 	end
 	if msg.active ~= nil then
 		active = msg.active == true
+		dbg(if active then "active" else "inactive")
 		version.Visible = active
 		if not active then
 			mySide = nil
