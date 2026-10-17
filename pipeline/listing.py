@@ -11,18 +11,18 @@ them, removes them, and after the rebuild gives the world a walk zone and a spaw
 Finding the overlay. A listing's photos share their overlay, in the same place on every photo, while the room
 behind it changes from photo to photo. So the overlay is where every photo has a strong edge and nearly the same
 brightness: the per-pixel minimum of the normalised edge maps, gated by a low brightness spread across the photos.
-A lone photo, or a mark on only some of them, is caught by the corner check: text and logos in a corner band are a
-dense patch of fine, high-contrast strokes that the rest of the photo doesn't have.
+Photos of one size are compared with each other only (a portrait photo among landscape ones has its overlay
+somewhere else). A lone photo, or a mark on only some of them, is caught by the corner check: text and logos in a
+corner band are a dense patch of fine, high-contrast strokes that the rest of the photo doesn't have.
 
 Removing it. A mark confined to a border band (a bottom or top strip, the usual place) is cropped off with the band,
 which leaves the photo's real pixels untouched for the reconstruction. Anything else (a mark across the middle) is
-inpainted. Every decision is written to `listing.json` with a mask preview per photo.
+inpainted. Every decision is written to `listing.json`, with a mask preview for each photo that had a mark.
 """
 from __future__ import annotations
 
 import argparse
 import json
-import math
 import shutil
 import sys
 from dataclasses import dataclass, field
@@ -39,6 +39,13 @@ EDGE_T = 0.35  # normalised edge strength every photo must reach for a pixel to 
 SPREAD_T = 0.10  # max spread of brightness (0..1) across photos at an overlay pixel
 CORNER_W, CORNER_H = 0.34, 0.18
 MIN_PIXELS = 40  # smaller marks are noise
+EDGE_RING = 8  # analysis pixels along the photo's own edge that never count: a thin frame drawn on every photo
+
+
+def _clear_ring(m: np.ndarray) -> np.ndarray:
+    r = EDGE_RING
+    m[:r, :] = m[-r:, :] = m[:, :r] = m[:, -r:] = False
+    return m
 
 
 @dataclass
@@ -121,9 +128,26 @@ def shared_overlay(images: list[np.ndarray]) -> np.ndarray | None:
     common = edges.min(axis=0)
     spread = np.stack(grays).std(axis=0)
     m = (common > EDGE_T) & (spread < SPREAD_T)
-    # the photos' own frames (a black border, a straight horizon all of them share) are long straight lines, not marks
-    m[:2, :] = m[-2:, :] = m[:, :2] = m[:, -2:] = False
-    return _clean_mask(m)
+    # a thin frame along every photo's edge is not a mark, and a wide one is one big outline that _clean_mask drops
+    # as scene; a frame about as wide as the ring, or the edge of a letterbox bar further in, can still leave a mark
+    return _clean_mask(_clear_ring(m))
+
+
+def size_groups(images: list[np.ndarray], tol: float = 0.02) -> list[list[int]]:
+    """Indices of the photos of the same size (each side within `tol`). The overlay sits in the same place only on
+    photos of one size, so each group is compared on its own: one portrait photo, or one at another resolution, in
+    the same comparison would hide a mark the others share."""
+    groups: list[list[int]] = []
+    for i, im in enumerate(images):
+        h, w = im.shape[:2]
+        for g in groups:
+            h0, w0 = images[g[0]].shape[:2]
+            if abs(h - h0) <= tol * h0 and abs(w - w0) <= tol * w0:
+                g.append(i)
+                break
+        else:
+            groups.append([i])
+    return groups
 
 
 def stroke_density(gray: np.ndarray) -> np.ndarray:
@@ -144,7 +168,7 @@ def corner_overlay(image: np.ndarray, ratio: float = 3.0, min_density: float = 0
     s = WORK / max(h0, w0)
     W, H = int(round(w0 * s)), int(round(h0 * s))
     g = _resize(_gray(image), W, H)
-    st = stroke_density(g)
+    st = _clear_ring(stroke_density(g))  # a thin frame along the edge would fill every corner with strokes
     cw, ch = int(W * CORNER_W), int(H * CORNER_H)
     corners = {"bottom-right": (H - ch, H, W - cw, W), "bottom-left": (H - ch, H, 0, cw),
                "top-right": (0, ch, W - cw, W), "top-left": (0, ch, 0, cw)}
@@ -161,9 +185,13 @@ def corner_overlay(image: np.ndarray, ratio: float = 3.0, min_density: float = 0
 
 def detect(images: list[np.ndarray]) -> list[Overlay]:
     """One Overlay per photo (an empty mask where there is nothing to remove)."""
-    shared = shared_overlay(images)
+    shared_of: list[np.ndarray | None] = [None] * len(images)
+    for g in size_groups(images):
+        found = shared_overlay([images[i] for i in g])
+        for i in g:
+            shared_of[i] = found
     out = []
-    for im in images:
+    for im, shared in zip(images, shared_of):
         h, w = im.shape[:2]
         src = []
         m = np.zeros((h, w), bool)
@@ -199,8 +227,10 @@ def remove(image: np.ndarray, ov: Overlay, band: float = BAND) -> tuple[np.ndarr
         return image[:, :max(1, x0 - pad)], {"action": "crop", "side": "right", "pixels": int(w - x0 + pad)}
     if x1 <= w * band and (y1 - y0) < 0.6 * h:
         return image[:, x1 + pad:], {"action": "crop", "side": "left", "pixels": int(x1 + pad)}
-    u8 = np.ascontiguousarray(np.asarray(image, np.uint8)[..., :3])
-    clean = cv2.inpaint(u8, ov.mask.astype(np.uint8) * 255, 5, cv2.INPAINT_TELEA)
+    a = np.asarray(image, np.uint8)
+    colour = np.ascontiguousarray(a if a.ndim == 2 else a[..., :3])  # grey or RGB; an alpha channel is kept as it is
+    filled = cv2.inpaint(colour, ov.mask.astype(np.uint8) * 255, 5, cv2.INPAINT_TELEA)
+    clean = filled if a.ndim == 2 or a.shape[2] == 3 else np.dstack([filled, a[..., 3:]])
     return clean, {"action": "inpaint", "pixels": int(ov.mask.sum()), "share": round(float(ov.mask.mean()), 4)}
 
 
@@ -208,11 +238,14 @@ def clean_photos(paths: list[Path], out_dir: Path, preview_dir: Path | None = No
                  report_path: Path | None = None) -> dict:
     """Detects and removes the overlays of a listing's photos. Writes the clean photos to `out_dir` under the same
     names (JPEG), optional mask previews, and returns the report (also written to `report_path`, by default
-    `out_dir/listing.json`; a job keeps it out of the image folder the rebuild reads)."""
+    `out_dir/listing.json`; a job keeps it out of the image folder the rebuild reads). Photos are read as a job reads
+    them: EXIF orientation applied, transparency on white."""
     from PIL import Image
 
+    from common.media import load_image
+
     out_dir.mkdir(parents=True, exist_ok=True)
-    imgs = [np.asarray(Image.open(p).convert("RGB")) for p in paths]
+    imgs = [load_image(p) for p in paths]
     overlays = detect(imgs)
     report = {"photos": []}
     for p, im, ov in zip(paths, imgs, overlays):
@@ -235,11 +268,12 @@ def clean_photos(paths: list[Path], out_dir: Path, preview_dir: Path | None = No
 
 # --- after the rebuild ---------------------------------------------------------------------------------------------
 
-def add_walk_zone(out_dir: Path, result: dict, work_dir: Path, render=None, log=print) -> dict:
+def add_walk_zone(out_dir: Path, result: dict, work_dir: Path, render=None, log=print, reraise: tuple = ()) -> dict:
     """Walk zone, collider and a spawn facing what the photos saw, for the world the rebuild wrote into `out_dir`.
     Files go to the top of out/ (the server copies only top-level files and the ones scene.json names). On any
     failure the rebuild's own spawn stays and the reason is returned, so the world still ships. Only the contract's
-    own fields change (world.collider, world.spawn); walkzone.json is a file next to the world."""
+    own fields change (world.collider, world.spawn); walkzone.json is a file next to the world. Exceptions in
+    `reraise` (the job's cancel) pass through instead of counting as a failed walk zone."""
     import walkzone_auto as W
     from objects import scene as obj_scene
 
@@ -249,6 +283,8 @@ def add_walk_zone(out_dir: Path, result: dict, work_dir: Path, render=None, log=
         cams = W.room_cameras(out_dir, world)
         doc = W.build(splats, world, cams, work_dir / "walkzone", W.Thresholds(), render=render, log=log,
                       spawn_facing="captured")
+    except reraise:
+        raise
     except SystemExit as e:  # no spot passed
         return {"ok": False, "reason": str(e)}
     except Exception as e:  # noqa: BLE001

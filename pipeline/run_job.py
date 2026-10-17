@@ -377,7 +377,7 @@ def run_reconstruct(job: Job) -> dict:
         job.stage("Finding where you can walk", 0.92)
         from listing import add_walk_zone
 
-        wz = add_walk_zone(job.out_dir, res, job.work_dir, log=job.log)
+        wz = add_walk_zone(job.out_dir, res, job.work_dir, log=job.log, reraise=(Cancelled,))
         if wz["ok"]:
             job.log(f"walk zone {wz['areaM2']} m2, spawn {wz['spawn']}")
         else:
@@ -391,16 +391,28 @@ def run_reconstruct(job: Job) -> dict:
 
 def _clean_listing(job: Job, img_dir: Path) -> None:
     """Crops or inpaints the listing's watermarks and logos in place (pipeline/listing.py). The originals stay in
-    work/listing-raw, the decisions in work/listing.json and the mask previews in work/listing-masks."""
-    from listing import clean_photos
-
+    work/listing-raw, the decisions in work/listing.json and the mask previews in work/listing-masks. If the clean-up
+    fails, the rebuild gets the original photos and the caption says so: the world still ships."""
     job.stage("Removing watermarks", 0.03)
     raw = job.work_dir / "listing-raw"
     if raw.exists():
         shutil.rmtree(raw)
     shutil.move(str(img_dir), str(raw))
-    rep = clean_photos(sorted(raw.glob("*.jpg")), img_dir, job.work_dir / "listing-masks",
-                       report_path=job.work_dir / "listing.json")
+    try:
+        from listing import clean_photos
+
+        rep = clean_photos(sorted(raw.glob("*.jpg")), img_dir, job.work_dir / "listing-masks",
+                           report_path=job.work_dir / "listing.json")
+    except Cancelled:
+        raise
+    except Exception as e:  # the photos rebuild fine with their marks on
+        job.log(traceback.format_exc().rstrip())
+        if img_dir.exists():
+            shutil.rmtree(img_dir)
+        shutil.copytree(raw, img_dir)
+        job.notice("We couldn't clean the watermarks off these photos, so some may show in the world.",
+                   f"listing clean-up failed: {type(e).__name__}: {e}")
+        return
     for e in rep["photos"]:
         if e["action"] != "none":
             job.log(f"listing: {e['file']}: {e['action']} ({', '.join(e['found'])})")

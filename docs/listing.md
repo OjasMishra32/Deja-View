@@ -22,15 +22,21 @@ It's now one job:
    - **Shared marks.** A listing's photos share their overlay, in the same place on every photo, while the room
      behind it changes. With 3 or more photos, a pixel is overlay where every photo has a crisp, high-contrast
      edge (the per-pixel minimum of the edge maps) and nearly the same brightness (low spread across the photos).
-     This catches corner text and big translucent marks across the middle.
+     This catches corner text and big translucent marks across the middle. Photos are compared only with photos of
+     the same size, so a portrait photo among landscape ones doesn't hide the mark the landscape ones share.
    - **Corner marks.** For a lone photo, or a mark on only some photos, the corner check looks for a dense patch of
      fine strokes (letters, logo lines) in a corner band, far denser than the rest of the photo.
    - **Cleaning.** Stray pixels are dropped. Strokes are closed into marks. Anything covering more than a fifth of
-     the photo is treated as scene, not overlay.
+     the photo is treated as scene, not overlay. A strip along the photo's edge, 1 % of the long side wide, never
+     counts, so a thin frame drawn on every photo is not taken for a mark.
    - **Crop or inpaint.** A mark inside a border band (the bottom or top 20 %, or a short mark at a side edge) is
      cropped off with its band, which leaves every real pixel untouched for the rebuild. Anything else is inpainted.
    - **Records.** The originals stay in `work/listing-raw/`. Every decision goes to `work/listing.json`, and a
-     magenta mask preview per photo to `work/listing-masks/`. Only the clean photos reach the rebuild.
+     magenta mask preview for each photo that had a mark to `work/listing-masks/`. Only the clean photos reach the
+     rebuild. These are job files: the server doesn't copy them into the scene, and it deletes a local job's
+     `work/` once the world is in.
+   - **If the clean-up fails,** the rebuild gets the original photos and the caption says the watermarks may
+     show. The job still ships.
 3. **The rebuild,** the same multi-photo reconstruction as any reconstruct job. A listing has the photos it has, so
    the "8 or more" notice is not shown.
 4. **The walk zone,** job 1's automatic zone, judged along the directions the listing photographed.
@@ -38,8 +44,9 @@ It's now one job:
      copies top-level files and the ones `scene.json` names.
    - It sets `world.collider` and `world.spawn`, the two `WorldAsset` fields for this. No new contract field.
    - **The spawn faces what the photos saw:** the best of 16 facings within 22.5° of a real photo's direction.
-   - If no spot passes, the job still ships with the rebuild's own spawn, plus a short notice in the caption.
-5. **Caption:** "Rebuilt from N listing photos."
+   - If no spot passes, or the step fails for any other reason, the job still ships with the rebuild's own spawn,
+     plus a short notice in the caption.
+5. **Caption:** "Rebuilt from N listing photos.", followed by any notices.
 
 To preview just the clean-up on a folder: `python pipeline/listing.py clean --photos <dir> --out <dir>`. It writes
 the clean photos, `listing.json` and `masks/`.
@@ -60,7 +67,13 @@ the real rebuild on the GPU. Done means it looks like today's hand-made world wi
 
 ## Limits
 
-- Shared-mark detection needs 3 or more photos, so a 2-photo listing relies on the corner check alone.
+- Shared-mark detection needs 3 or more photos of the same size, so a 2-photo listing, or a lone portrait photo
+  among landscape ones, relies on the corner check alone. A mark across the middle of such a photo stays.
+- One photo without the mark (a floor plan, say) in a group hides a mark across the middle on all of them; a
+  corner mark is still caught by the corner check.
+- A frame drawn on every photo is ignored when it is thin or wide, but one about 1 % of the long side wide can
+  still cost a sliver along an edge. The edge of a letterbox bar that every photo has is taken for a mark and
+  inpainted.
 - A mark that is the same colour as the wall behind it in every photo has no edge to find. Real listing overlays
   are white or dark with an outline, which this targets.
 - Inpainting fills from the surroundings. On a highly patterned surface (tile, a bookshelf) it can leave a soft
