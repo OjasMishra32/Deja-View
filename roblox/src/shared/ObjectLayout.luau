@@ -110,6 +110,7 @@ function ObjectLayout.plan(doc: any, opts: any?): any
 				parts = parts,
 				affordance = obj.affordance,
 				source = obj.source,
+				assetId = obj.assetId,
 			})
 		end
 	end

@@ -1,5 +1,6 @@
 -- Builds the proxy object layer from the server's objects.json (docs/object-layer.md).
 -- The proxy is inflated so it covers the rough scanned original. No data means no change.
+local InsertService = game:GetService("InsertService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Backend = require(script.Parent.Backend)
 local ObjectFixtures = require(ReplicatedStorage.Shared.ObjectFixtures)
@@ -46,6 +47,29 @@ local function makePart(plan: any, parent: Instance): Part
 	return p
 end
 
+-- Load the uploaded Model for one object. The proxy part stays as the collision shape.
+local function loadMesh(plan: any, parent: Instance): boolean
+	local assetId = tonumber(plan.assetId)
+	if not assetId then return false end
+	local ok, model = pcall(function()
+		return InsertService:LoadAsset(assetId)
+	end)
+	if not ok or not model then
+		warn(`[DejaView] could not load object mesh {assetId}: {tostring(model)}`)
+		return false
+	end
+	model.Name = plan.id or "ObjectMesh"
+	for _, part in model:GetDescendants() do
+		if part:IsA("BasePart") then
+			part.Anchored = true
+			part.CanCollide = false
+			part.CastShadow = true
+		end
+	end
+	model.Parent = parent
+	return true
+end
+
 function ObjectLayer.build(sceneId: string, room: Instance?)
 	local ok, doc, status = Backend.objects(sceneId)
 	if not ok or type(doc) ~= "table" or type(doc.objects) ~= "table" or #doc.objects == 0 then
@@ -67,9 +91,15 @@ function ObjectLayer.build(sceneId: string, room: Instance?)
 	local model = Instance.new("Model")
 	model.Name = "ObjectLayer"
 	for _, obj in plan.objects do
-		makePart(obj, model)
+		local proxy = makePart(obj, model)
+		local hasMesh = false
+		if obj.assetId then
+			hasMesh = loadMesh(obj, model)
+			if hasMesh then proxy.Transparency = 1 end
+		end
 		for _, child in obj.parts or {} do
-			makePart(child, model)
+			local childProxy = makePart(child, model)
+			if hasMesh then childProxy.Transparency = 1 end
 		end
 	end
 	if plan.outline then

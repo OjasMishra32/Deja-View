@@ -39,6 +39,7 @@ local doc = {
 				},
 			},
 			affordance = { kind = "door", hinge = "left", openAngle = 100 },
+			assetId = 1234567890,
 		},
 		{ id = "counter", label = "counter", center = { -4, 10, -30 }, size = { 8, 4, 3 }, color = { 180, 140, 100 } },
 	},
@@ -55,6 +56,7 @@ check("child parts are planned", #p.objects[1].parts == 1)
 check("child shape is kept", p.objects[1].parts[1].shape == "cylinder")
 check("child colour is kept", p.objects[1].parts[1].color[1] == 44)
 check("affordance is kept", p.objects[1].affordance.kind == "door")
+check("uploaded mesh id is kept", p.objects[1].assetId == 1234567890)
 check("flat style has no outline", p.outline == false)
 check("flat style keeps the scanned colour", p.objects[1].color[1] == 242 and p.objects[1].color[3] == 238)
 check("flat style keeps the second object colour", p.objects[2].color[1] == 180 and p.objects[2].color[3] == 100)
