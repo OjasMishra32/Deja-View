@@ -21,6 +21,7 @@ import { findMemorySource, MemoryIntro, reliefFor } from './memory-intro.ts';
 import { createSocial, type Cue, type SocialHandle } from './social/index.ts';
 import { SocialSocket } from './social/presence-client.ts';
 import { analyseWorld, applyTransform, loadSplatMesh, repairHiddenSplats, splatCount, type WorldAnalysis } from './world.ts';
+import type { AvatarsHandle } from './avatars.ts';
 import type { CollisionWorld } from './voxels.ts';
 import { XrSystem } from './xr.ts';
 
@@ -122,6 +123,12 @@ class Viewer {
   analysis: WorldAnalysis | null = null;
   collider: MeshCollider | null = null;
   video: VideoLayerHandle | null = null;
+  /** The people from the clip as full 3D (avatars.ts), on the video's clock; they stand in for the video layer away from the recording camera. */
+  avatars: AvatarsHandle | null = null;
+  /** The memory intro's video alpha (the layer and the people fade with it). */
+  private videoAlpha = 1;
+  private readonly eyeTmp = new THREE.Vector3();
+  private readonly recTmp = new THREE.Vector3();
   videoReady = false;
   videoStarted = false;
   flipped = false;
@@ -394,7 +401,7 @@ class Viewer {
           sky: this.sky,
           palette: () => this.analysis?.palette ?? a.palette,
           bounds: () => this.analysis?.bounds ?? a.bounds,
-          setVideoAlpha: (o) => this.video?.setOpacity(o),
+          setVideoAlpha: (o) => this.setVideoAlpha(o),
           hide: () => [
             this.floorGlow.mesh.visible ? this.floorGlow.mesh : null,
             this.social?.ghosts.group,
@@ -716,6 +723,7 @@ class Viewer {
       const handle = mod.createVideoLayer(layer, base, this.renderer);
       this.video = handle;
       this.flip.add(handle.object);
+      void this.setupAvatars(handle);
       hud.showTransport(true, layer.hasAudio);
       hud.setPlaying(false, true);
       hud.setTime(0, layer.duration);
@@ -735,6 +743,37 @@ class Viewer {
       hud.toast('The video could not be shown', 'The room still works without it. Reload the page to try again.', 'error');
       console.error(e);
     }
+  }
+
+  /** The people from the clip (pipeline/avatar), when the scene has them: under the video layer's parent, on its clock. */
+  private async setupAvatars(handle: VideoLayerHandle): Promise<void> {
+    try {
+      const { createAvatars } = await import('./avatars.ts');
+      if (this.video !== handle) return;
+      const avatars = createAvatars({ scene: this.data, video: handle.video, parent: this.flip, renderer: this.renderer });
+      this.avatars = avatars;
+      avatars.setOpacity(this.videoAlpha);
+      window.addEventListener('pagehide', (e) => {
+        if (!e.persisted) avatars.dispose();
+      });
+      await avatars.ready;
+      debug.info.avatars = avatars.count;
+    } catch (e) {
+      console.warn('people from the video not shown', e);
+    }
+  }
+
+  /** The memory intro's video alpha: the layer and the people fade together. */
+  private setVideoAlpha(o: number): void {
+    this.videoAlpha = o;
+    this.avatars?.setOpacity(o);
+    this.video?.setOpacity(o * (1 - (this.avatars?.coverage ?? 0)));
+  }
+
+  /** Eye to recording camera (m): a handheld clip's per-frame camera (avatars.ts reads it), else the video layer's own pose. */
+  private recordingCameraDistance(): number {
+    const rec = this.avatars?.recordingCamera(this.recTmp) ?? (this.video ? this.video.object.getWorldPosition(this.recTmp) : null);
+    return rec ? this.camera.getWorldPosition(this.eyeTmp).distanceTo(rec) : Infinity;
   }
 
   private async playVideo(): Promise<void> {
@@ -958,6 +997,17 @@ class Viewer {
         this.uiTimer = 0.25;
         hud.setPlaying(this.video.playing, !this.videoStarted);
         if (this.videoReady) hud.setTime(this.video.currentTime, this.video.duration);
+      }
+    }
+
+    if (this.avatars) {
+      // full-3D people away from the recording camera, the video layer (which looks best there) close to it
+      try {
+        this.avatars.setBlend(this.recordingCameraDistance());
+        this.avatars.update(dt);
+        this.video?.setOpacity(this.videoAlpha * (1 - this.avatars.coverage));
+      } catch (e) {
+        console.error(e);
       }
     }
 
