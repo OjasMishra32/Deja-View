@@ -17,9 +17,10 @@ up in the headset) and powers the finale (2:00 to 2:25, the judge's own photo be
 2. **DeepSpace gallery:** set `/admin` → `baseUrl` to BASE now. When Ojasva posts that `https://deja-view.photo` is
    live (its DNS is switching now), move `baseUrl` and `dejaview_base` to it once.
 3. **Censor pass and gate (Update 8, Tasks C and D):** then upload the Game Lawn room and its sky from your account.
-   Shivin reviews the contact sheets (shivin.md Update 18 item 6). Giant chess is next.
-4. **Cooking rush on the real kitchen:** Shivin writes `cookingSpots` from `features.surfaces` (shivin.md Update 18
-   item 2). You run the Play test and check the STOVE marker sits on the real range.
+   A teammate who isn't you (Brianna, or Ojasva) looks at the contact sheets and runs `review.py`; Shivin is on product work. Giant chess is next.
+4. **Cooking rush on the real kitchen:** put the STOVE on a `features.surfaces` stove and the ingredients on the
+   counters and tables (Update 10), keeping the raycast fallback. Play test it: the STOVE marker should sit on the
+   real range.
 5. **The kitchen's v2 textured room** is building on HiPerGator tonight. When Ojasva posts it, it goes through your
    gate like the others.
 6. **Pool:** only if the game-room pool table gets filmed and rebuilt in time.

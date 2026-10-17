@@ -8,44 +8,51 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
-> **Update 18 (Sat ~3:30 PM): your list for the rest of the night, in order.** Each is written so you can hand it to
-> an agent: paste the rule block from seb.md Update 8 first (own branch `shivin/<task>`, no attribution or timestamps
-> in commits, `git config core.hooksPath .githooks`, no keys in chat, nothing uploaded to Roblox). BASE is the live
-> link; it becomes `https://deja-view.photo` once its DNS finishes switching (Ojasva posts when).
+> **Update 19 (Sat ~3:45 PM): product work only. No Roblox (no Studio), no Devpost.** This replaces Updates 17 and 18:
+> drop the video, the Devpost page, the rehearsal, cooking rush and the censor review. Three build jobs, in order.
+> Each can go to an agent as written. Work on a branch `shivin/<task>`, with no attribution or timestamps in commits
+> (`git config core.hooksPath .githooks`). Never paste keys. BASE is the live link (`https://deja-view.photo` once its
+> DNS switches). World files download from `BASE/data/scenes/<id>/world.spz` and `cameras.json`.
 >
-> **1. The Devpost video (Update 17, still first, due before 8 AM).** If it's done, send Ojasva the MP4. If not, start
-> now. Two new beats are live to film: the old Pennsylvania house kitchen rebuilt from four listing photos
-> (`/view?scene=old-house-kitchen`), and Seb cooking with the fridge doors opening and the milk jug carried to the
-> stove (`/view?scene=kitchen-cooking`, 13 to 36 s).
+> **1. Automatic walk zones from view quality (the biggest one).** Today each world's walkable area is hand-made.
+> The kitchen was boxed into 0.85 m^2 until Ojasva opened it to 11.9 m^2 by hand, and the old house kitchen got a
+> camera box. Build `pipeline/walkzone_auto.py`:
+> - Render the splats (gsplat, or your `pipeline/objects/eval` renderer) from a 0.5 m grid of eye-height spots, in
+>   8 directions each.
+> - Score each view with your held-out metrics: coverage, floaters near the eye, and blur against the nearest real
+>   photo.
+> - Keep the spots that pass, grow them by the walker's radius (0.22 m), and write the fence polygon plus a collider
+>   (floor + fence + roof, the format of `data/scenes/kitchen/collider.glb`; `scripts/collider-clear-path.ts` shows
+>   it). Also write the spawn: the best spot, facing the best direction.
+> - Done when it runs on `kitchen` and `old-house-kitchen` and the fence covers the good strip (compare with the
+>   hand-made ones), with tests in `tests/pipeline/`. The GPU runs go through Ojasva.
 >
-> **2. Cooking rush on the real kitchen (Luau in the repo, no Studio needed; Seb runs the Play test).**
-> `GET BASE/api/roblox/kitchen/model` now has `features.surfaces`: `{kind, name, corners, centre, height, length,
-> width, yaw}` in studs, kinds `stove` (2), `counter` (2), `table` (3), `fridge`.
-> - In `roblox/src/server/DejaView/WorldGames.luau`, split spot picking into a pure function
->   `cookingSpots(features, info)`. It returns the stove from the first `stove` centre, plus ingredient spots on the
->   `counter` and `table` tops (a few per top, inside its corners, 0.3 studs above `height`).
-> - `WorldGames.cooking` uses it when `features.surfaces` has a stove, and keeps today's `counterSpots` raycast as
->   the fallback.
-> - Add `roblox/tests/cooking_spots_test.luau` like `pingpong_sim_test.luau`. It should cover: the stove lands on the
->   stove, every spot is inside a top, and no surfaces means the fallback is used.
-> - Done when: the tests pass, `selene` is clean, and Seb confirms in a Play test that the STOVE marker sits on the
->   real range.
+> **2. "Your old home from listing photos" as a real flow.** The old Pennsylvania house kitchen
+> (`/view?scene=old-house-kitchen`) was built by hand from 4 listing photos: watermark trimmed by hand, the
+> multi-photo rebuild (`pipeline/anysplat_run.py`), then the walk box and spawn set by hand. Make it one path:
+> - Detect listing watermarks and logos (bottom corners, text), then crop or inpaint them.
+> - Run the rebuild, then (from job 1) the walk zone and a spawn inside the room facing what the photos saw.
+> - Write the scene. Build it as a `reconstruct` mode option in `pipeline/run_job.py` (`listing: true`), with
+>   tests.
+> - Done when the four photos in `data/inputs/old-house-kitchen/` (Ojasva can send them) rebuild into a world that
+>   looks like today's with no hand steps.
 >
-> **3. The Devpost page, drafted, not submitted.** Copy `docs/DEVPOST.md` into the SwampHacks Devpost form
-> (title, tagline, story, "Built with"), and pick Entertainment & Creative Tech as the one track. Add the sponsor
-> challenges listed in the draft, and gallery images from `web/public/landing/` (`people-3d.jpg`, `roblox-lawn.jpg`,
-> `worlds/*.jpg`). Leave it as a draft; Ojasva submits.
+> **3. One command for a video memory.** Tonight's chess memory took many separate HiPerGator steps, and four
+> pipeline bugs got fixed by hand along the way:
+> - SDR clips
+> - pose-only runs
+> - helper modules missing from job copies
+> - a step hitting its 29-minute limit
 >
-> **4. Expo rehearsal.** Run `docs/DEMO.md` start to finish with a timer (3 min demo + 1 min Q&A) on the real Quest
-> and a laptop. Write the real timings and anything that broke into `team/qa-quest.md`.
+> Steps today: cut the window, frames, register, pack, poses, body, photofit, install. Write
+> `pipeline/memory_job.py` (plus one sbatch chain): given a clip, a time window and a world, it submits the chain
+> with the right dependencies, one GPU at a time, splits long steps under the limit, checks each step's output, and
+> assembles `data/scenes/<memory-id>/`. It needs a dry-run mode that prints the plan, and tests. Ojasva runs the real
+> one.
 >
-> **5. Headset QA (Update 17 item 2), now also** `old-house-kitchen`, `kitchen-cooking` (doors and jug) and
-> `chess-match` once Ojasva says it's live.
->
-> **6. Reviewer for Seb's censor sheets** (Update 17 item 3), whenever Seb sends them.
-
-> **Order of work:** the Devpost video below first (hard deadline 8 AM Sunday), then the headset QA, then Seb's
-> reconstruction loop (`team/shivin-reconstruction-loop.md`) as Seb directs it.
+> **Also (not building, but product): headset QA** on the Quest as in Update 17 item 2, now including
+> `old-house-kitchen`, `kitchen-cooking` (doors and milk jug, 13 to 36 s) and `chess-match` when it's live.
+> Problems go into `team/qa-quest.md` on `shivin/qa`.
 
 > **Update 17 (Sat ~1:30 PM): your new jobs, in this order.** All three need you, not Studio. The live link (BASE) is
 > `https://highlighted-filter-surf-other.trycloudflare.com` (Ojasva posts a new one if the tunnel restarts).
