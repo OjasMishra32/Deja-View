@@ -168,20 +168,26 @@ local function buildTable(tableCf: CFrame, length: number, width: number, visibl
 		centre.CFrame = frame * CFrame.new(0, 0.01, 0)
 	end
 
-	net = ensurePart("Net", Vector3.new(Sim.NET_L, Sim.NET_H, 0.12), Color3.fromRGB(245, 245, 245), folder)
-	net.Material = Enum.Material.Neon
-	net.Transparency = 0.05
+	-- a real net: dark mesh you can half see through, a white top tape and a steel post at each end
+	net = ensurePart("Net", Vector3.new(Sim.NET_L, Sim.NET_H, 0.04), Color3.fromRGB(26, 32, 52), folder)
+	net.Material = Enum.Material.Fabric
+	net.Transparency = 0.35
 	net.CFrame = frame * CFrame.new(0, Sim.NET_H / 2, 0)
-	local netTop = ensurePart("NetTop", Vector3.new(Sim.NET_L + 0.2, 0.1, 0.16), Color3.fromRGB(255, 60, 40), folder)
-	netTop.Material = Enum.Material.Neon
-	netTop.CFrame = frame * CFrame.new(0, Sim.NET_H, 0)
+	local netTop = ensurePart("NetTop", Vector3.new(Sim.NET_L, 0.07, 0.06), Color3.fromRGB(245, 245, 245), folder)
+	netTop.CFrame = frame * CFrame.new(0, Sim.NET_H - 0.035, 0)
+	for _, x in { -Sim.NET_L / 2, Sim.NET_L / 2 } do
+		local post = ensurePart("NetPost", Vector3.new(Sim.NET_H + 0.1, 0.08, 0.08), Color3.fromRGB(40, 42, 48), folder)
+		post.Shape = Enum.PartType.Cylinder
+		post.Material = Enum.Material.Metal
+		post.CFrame = frame * CFrame.new(x, (Sim.NET_H + 0.1) / 2 - 0.05, 0) * CFrame.Angles(0, 0, math.rad(90))
+	end
 
 	ball = Instance.new("Part")
 	ball.Name = "PPBall"
 	ball.Shape = Enum.PartType.Ball
 	ball.Size = Vector3.new(0.36, 0.36, 0.36)
-	ball.Color = Color3.fromRGB(255, 170, 40)
-	ball.Material = Enum.Material.Neon
+	ball.Color = Color3.fromRGB(255, 132, 28) -- a matte orange match ball
+	ball.Material = Enum.Material.SmoothPlastic
 	ball.Anchored, ball.CanCollide, ball.CanQuery, ball.CanTouch = true, false, false, false
 	ball.Parent = folder
 	ball.CFrame = frame * CFrame.new(Sim.servePos("A", len))
