@@ -10,6 +10,303 @@ up in the headset) and powers the finale (2:00 to 2:25, the judge's own photo be
 
 ---
 
+**Update 5 (Sat ~6 AM): Roblox games.** From now to the freeze you turn our worlds into real Roblox games, on top
+of Shivin's game in `roblox/` (Luau + Rojo): **real-physics ping pong** on the real table at the Infinity Hall Game
+Lawn now, then **pool** on the game-room table we film today. This block is your build guide (A to F). Read
+`roblox/README.md` first (Studio, Rojo, mock, going live).
+
+**A. How the game is organised, and working beside Shivin without collisions**
+
+1. **Your branch:** `git switch -c seb/roblox-games` off an up-to-date `main`. Push it and tell Shivin at each
+   checkpoint (F); he merges into `main` and publishes. Never commit to `main`, never publish place `106038900865360`
+   yourself.
+2. **Your files, all new (nobody else edits them):**
+
+   | File | In Studio | What |
+   | --- | --- | --- |
+   | `src/server/DejaView/PingPong.luau` | ServerScriptService.DejaView | match rules, the 60 Hz ball, hit checks |
+   | `src/server/DejaView/PoolGame.luau` | ServerScriptService.DejaView | 8-ball rules, turns, the 120 Hz sim |
+   | `src/shared/PingPongSim.luau`, `src/shared/PoolSim.luau` | ReplicatedStorage.Shared | the physics step: the same code on the server and every client |
+   | `src/client/Games.client.luau` | StarterPlayerScripts | your own LocalScript: input, paddle, cue, cameras, your HUD |
+   | `src/client/Modules/PingPongView.luau`, `PoolView.luau` | StarterPlayerScripts.Modules | local balls, paddles, cue, aim line |
+
+   Every `*.client.luau` in `src/client` becomes its own LocalScript, so you never edit `Client.client.luau`.
+3. **The only line you add to Shivin's code**, per game, in `Main.server.luau` after `Foosball.start()`:
+   `require(DV.PingPong).start()` (later `require(DV.PoolGame).start()`).
+4. **Ask Shivin (his files):** the Game Lawn numbers in `Config.PINGPONG_TABLES["the-courts"]` (shared with his
+   arcade game), a `"pool"` column in `Stats.GAMES`, and ending your game from his `pingpong` host action (item 12).
+5. **Remotes:** create yours in `start()` under `ReplicatedStorage.Remotes`, so `default.project.json` stays his:
+
+   ```lua
+   local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+   local function remote(name: string, class: string): any
+   	local r = Remotes:FindFirstChild(name) or Instance.new(class)
+   	r.Name = name
+   	r.Parent = Remotes
+   	return r
+   end
+   local Paddle = remote("PPPaddle", "UnreliableRemoteEvent") -- hand poses, 30 Hz
+   local Hit = remote("PPHit", "RemoteEvent") -- one per hit
+   ```
+
+   Clients: `Remotes:WaitForChild("PPPaddle")`. Prefix every remote and workspace attribute `PP` or `Pool`
+   (`PPActive`, `PoolTurn`). Never set `PongActive`: while it is true Shivin's client shows his HIT button and fires
+   `PongHit` on R2.
+6. **Reuse, don't copy:** `World.Moment` and `World.toast` (moments, toasts), `World.where(p) == "room"`,
+   `Theme.make` / `label` / `corner` / `stroke` (boards in the house style), `Stats.win(p, "pingpong")` (hall of
+   fame), `Rooms.modelInfo(sceneId).features` (where the table is), `Backend.sendEvent` (results, D).
+7. **Room lifecycle:** place your table when the workspace attribute `Phase` becomes `"room"`, inside
+   `workspace.Room`; that folder is destroyed on every room switch, so on a `SceneId` change you only reset your state
+   (as `Pong.start()` does). Leave `Rooms.onRoomReady` alone: it has one slot.
+8. **Starting a game:** a `ProximityPrompt` on the table ("Play ping pong", "Play pool"). It works on phone, PC and
+   Quest and needs no new HUD button; the host-bar PING PONG button stays Shivin's arcade game.
+9. **Sync:** in `roblox/`, `rojo build -o seb.rbxlx` once, open that file in Studio, then `rojo serve` and Plugins →
+   Rojo → Connect. Your own local place only: never Rojo into Shivin's published place or a Team Create session.
+10. **Test in Studio:** Test → Server & Clients, 2 clients (HTTP on: README step 4).
+    - **Live is the default:** `Config.USE_MOCK = false` and `BASE_FALLBACK` in `Config.luau` is the live link. Pick
+      the Infinity Hall Game Lawn (`the-courts`) in the picker. A 401 means the key is on: add the `dejaview_key` Local
+      Secret (README, Going live) with the value from Ojasva, privately.
+    - **Mock:** `workspace:SetAttribute("DejaViewMock", true)` in the Server window's command bar (no file edit).
+      Fixture rooms, no `features`, and every event you post prints as `[MockServer] event ...` in Output.
+    - `/model` is cached per Roblox server: once Ojasva adds `features`, stop and start the test.
+    - **Quest:** Studio on a Mac cannot play in a headset. Add a debug flag that drives the paddle from the mouse for
+      most tests; for the real thing publish your build to your own private test experience (VR on, HTTP on) and join
+      it from the Roblox app on Ojasva's Quest.
+11. **Shivin's arcade ping pong (`Pong.luau`), so you know what is beside you:** no physics. The server picks every shot
+    (a random bounce point on the receiver's half and an end point past their end) and every client draws the same two
+    arcs from that description on the server clock (`PongBall.luau`). HIT counts after the bounce within 9 studs of
+    your root, and a hit at the top of the bounce returns faster. First to 7; a bot covers an empty end. It works on
+    any phone.
+12. **Yours is the real-physics version beside it, made for the Quest.** Agree with Shivin today which one the Game
+    Lawn table opens by default. Proposal: yours once it passes the Sat afternoon checkpoint, his arcade stays on the
+    host bar as the phone-friendly fallback. One at a time: before you place yours,
+    `if Pong.isActive() then Pong.remove() end`; he calls your `PingPong.stop()` from his `pingpong` action.
+
+**B. Real ping pong at the Infinity Hall Game Lawn (now)**
+
+Scene id `the-courts`; anything a player sees says "Infinity Hall Game Lawn" (or "Game Lawn"), never the id.
+
+1. **Placement**, in this order: `features.pingPongTable` from `Rooms.modelInfo("the-courts")` once the server sends
+   it (4 top corners in order around the table + `height`, studs; `contracts.md` 6.6); else
+   `Config.PINGPONG_TABLES["the-courts"]` (`{centre, yaw, length, width, visible = false}`); else a full table 6 studs
+   in front of whoever pressed the prompt (every mock room). Corners to centre, yaw and size: copy `placeFromFeature`
+   in `Pong.luau`. Same frame as the block map: studs = metres × 3.57, floor y = 0. To tune by hand, drop a Part on
+   the textured table top in a Play test, line it up, read its Position and Orientation.
+2. **Real sizes**, life size (the textured table is):
+
+   | | metres | studs |
+   | --- | --- | --- |
+   | Top | 2.74 × 1.525 | 9.78 × 5.44 |
+   | Top above the floor | 0.76 | 2.71 |
+   | Net | 0.1525 high, 1.83 long | 0.54 high, 6.53 long |
+   | Ball | 40 mm | 0.143 across |
+   | Paddle blade | about 0.15 × 0.16 | 0.55 × 0.57 |
+
+   On the real table draw only the net and the white lines, like Pong does with `visible = false`.
+3. **Ball, server-authoritative.** State `{pos, vel, spin, t, shotId}` in the table frame (long axis Z, net at z = 0,
+   top at y = 0). A `Heartbeat` accumulator runs fixed 60 Hz steps, 4 substeps each. Per substep:
+   - gravity **35.0 studs/s²** (9.81 × 3.57; not `workspace.Gravity`, which is 196.2 for avatars);
+   - light drag: `vel -= 0.02 * vel.Magnitude * vel * dt` (a real ball is about 0.04 per stud);
+   - table: the ball's bottom crosses the top inside the rectangle, moving down: `vel.Y = -vel.Y * 0.88`,
+     horizontal × 0.95;
+   - net: a thin box at z = 0 (6.53 × 0.54 × 0.05): `vel.Z = -vel.Z * 0.2`, the rest × 0.5; a ball over the top
+     carries on;
+   - dead ball: below y = −2.5 (near the floor) or 1.5 s after the last touch.
+   Test each crossing between the substep's start and end (a sweep): a 30 m/s smash (107 studs/s) moves 0.45 studs per
+   substep and would tunnel through the net otherwise. The step lives in `PingPongSim.luau`: the server runs it, and
+   each client runs it forward from the last state for a smooth ball. Send state on a reliable remote at every hit,
+   bounce, serve and point, plus an unreliable copy at 10 Hz; clients render on `workspace:GetServerTimeNow()`, like
+   `PongBall.luau`.
+4. **Paddle in VR**, every RenderStepped (`UserInputService.VREnabled` tells you it is a headset):
+
+   ```lua
+   local cam = workspace.CurrentCamera
+   local h = UserInputService:GetUserCFrame(Enum.UserCFrame.RightHand) -- relative to the camera
+   local hand = cam.CFrame * CFrame.new(h.Position * cam.HeadScale) * h.Rotation
+   paddle.CFrame = hand * GRIP -- GRIP: the blade about 0.35 studs ahead of the hand, tilted to taste
+   ```
+
+   Use the hand whose trigger claimed the end (`ButtonR2` right, `ButtonL2` with `LeftHand`). Send `hand` on
+   `PPPaddle` at 30 Hz; the server fans it out, and everyone draws the other paddles 0.1 s behind, interpolated.
+5. **Hits: detected on the client, checked on the server.**
+   - Client: each frame, the predicted ball in the paddle's space last frame and now; a hit when it crosses the blade
+     plane within 0.45 studs of the blade centre (generous for tracking and latency). Paddle velocity = its movement
+     over the last 3 frames. Apply the hit locally at once (it feels instant), then
+     `PPHit:FireServer(shotId, ballPos, paddleVel, bladeNormal, workspace:GetServerTimeNow())`.
+   - Server accepts when: it is that player's ball (their end, one bounce on their half, no volleys), `shotId`
+     matches and is not hit yet, `ballPos` is within 1.5 studs of the server's ball at that time (keep 0.5 s of
+     history), their last paddle pose is within 2 studs, and the speed is at most 107 studs/s. It sets the new state
+     at that time, steps forward to now and sends it; a rejected hit gets the current state back and the client snaps.
+   - Paddle to ball: `rel = vel - paddleVel`, `vn = rel:Dot(n)`; if `vn < 0`, `vel -= 1.8 * vn * n` (paddle
+     restitution 0.8) and the tangential part of `rel` × 0.85; clamp to 107 studs/s. An `ASSIST` constant (0 to 1,
+     start at 0.3) nudges a landing just outside onto the far half and lifts a ball that would hit the net.
+   - Spin, optional and last: from the paddle's sideways speed at contact; a small Magnus term
+     `vel += K * spin:Cross(vel) * dt`, K tuned by eye.
+6. **Phones and PC (the assist):** the paddle sits in the avatar's hand. In your hit window (after the bounce on your
+   half, within 6 studs of your root), tap your own HIT button, click or press E. The server builds the return: aim x
+   from where you tapped or the mouse (left, centre or right third), depth from timing (early = short, top of the
+   bounce = deep), flight time T from 0.8 s down to 0.5 s as the rally grows: `v0 = (target - p0) / T - 0.5 * g * T`
+   (aim 5% long for the drag), lifted if it clears the net by less than 0.3 studs. The same function is the bot at an
+   empty end, so you can test alone.
+7. **The ball, bigger than real** (0.143 studs is a dot): physics radius 0.15 for everything (a 0.3-stud ball), drawn
+   0.3 in VR and up to 0.45 on phones (centre lifted by the extra radius so it never sinks into the top). Neon white or
+   orange, a short Trail, and a dark dot on the table under it so you can judge depth.
+8. **Rules:** rally scoring to 11, win by 2 (one constant; 7 for the skit). Serve: the ball floats at chest height
+   over the server's end line, hit it, it must land on the far half; net and in is a let. Serve changes every 2 points,
+   every point from 10-10. A point is lost by a ball that misses the far half, a second bounce on your half, or a
+   volley. Change ends after each game and at 5 in the last game: a 0.5 s fade, `PivotTo` the other end, swap the
+   sides in your state (never move a VR player's camera without the fade).
+9. **Spectators:** everyone else in the room sees the ball and both paddles. Scoreboard over the net (copy Pong's:
+   names, score, who serves, rally, best rally). Pressing the prompt during a match queues you ("NEXT: Maya"); the
+   winner stays on.
+10. **Done when:** at the Game Lawn, you on the Quest against Shivin on a phone: a 5-shot rally, a full game to 11 with
+    the right serve changes and the end change, and the `game.result` event (D) arrives.
+
+**C. Pool in the game room (filmed today, playable tonight)**
+
+1. **Film it (about 20 min, one phone; it becomes the world `game-room`):**
+   - Room lights and the table lamp on, no flash. Lock exposure and focus (iPhone: long-press the table until
+     "AE/AF LOCK"), 1× lens, no portrait mode.
+   - Clear the table: balls in the pockets or the rack, cues on the wall (anything on the cloth is baked into the
+     world; the game draws its own balls). Nobody moving, screens off.
+   - The whole table and the room around it in every frame. **30 to 50 sharp photos** walking all the way round, at two
+     heights: one lap at eye level looking slightly down, one at table height looking across. About 30 cm between
+     shots, so each overlaps the last by about 70%.
+   - Then **one slow 60 s video** lap at waist height, no fast turns.
+   - **Close-ups:** each of the 6 pockets and both long rails, 2 or 3 photos each.
+   - AirDrop the originals to Ojasva (chat apps shrink them).
+2. **Measure with a tape** and send the numbers to Ojasva: the playing surface (cloth inside the cushion noses), the
+   cloth height above the floor, one corner and one side pocket mouth. To sanity-check the size:
+
+   | Table | Playing surface | Studs |
+   | --- | --- | --- |
+   | 7 ft | 78 × 39 in (1.98 × 0.99 m) | 7.07 × 3.54 |
+   | 8 ft | 88 × 44 in (2.24 × 1.12 m) | 7.98 × 3.99 |
+   | 9 ft | 100 × 50 in (2.54 × 1.27 m) | 9.07 × 4.53 |
+
+3. **What the server provides** once `game-room` is rebuilt: `features.poolTable` in `/model` (`contracts.md` 6.6):
+   `corners` (4 × [x, y, z] of the cloth surface, in order around), `pockets` (6 × [x, y, z] at cloth height),
+   `railHeight`, `clothColor`, in studs. Until then: your own `POOL_TABLES` at the top of `PoolGame.luau` with the
+   measured size, or a table in front of the player.
+4. **Game: 8-ball, two players plus spectators, turn based.** The prompt claims a seat; the first two play, the rest
+   watch and queue, the winner stays on. Rack: apex on the foot spot, 8 in the middle of the third row, a solid and a
+   stripe in the back corners; cue ball behind the head string. Rules: the first ball potted after the break gives
+   that player its group; you keep shooting while you pot your own; a foul (cue ball potted, nothing hit, or the other
+   group or the 8 hit first) gives the other player ball in hand (tap or point to place it); potting the 8 after your
+   group wins; the 8 early, or the 8 with the cue ball, loses. No called pockets.
+5. **Physics: your own deterministic 2D sim on the table plane, never Roblox physics for the balls** (each client
+   draws anchored, non-colliding Parts by CFrame, like `PongBall.luau`).
+   - Server: a `Heartbeat` accumulator at 120 Hz; inside each tick, substeps so no ball moves more than half its
+     radius (a break needs about 8).
+   - Ball radius 0.102 studs (57 mm). Cue speed up to 30 studs/s for the break, about 3 to 10 for normal shots.
+   - Ball to ball, equal masses, restitution 0.95: `n` from ball 1 to ball 2, `vn = (v1 - v2):Dot(n)`; if `vn > 0`,
+     `v1 -= 0.975 * vn * n` and `v2 += 0.975 * vn * n`; then push the pair apart by the overlap.
+   - Cushions: the 4 cloth edges inset by the radius; the normal part × −0.75, along the rail × 0.95; no cushion
+     inside a pocket mouth.
+   - Rolling friction: slow down by 0.4 studs/s² (μ about 0.011), stop below 0.05 studs/s. A shot ends when every
+     ball has stopped.
+   - Pockets: capture circles at the 6 pocket points, radius about half the mouth (0.22 corner, 0.24 side); a ball
+     whose centre enters one is potted.
+   - Only + − × ÷ and `math.sqrt` in the step (trig can differ between CPUs), a fixed pair order, no random. Then
+     every client runs the same shot from one reliable `PoolShot {balls, cueVel, t0}` and matches the server; the
+     server's positions at rest (`PoolRest`) snap any drift.
+6. **Cue controls.** A shot is a direction in the table plane plus a speed; the server checks it is your turn, every
+   ball is still and the speed is at most 30.
+   - **VR:** hold the trigger with the controller near the cue ball to address it; aim along the controller's
+     forward, flattened onto the table; pull the controller back along the aim line: 0 to 0.45 m (1.6 studs) is 0 to
+     full power (squared, so soft shots are easy); release to shoot. Draw the cue and a line to the first ball it will
+     hit.
+   - **Phone:** a top-down aim camera on your turn (Scriptable, over the table centre, the table filling the screen).
+     Touch near the cue ball and drag back: the opposite of the drag is the direction, its length the power (35% of the
+     screen height is full); release to shoot, drag back onto the ball to cancel.
+   - **PC:** the same drag with the mouse; one code path for `Touch` and `MouseButton1`.
+7. **Ball scale:** real balls are 0.2 studs across, specks in third person. Keep real scale (in VR it is the real
+   table) and let the top-down camera make them readable on phones. If you scale anything, scale balls, pockets and
+   capture circles together and leave the cloth as it is.
+8. **Done when:** on the rebuilt game-room table, a full 8-ball game between the Quest and a phone, with ball in hand
+   after a scratch, the right winner, and its `game.result` event.
+
+**D. Results: one event at the end of every match**
+
+Post `game.result` (`contracts.md` 6.5) when a match ends, plus `Stats.win(winner, "pingpong")` for the hall of fame.
+Ojasva's side does the rest, all being built now: the server stores it (Tiger Data replay), writes it to a public
+Solana devnet scoreboard (the `/scores` page) and settles the Capital One Nessie tab (the loser covers the table, mock
+money). Nothing else for you.
+
+```lua
+local HttpService = game:GetService("HttpService")
+local Backend = require(script.Parent.Backend)
+
+-- once when the match starts: retries reuse it, so the server never counts a match twice
+local matchId = "pp-" .. HttpService:GenerateGUID(false)
+local startedAt = workspace:GetServerTimeNow()
+
+local function idOf(p: Player?): string
+	return if p then "rbx-" .. p.UserId else "bot"
+end
+
+-- once when it ends; the winner's points first
+local function postResult(winner: Player?, loser: Player?, winnerPoints: number, loserPoints: number)
+	local sceneId = workspace:GetAttribute("SceneId")
+	if type(sceneId) ~= "string" or sceneId == "" then
+		return
+	end
+	-- queued and in order, 3 retries 1 s apart; each try is Backend.event(sceneId, body)
+	Backend.sendEvent(sceneId, {
+		type = "game.result",
+		game = "pingpong", -- "pool" for pool
+		round = matchId,
+		winner = idOf(winner),
+		winnerName = if winner then winner.DisplayName else "Bot",
+		loser = idOf(loser),
+		loserName = if loser then loser.DisplayName else "Bot",
+		score = string.format("%d-%d", winnerPoints, loserPoints), -- pool: balls each potted, the 8 counts for the winner
+		durationS = math.floor(workspace:GetServerTimeNow() - startedAt),
+	})
+end
+```
+
+Mock: the event prints in Output. Live: no `event failed` warning may follow. A `400` about the type means the server
+does not take the dot in `game.result` yet: tell Ojasva (a one-line server fix) and keep your body as it is.
+
+**E. Sponsor sign-ups only a person can do (15 minutes in any gap)**
+
+Send every value to Ojasva privately (DM): never in the repo, the team chat or a screenshot.
+
+1. **Auth0** (free tenant, auth0.com): Applications → Create Application → Single Page Application, "Déjà View".
+   Allowed Callback URLs and Allowed Logout URLs: `https://<your domain>/capture, https://<your domain>/host` (plus the
+   same two on the current tunnel link); Allowed Web Origins: both origins. Then Applications → APIs → Create API,
+   identifier `https://dejaview/api`. Send `AUTH0_DOMAIN` (the tenant, like `dejaview.us.auth0.com`),
+   `AUTH0_CLIENT_ID` and `AUTH0_AUDIENCE` (the API identifier).
+2. **Tiger Data:** a free Tiger Cloud service (tigerdata.com); its connection string (`postgres://...?sslmode=require`)
+   is `TIGER_DATA_URL`.
+3. **Capital One Nessie:** nessieisreal.com, sign in with GitHub, the key on the Profile page is `NESSIE_API_KEY`
+   (section 12.1).
+4. **Still open from before, if not done:** Vultr access (Update 3 item 3) and the domain's tunnel token (Update 3
+   item 2).
+
+**F. Checklist**
+
+- [ ] **Sat 7 AM:** branch, Studio + Rojo on your own place, `PingPong.luau` registered, a full table in front of you
+  in mock.
+- [ ] **Sat 10 AM:** `PingPongSim` on its own: bounces on the top (0.88), stops at the net, dies on the floor; 2
+  clients see the same smooth ball.
+- [ ] **Sat 12 PM:** a phone/PC assist rally against the bot; serve, score to 11, serve changes, end change,
+  scoreboard; `game.result` in the mock Output.
+- [ ] **Sat 1 PM:** the pool table filmed and measured, photos with Ojasva (earlier is better: the rebuild runs after).
+- [ ] **Sat 3 PM:** the VR paddle on the Quest (your test place): hits feel right, others see your paddle.
+- [ ] **Sat afternoon (5 PM): ping pong playable** at the Infinity Hall Game Lawn, Quest against a phone on the real
+  table, live link; Shivin merges it and you settle the default table game with him.
+- [ ] **Sat 7 PM:** `PoolSim` on a hand-made table of the measured size: break, collisions, cushions, pockets, the same
+  result on 2 clients.
+- [ ] **Sat night (11 PM): pool playable** on the rebuilt `game-room` table: 8-ball on Quest, phone and PC,
+  `game.result` arrives; Shivin merges it.
+- [ ] **Sun 2 AM:** the full team run with both games; fix only what breaks.
+- [ ] **Sun 4 AM:** your Devpost lines: what is real physics, the controls per device, credit for any Creator Store
+  sounds or models.
+- [ ] **Sun 6 AM: freeze.** No new code; the last merge; Shivin publishes. Submission Sun 8 AM.
+- [ ] **Any gap:** E (15 minutes).
+
 **Update 4 (Sat ~4:50 AM):** five worlds (`tilted-towers`, `brick-apartment`, `the-courts`, `chess-room`, `kitchen`)
 and three video memories (`courts-foosball`, `chess-match`, `kitchen-cooking`). Your gallery picks them up from
 `GET /api/scenes` with no change. "Join in Roblox" goes on the five worlds, not on the video memories.

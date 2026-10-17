@@ -277,6 +277,9 @@ of being ready. A room is loadable once its map (6.2) returns 200.
   (`chunk=0` is a 400). Without `chunk`, all parts come in one response.
 - Optional extra fields: `ceilingY` (studs, for an invisible lid), `bounds` (studs), and a 10th value per part (`1` =
   imagined, `0` = captured) for the reality-check tint.
+- `walkBounds` `{"min":[x,y,z],"max":[x,y,z]}` (studs, this frame) when the scene has `world.bounds`: where the capture
+  camera went, the headset's walk limit, mapped like every map point (the floor moved to y = 0, then studs) and padded
+  0.5 m on x and z. The game builds its invisible walls there and a floor slab with its top at y = 0 under it.
 - Errors: `202 {"status":"building","retryAfter":2}` (wait and retry), `404 {"error":"No such scene"}`,
   `409 {"error":"Scene is not ready","status":"running"}`, `401 {"error":"Bad key"}`.
 
@@ -290,6 +293,10 @@ triangle limit, in the same frame as the map. `model` is JSON: units, studsPerMe
 bounds, spawn in studs, and `assetId` once the server has uploaded it with Open Cloud (only when `ROBLOX_API_KEY` and
 `ROBLOX_CREATOR_ID` are set). Load an `assetId` on the Roblox server with `AssetService:LoadAssetAsync`; without one,
 build the map (6.2). Demo worlds are imported in Studio ahead of time.
+In the map's frame (studs): `bounds` is the box the model's geometry occupies, read from the .glb files themselves
+(`boundsSource: "glb"`, else the sidecar's own, `"sidecar"`), and each entry of `parts` has its own `bounds`;
+`walkBounds` as in 6.2; `floorY: 0` (`sceneFloorY` is the scene-frame floor height it was built on); `studsPerMeter`;
+`spawn` when known. The game turns, scales and moves the model it loaded until its box matches `bounds`.
 
 ### 6.3 Presence: `POST BASE/api/roblox/:sceneId/presence` (4 Hz, one loop per Roblox server)
 
@@ -344,6 +351,75 @@ on round end.
 
 **Request budget:** Roblox allows 500 HTTP requests per minute per game server. Presence (240) + picker (20) + map
 loads + events stays near 280.
+
+### 6.5 Game results: `game.result` (the contract)
+
+Every Roblox game reports the end of each match once, on the 6.4 route `POST BASE/api/roblox/:sceneId/event`:
+
+```json
+{ "type": "game.result", "game": "pingpong", "round": "pp-6F1C2A0E-3B7D-4C55-9A2E-0D9F4B1E8A77",
+  "winner": "rbx-123", "winnerName": "Seb", "loser": "rbx-456", "loserName": "Shivin",
+  "score": "7-4", "durationS": 312 }
+```
+
+| Field | Meaning |
+| --- | --- |
+| `type` | exactly `"game.result"` |
+| `game` | `"pingpong"`, `"pool"`, `"foosball"`, `"chess"` or `"tag"` |
+| `round` | unique per match: made once when the match starts, the same on every retry |
+| `winner`, `loser` | person ids (3.3) as strings, `"rbx-<UserId>"`; `"bot"` for a side the game played itself. A game with more than two players reports the top and the bottom player |
+| `winnerName`, `loserName` | display names, at most 40 characters |
+| `score` | the winner's first: `"11-7"`; pool: balls each player potted, the 8 counting for the winner |
+| `durationS` | whole seconds from the first serve or move to the end |
+
+A draw (chess stalemate) adds `"draw": true`, both players as `winner` and `loser` in either order, `score` `"draw"`.
+
+Server side:
+- `parseRobloxEvent` passes these through as extra fields (short strings, clipped at 120 characters, finite numbers,
+  booleans; at most 16; objects and arrays are dropped). A bare UserId sent as a number stays a number, so games send
+  the `"rbx-"` string.
+- Its `type` pattern must accept the `.` in `game.result`.
+- An identical body within 2 s answers `{"ok":true,"duplicate":true}` and is not published again.
+- It adds `t` and publishes with `presence.publishEvent`: `/ws` gets `{type: "roblox", sceneId, event}`, and so does
+  every `onEvent` subscriber.
+
+Consumers (the Tiger Data replay store, the Solana devnet scoreboard on `/scores`, the Capital One Nessie tab where the
+loser covers the table in mock money):
+- ignore every other `type`;
+- are idempotent per `(sceneId, round)`: a second copy changes nothing;
+- never slow the event route down: the subscriber returns at once and the work runs on the consumer's own queue (fire
+  and forget); failures are logged, never thrown back into the publisher;
+- move no money for a `"bot"` side or a draw.
+
+The older `{type: "game", game, winner, score}` that the first arcade games send is not part of this contract;
+consumers read only `game.result`.
+
+### 6.6 Table features in `/model` (the contract)
+
+`GET BASE/api/roblox/:sceneId/model` adds `features` when a world has the object; when one is missing the game falls
+back to its hand-tuned table. Studs, in the map's frame (6.2: studs = room metres × `studsPerMeter`, floor y = 0).
+Points are `[x, y, z]` arrays. Example (a table tennis table and an 8 ft pool table, each centred on the origin):
+
+```json
+"features": {
+  "pingPongTable": { "corners": [[-2.72, 2.71, -4.89], [2.72, 2.71, -4.89], [2.72, 2.71, 4.89], [-2.72, 2.71, 4.89]],
+                     "height": 2.71 },
+  "poolTable": { "corners": [[-2.0, 2.75, -3.99], [2.0, 2.75, -3.99], [2.0, 2.75, 3.99], [-2.0, 2.75, 3.99]],
+                 "pockets": [[-2.0, 2.75, -3.99], [2.0, 2.75, -3.99], [2.0, 2.75, 3.99], [-2.0, 2.75, 3.99],
+                             [-2.0, 2.75, 0], [2.0, 2.75, 0]],
+                 "railHeight": 0.13, "clothColor": [38, 110, 72] }
+}
+```
+
+- `pingPongTable.corners`: the 4 corners of the playing top, in order around it (each corner shares an edge with the
+  next); `y` is the top. `height`: the top above the floor (0.76 m real, 2.71 studs). The long axis is the longer pair
+  of edges; the net crosses its middle.
+- `poolTable.corners`: the 4 corners of the cloth playing surface (inside the cushion noses), in order around it; `y`
+  is the cloth. `pockets`: the 6 pocket centres at cloth height, in any order (the 4 nearest the corners are the corner
+  pockets). `railHeight`: the cushion tops above the cloth. `clothColor`: `[r, g, b]`, 0 to 255, from the capture.
+- Already read by the game, in the same frame: `foosballTable` (`corners` as for `pingPongTable`) and `chessBoard`
+  (`corners` plus `a1`, the 1-based index of the a1 corner).
+- The game reads `/model` once per Roblox server: features added later reach the servers started after them.
 
 ---
 
