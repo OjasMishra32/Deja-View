@@ -188,7 +188,7 @@ function seedDemo() {
   const running = add(
     {
       id: 'demo-running',
-      name: 'Kitchen, rent free',
+      name: 'Downstairs, from one photo',
       mode: 'rentfree',
       status: 'running',
       stage: 'Generating the world',
@@ -208,7 +208,7 @@ function seedDemo() {
   }, 700);
   add({
     id: 'demo-failed',
-    name: 'Sam makes pancakes',
+    name: 'Ping pong, take one',
     mode: 'thirdwheel',
     status: 'failed',
     stage: 'Estimating video depth',
@@ -221,13 +221,13 @@ function seedDemo() {
   });
   add({
     id: 'demo-queued',
-    name: "A lighthouse keeper's kitchen",
+    name: "A lighthouse keeper's study",
     mode: 'rentfree',
     status: 'queued',
     stage: 'Waiting for a GPU',
     createdAt: iso(20_000),
     updatedAt: iso(20_000),
-    input: { files: [], prompt: "a lighthouse keeper's kitchen at dusk, warm lamps, sea through the window" },
+    input: { files: [], prompt: "a lighthouse keeper's study at dusk, warm lamps, sea through the window" },
   });
 }
 
@@ -301,6 +301,8 @@ function json(body: unknown, status = 200) {
 }
 
 const CREATABLE: SceneMode[] = ['rentfree', 'thirdwheel', 'reconstruct'];
+/** The public mode names the capture page sends, mapped to the internal ids (as the real server does). */
+const MODE_ALIAS: Record<string, SceneMode> = { photo: 'rentfree', video: 'thirdwheel' };
 
 async function createScene(req: Request): Promise<Response> {
   let form: FormData;
@@ -309,7 +311,8 @@ async function createScene(req: Request): Promise<Response> {
   } catch {
     return json({ error: 'Expected multipart form data' }, 400);
   }
-  const mode = String(form.get('mode') ?? '') as SceneMode;
+  const raw = String(form.get('mode') ?? '');
+  const mode = (MODE_ALIAS[raw] ?? raw) as SceneMode;
   const name = String(form.get('name') ?? '').trim();
   const prompt = String(form.get('prompt') ?? '').trim();
   const files = form.getAll('files').filter((f): f is File => typeof f !== 'string');
@@ -778,21 +781,21 @@ async function runShots(base: string) {
       await shot(phone, 'capture-phone');
       await shot(phone, 'capture-phone-full', true);
       // Video mode with a photo must be rejected, then accept the clip.
-      await phone.click('[data-mode="thirdwheel"]');
+      await phone.click('[data-mode="video"]');
       await phone.setInputFiles('#pick-files', join(SCENES, 'test-thirdwheel', 'thumb.jpg'));
       await phone.waitForTimeout(400);
       const err = await phone.$eval('#capture-error', (e) => e.textContent?.trim() ?? '');
-      console.log(`thirdwheel + photo validation: "${err}"`);
+      console.log(`video + photo validation: "${err}"`);
       await phone.click('.pv-x');
       await phone.setInputFiles('#pick-files', join(SCENES, 'test-thirdwheel', 'tw.mp4'));
       await phone.waitForTimeout(1000);
       const err2 = await phone.$eval('#capture-error', (e) => e.textContent?.trim() ?? '');
-      console.log(`thirdwheel + one video validation: "${err2}"`);
-      await shot(phone, 'capture-phone-thirdwheel', true);
+      console.log(`video + one video validation: "${err2}"`);
+      await shot(phone, 'capture-phone-video', true);
       // Photo mode with a photo: downscale, upload with progress, land on the gallery.
-      await phone.goto(base + '/capture?mode=rentfree', { waitUntil: 'networkidle' });
+      await phone.goto(base + '/capture?mode=photo', { waitUntil: 'networkidle' });
       await phone.setInputFiles('#pick-files', join(SCENES, 'test-thirdwheel', 'plate.jpg'));
-      await phone.fill('#scene-name', 'Harness kitchen');
+      await phone.fill('#scene-name', 'Harness room');
       await phone.waitForTimeout(800);
       const meta = await phone.$eval('.pv-meta', (e) => e.textContent ?? '');
       console.log(`processed photo preview: "${meta}"`);
@@ -808,7 +811,7 @@ async function runShots(base: string) {
       // upright, at most 2048 px, with the focal length kept and the orientation reset.
       const big = join(out, 'test-12mp-exif.jpg');
       await makeExifJpeg(big);
-      await phone.goto(base + '/capture?mode=rentfree', { waitUntil: 'networkidle' });
+      await phone.goto(base + '/capture?mode=photo', { waitUntil: 'networkidle' });
       await phone.setInputFiles('#pick-files', big);
       await phone.fill('#scene-name', 'Sideways photo');
       await phone.waitForFunction(() => !document.querySelector('.pv-meta')?.textContent?.includes('shrinking'), null, { timeout: 15000 });
@@ -824,7 +827,7 @@ async function runShots(base: string) {
 
       const desk = await browser.newPage({ viewport: { width: 1440, height: 900 } });
       logConsole(desk, 'capture-desktop');
-      await desk.goto(base + '/capture?mode=thirdwheel', { waitUntil: 'networkidle' });
+      await desk.goto(base + '/capture?mode=video', { waitUntil: 'networkidle' });
       await desk.waitForTimeout(800);
       await shot(desk, 'capture-desktop');
       await desk.close();

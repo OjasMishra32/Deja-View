@@ -1,4 +1,4 @@
-// Landing page: hero animation, compute health strip, live gallery, and the same-Wi-Fi panel.
+// Landing page: the group-chat hero, the live gallery, and the same-Wi-Fi panel.
 
 import {
   ApiError,
@@ -13,7 +13,6 @@ import {
   retryScene,
   sceneAssetUrl,
   sceneErrorDetails,
-  summarizeHealth,
   viewUrl,
   type HealthInfo,
   type Scene,
@@ -38,29 +37,7 @@ function toast(msg: string) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Point-cloud room, used by the hero and for placeholder thumbnails: a cutaway "dollhouse" of
-// dots. Dots inside the photo's frustum are what the camera saw; the rest is what gets generated.
-
-interface RoomPoint {
-  x: number;
-  y: number;
-  z: number;
-  shot: boolean; // inside the original photo's frustum
-  tone: number; // 0..1 brightness variation
-  phase: number;
-  reveal: number; // how far outside the photo, for the reveal animation
-  wall: number; // -1 floor or furniture, else index into WALLS
-}
-
-function rng(seed: number) {
-  let s = seed >>> 0 || 1;
-  return () => {
-    s ^= s << 13;
-    s ^= s >>> 17;
-    s ^= s << 5;
-    return (s >>> 0) / 4294967296;
-  };
-}
+// Cover for scenes without a thumbnail yet: a soft gradient with a photo or video glyph.
 
 function hashString(s: string): number {
   let h = 2166136261;
@@ -68,271 +45,26 @@ function hashString(s: string): number {
   return h >>> 0;
 }
 
-type V3 = [number, number, number];
-const sub3 = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const dot3 = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const cross3 = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-const norm3 = (a: V3): V3 => {
-  const l = Math.hypot(a[0], a[1], a[2]) || 1;
-  return [a[0] / l, a[1] / l, a[2] / l];
-};
-
-interface Basis {
-  eye: V3;
-  f: V3;
-  r: V3;
-  u: V3;
-}
-
-function lookAt(eye: V3, target: V3): Basis {
-  const f = norm3(sub3(target, eye));
-  const r = norm3(cross3(f, [0, 1, 0]));
-  return { eye, f, r, u: cross3(r, f) };
-}
-
-interface Room {
-  pts: RoomPoint[];
-  half: [number, number]; // half extents x, z
-  height: number;
-  photo: Basis & { tanX: number; tanY: number };
-}
-
-/** Walls by outward normal axis: back (-z), front (+z), left (-x), right (+x). */
-const WALLS: { axis: 0 | 2; sign: number }[] = [
-  { axis: 2, sign: -1 },
-  { axis: 2, sign: 1 },
-  { axis: 0, sign: -1 },
-  { axis: 0, sign: 1 },
+const COVER_TINTS: [string, string][] = [
+  ['#e8eef7', '#d5deeb'],
+  ['#eef0f4', '#dcdfe6'],
+  ['#e9f1f0', '#d3e1df'],
+  ['#f2eef4', '#e0d9e6'],
 ];
 
-function buildRoom(seed: number, count: number): Room {
-  const r = rng(seed);
-  const X = 2.3 + r() * 0.4, Z = 1.9 + r() * 0.4, H = 2.5;
-  // The photo is taken from the front-right corner, looking into the room.
-  const eye: V3 = [X - 0.55, 1.35, Z - 0.5];
-  const target: V3 = [-X * 0.35, 0.95, -Z * 0.6];
-  const photo = { ...lookAt(eye, target), tanX: Math.tan((32 * Math.PI) / 180), tanY: Math.tan((23 * Math.PI) / 180) };
-  const pts: RoomPoint[] = [];
-  const add = (x: number, y: number, z: number, tone: number, wall = -1) => {
-    const d = sub3([x, y, z], eye);
-    const fz = dot3(d, photo.f);
-    const ax = fz > 0 ? Math.abs(dot3(d, photo.r) / fz) / photo.tanX : 9;
-    const ay = fz > 0 ? Math.abs(dot3(d, photo.u) / fz) / photo.tanY : 9;
-    const out = Math.max(ax, ay);
-    pts.push({ x, y, z, shot: fz > 0.3 && out < 1, tone, phase: r() * Math.PI * 2, reveal: Math.max(0, out - 1), wall });
-  };
-  const n = (k: number) => Math.round(count * k);
-  // Floor: planks along x with per-plank tone.
-  for (let i = 0; i < n(0.3); i++) {
-    const x = (r() * 2 - 1) * X, z = (r() * 2 - 1) * Z;
-    const plank = Math.floor((z + 10) / 0.32);
-    add(x, 0, z, 0.35 + 0.35 * rng(plank * 7 + seed)() + r() * 0.12);
-  }
-  // Rug
-  for (let i = 0; i < n(0.05); i++) add(-0.4 + (r() * 2 - 1) * 1.0, 0.01, 0.2 + (r() * 2 - 1) * 0.7, 0.8 + r() * 0.2);
-  // Walls with a window on the back wall and a door on the left wall.
-  const winX0 = -0.2 + r() * 0.5;
-  for (let w = 0; w < 4; w++) {
-    const { axis, sign } = WALLS[w];
-    const len = axis === 2 ? X : Z;
-    const share = axis === 2 ? (sign < 0 ? 0.13 : 0.08) : 0.1;
-    for (let i = 0; i < n(share); i++) {
-      const s = (r() * 2 - 1) * len, y = r() * H;
-      let tone = 0.45 + r() * 0.35;
-      if (w === 0 && s > winX0 && s < winX0 + 1.2 && y > 0.95 && y < 2.0) {
-        // window: brighter glass with a cross bar
-        const bar = Math.abs(s - (winX0 + 0.6)) < 0.03 || Math.abs(y - 1.48) < 0.03;
-        tone = bar ? 0.3 : 0.95;
-      }
-      if (w === 2 && s > -0.2 && s < 0.7 && y < 2.0) {
-        if (Math.abs(s + 0.2) > 0.04 && Math.abs(s - 0.7) > 0.04 && Math.abs(y - 2.0) > 0.04) continue;
-        tone = 0.9;
-      }
-      const p: V3 = axis === 2 ? [s, y, sign * Z] : [sign * X, y, s];
-      add(p[0], p[1], p[2], tone, w);
-    }
-    // Edges where walls meet the floor read as lines.
-    for (let i = 0; i < n(0.01); i++) {
-      const s = (r() * 2 - 1) * len;
-      const p: V3 = axis === 2 ? [s, 0, sign * Z] : [sign * X, 0, s];
-      add(p[0], p[1], p[2], 1, w);
-    }
-  }
-  const box = (cx: number, cz: number, w: number, d: number, h: number, k: number, top = 0.9) => {
-    for (let i = 0; i < n(k); i++) {
-      const face = r();
-      const u = r() * 2 - 1, v = r();
-      if (face < 0.5) add(cx + u * w, h, cz + (r() * 2 - 1) * d, top - r() * 0.15);
-      else if (face < 0.75) add(cx + u * w, v * h, cz + (r() < 0.5 ? -d : d), 0.55 + r() * 0.2);
-      else add(cx + (r() < 0.5 ? -w : w), v * h, cz + u * d, 0.5 + r() * 0.2);
-    }
-  };
-  // Bed against the back-left, nightstand, desk on the right.
-  box(-X + 0.85, -Z + 1.05, 0.75, 1.0, 0.5, 0.09, 0.95);
-  box(-X + 0.85, -Z + 0.12, 0.75, 0.1, 0.9, 0.02, 0.8);
-  box(-X + 2.0, -Z + 0.3, 0.25, 0.25, 0.55, 0.015);
-  box(X - 0.45, -0.6, 0.35, 0.7, 0.75, 0.04);
-  // Lamp and plant.
-  const ball = (cx: number, cy: number, cz: number, rad: number, k: number, tone: number) => {
-    for (let i = 0; i < n(k); i++) {
-      const a = r() * Math.PI * 2, b = Math.acos(2 * r() - 1);
-      add(cx + rad * Math.sin(b) * Math.cos(a), cy + rad * Math.cos(b), cz + rad * Math.sin(b) * Math.sin(a), tone);
-    }
-  };
-  ball(-X + 2.0, 0.85, -Z + 0.3, 0.16, 0.012, 1);
-  ball(X - 0.35, 1.0, Z - 1.2, 0.3, 0.02, 0.7);
-  box(X - 0.35, Z - 1.2, 0.15, 0.15, 0.6, 0.008);
-  return { pts, half: [X, Z], height: H, photo };
-}
-
-interface View {
-  az: number; // radians around +y, 0 = looking from +z
-  el: number;
-  dist: number;
-  fov: number;
-}
-
-function drawRoom(ctx: CanvasRenderingContext2D, w: number, h: number, room: Room, view: View, t: number, reveal: number, scale: number, frame = true) {
-  ctx.clearRect(0, 0, w, h);
-  const center: V3 = [0, 0.9, 0];
-  const eye: V3 = [
-    center[0] + view.dist * Math.cos(view.el) * Math.sin(view.az),
-    center[1] + view.dist * Math.sin(view.el),
-    center[2] + view.dist * Math.cos(view.el) * Math.cos(view.az),
-  ];
-  const cam = lookAt(eye, center);
-  const F = (0.5 * h) / Math.tan((view.fov * Math.PI) / 360);
-  const proj = (p: V3) => {
-    const d = sub3(p, eye);
-    const z = dot3(d, cam.f);
-    return { sx: w / 2 + (dot3(d, cam.r) / z) * F, sy: h / 2 - (dot3(d, cam.u) / z) * F, z };
-  };
-  // Cutaway: walls between the viewer and the room fade out.
-  const wallVis = WALLS.map(({ axis, sign }) => {
-    const outside = sign * eye[axis] - (axis === 0 ? room.half[0] : room.half[1]);
-    return 1 - Math.min(1, Math.max(0, (outside + 0.6) / 1.4));
-  });
-  for (const p of room.pts) {
-    const vis = p.wall >= 0 ? wallVis[p.wall] : 1;
-    if (vis <= 0.02) continue;
-    const q = proj([p.x, p.y, p.z]);
-    if (q.z < 0.2) continue;
-    const size = Math.max(1, Math.min(3.2, (2.1 * view.dist) / q.z / 1.0)) * scale;
-    if (p.shot) {
-      const a = (0.32 + 0.6 * p.tone) * vis;
-      ctx.fillStyle = `rgba(243,241,234,${a.toFixed(3)})`;
-    } else {
-      const shown = Math.max(0, Math.min(1, (reveal - p.reveal) * 1.6));
-      if (shown <= 0) continue;
-      const tw = 0.75 + 0.25 * Math.sin(t * 1.7 + p.phase);
-      const a = (0.2 + 0.62 * p.tone) * vis * shown * tw;
-      ctx.fillStyle = `rgba(212,255,58,${a.toFixed(3)})`;
-    }
-    ctx.fillRect(q.sx - size / 2, q.sy - size / 2, size, size);
-  }
-  if (!frame) return;
-  // The photo: frustum from the photo camera with corner brackets 0.9 m out.
-  const ph = room.photo;
-  const at = (d: number, sx: number, sy: number): V3 => [
-    ph.eye[0] + d * (ph.f[0] + sx * ph.tanX * ph.r[0] + sy * ph.tanY * ph.u[0]),
-    ph.eye[1] + d * (ph.f[1] + sx * ph.tanX * ph.r[1] + sy * ph.tanY * ph.u[1]),
-    ph.eye[2] + d * (ph.f[2] + sx * ph.tanX * ph.r[2] + sy * ph.tanY * ph.u[2]),
-  ];
-  const signs: [number, number][] = [
-    [-1, 1],
-    [1, 1],
-    [1, -1],
-    [-1, -1],
-  ];
-  const apex = proj(ph.eye);
-  const near = signs.map(([a, b]) => proj(at(0.9, a, b)));
-  const far = signs.map(([a, b]) => proj(at(3.2, a, b)));
-  if (apex.z < 0.2) return;
-  ctx.lineWidth = 1 * scale;
-  ctx.strokeStyle = 'rgba(243,241,234,0.22)';
-  ctx.setLineDash([4 * scale, 5 * scale]);
-  ctx.beginPath();
-  for (let i = 0; i < 4; i++) {
-    ctx.moveTo(near[i].sx, near[i].sy);
-    ctx.lineTo(far[i].sx, far[i].sy);
-  }
-  ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.strokeStyle = 'rgba(243,241,234,0.45)';
-  ctx.beginPath();
-  for (const c of near) {
-    ctx.moveTo(apex.sx, apex.sy);
-    ctx.lineTo(c.sx, c.sy);
-  }
-  ctx.stroke();
-  ctx.strokeStyle = 'rgba(243,241,234,0.95)';
-  ctx.lineWidth = 2 * scale;
-  ctx.beginPath();
-  for (let i = 0; i < 4; i++) {
-    const c = near[i], prev = near[(i + 3) % 4], next = near[(i + 1) % 4];
-    const k = 0.25;
-    ctx.moveTo(c.sx + (prev.sx - c.sx) * k, c.sy + (prev.sy - c.sy) * k);
-    ctx.lineTo(c.sx, c.sy);
-    ctx.lineTo(c.sx + (next.sx - c.sx) * k, c.sy + (next.sy - c.sy) * k);
-  }
-  ctx.stroke();
-  ctx.fillStyle = 'rgba(243,241,234,0.95)';
-  ctx.beginPath();
-  ctx.arc(apex.sx, apex.sy, 3 * scale, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function startHero(canvas: HTMLCanvasElement) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  const small = innerWidth < 760;
-  const room = buildRoom(11, small ? 4200 : 7000);
-  let w = 0, h = 0, dpr = 1;
-  const resize = () => {
-    dpr = Math.min(devicePixelRatio || 1, 2);
-    w = canvas.width = Math.round(canvas.clientWidth * dpr);
-    h = canvas.height = Math.round(canvas.clientHeight * dpr);
-  };
-  resize();
-  new ResizeObserver(resize).observe(canvas);
-  let visible = true;
-  new IntersectionObserver((e) => (visible = e[0]?.isIntersecting ?? true)).observe(canvas);
-  const t0 = performance.now();
-  const frame = (now: number) => {
-    const t = (now - t0) / 1000;
-    if (visible && w && h) {
-      const az = reducedMotion ? 0.55 : 0.6 + Math.sin(t * 0.16) * 0.5;
-      const reveal = reducedMotion ? 9 : Math.min(9, t * 0.9 - 0.3);
-      const fit = Math.max(1, (h / w) * 0.9);
-      drawRoom(ctx, w, h, room, { az, el: 0.52, dist: 7.8 * fit, fov: 50 }, t, reveal, dpr);
-    }
-    if (!reducedMotion || t < 0.1) requestAnimationFrame(frame);
-  };
-  requestAnimationFrame(frame);
-}
-
 const thumbCache = new Map<string, string>();
-/** Generated cover for scenes without a thumbnail: the same dot room, seeded by the scene id. */
-function placeholderThumb(scene: { id: string }): string {
-  const hit = thumbCache.get(scene.id);
+function placeholderThumb(scene: { id: string; mode?: string }): string {
+  const key = `${scene.id}|${scene.mode ?? ''}`;
+  const hit = thumbCache.get(key);
   if (hit) return hit;
-  const c = document.createElement('canvas');
-  c.width = 640;
-  c.height = 400;
-  const ctx = c.getContext('2d');
-  if (!ctx) return '';
-  const seed = hashString(scene.id);
-  const r = rng(seed ^ 0x9e3779b9);
-  const room = buildRoom(seed, 5200);
-  drawRoom(ctx, 640, 400, room, { az: 0.25 + r() * 0.8, el: 0.55, dist: 8.4, fov: 46 }, r() * 10, 9, 1.4, false);
-  ctx.globalCompositeOperation = 'destination-over';
-  const g = ctx.createRadialGradient(320, 220, 20, 320, 220, 380);
-  g.addColorStop(0, '#1b1d17');
-  g.addColorStop(1, '#0c0c0f');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 640, 400);
-  const url = c.toDataURL('image/jpeg', 0.85);
-  thumbCache.set(scene.id, url);
+  const [a, b] = COVER_TINTS[hashString(scene.id) % COVER_TINTS.length];
+  const glyph =
+    modeKind(scene.mode) === 'video'
+      ? '<rect x="292" y="178" width="40" height="44" rx="8"/><path d="M332 193l20-12v38l-20-12z"/>'
+      : '<rect x="290" y="176" width="60" height="48" rx="8"/><circle cx="306" cy="192" r="5"/><path d="M290 214l18-16 14 12 10-8 18 14"/>';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="640" height="400" fill="url(#g)"/><g fill="none" stroke="#8e8e93" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" opacity=".7">${glyph}</g></svg>`;
+  const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  thumbCache.set(key, url);
   return url;
 }
 
@@ -579,25 +311,12 @@ export function qrSvg(text: string): string {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Health strip + same-Wi-Fi panel
+// Same-Wi-Fi panel (the server's health says which addresses phones and the headset can reach)
 
 let health: HealthInfo | undefined;
 
 function setHealth(h: HealthInfo | undefined) {
   health = h;
-  const s = summarizeHealth(h);
-  const items: [string, { ok: boolean; detail: string }][] = [
-    ['gpu', s.gpu],
-    ['worker', s.worker],
-    ['fallbacks', s.fallbacks],
-  ];
-  for (const [k, v] of items) {
-    const el = $(`.health-item[data-k="${k}"]`);
-    if (!el) continue;
-    const dot = $('.dot', el)!;
-    dot.className = 'dot' + (h ? (v.ok ? ' on' : k === 'fallbacks' ? ' bad' : '') : '');
-    $('.v', el)!.textContent = v.detail;
-  }
   renderLan();
 }
 
@@ -612,24 +331,19 @@ let lastQr = '';
 function renderLan() {
   const url = currentLanUrl();
   const link = $<HTMLAnchorElement>('#lan-url');
-  const inline = $<HTMLAnchorElement>('#lan-inline');
   const note = $('#lan-note');
   const qr = $('#qr');
   const cap = $<HTMLAnchorElement>('#lan-capture');
-  if (!link || !inline || !note || !qr) return;
+  if (!link || !note || !qr) return;
   if (!url) {
-    link.textContent = health ? 'No Wi-Fi address found' : 'finding this laptop…';
+    link.textContent = health ? 'No Wi-Fi address found' : 'Finding this laptop…';
     link.removeAttribute('href');
-    inline.textContent = health ? 'not on a network' : 'finding address';
     note.textContent = health ? 'Connect the laptop to Wi-Fi, then reload. Phones and the headset must be on the same network.' : '';
     qr.innerHTML = '';
     return;
   }
-  const pretty = url.replace(/^https?:\/\//, '');
-  link.textContent = url;
+  link.textContent = url.replace(/^https?:\/\//, '');
   link.href = url;
-  inline.textContent = pretty;
-  inline.href = url;
   if (cap) cap.href = url + '/capture';
   if (url !== lastQr) {
     try {
@@ -792,7 +506,7 @@ function cardBody(s: Scene): string {
       }
       <a class="btn ${s.status === 'ready' ? 'btn-primary' : ''} btn-xs" data-act="enter" href="${esc(viewUrl(s.id))}"${
         s.status === 'ready' ? '' : ' aria-disabled="true" tabindex="-1"'
-      }>Enter <span class="arrow">&rarr;</span></a>
+      }>Walk in</a>
     </div>`;
 }
 
@@ -800,7 +514,7 @@ function badges(s: Scene): string {
   const active = ACTIVE.has(s.status);
   const kind = modeKind(s.mode);
   return `<span class="badge mode-${kind}">${MODE_NAME[kind]}</span>
-    <span class="badge status-${esc(s.status)}"><span class="dot${s.status === 'ready' ? ' on' : active ? ' on pulse' : s.status === 'failed' ? ' bad' : ''}"></span>${esc(STATUS_LABEL[s.status] ?? s.status)}</span>`;
+    <span class="badge status-${esc(s.status)}">${esc(active ? 'Building' : STATUS_LABEL[s.status] ?? s.status)}</span>`;
 }
 
 function makeCard(s: Scene): HTMLElement {
@@ -865,13 +579,14 @@ function renderFilters() {
 function renderGrid() {
   const grid = $('#grid');
   if (!grid) return;
+  renderThread();
   renderFilters();
   const list = ordered().filter(matches);
   if (!list.length) {
     grid.innerHTML = loaded
       ? `<div class="empty"><h3>${scenes.size ? 'Nothing here in this filter.' : 'Nothing here yet.'}</h3><p>${
           scenes.size ? 'Try another filter, or make something new.' : 'Your first world is one photo away.'
-        }</p><a class="btn btn-primary" href="/capture">Make a world <span class="arrow">&rarr;</span></a></div>`
+        }</p><a class="btn btn-primary" href="/capture">Make a world</a></div>`
       : grid.innerHTML;
     return;
   }
@@ -904,6 +619,7 @@ function upsert(s: Scene) {
   const el = $(`.scene-card[data-id="${CSS.escape(s.id)}"]`);
   if (el && matches(s)) fillCard(el, s);
   else renderGrid();
+  if (s.status === 'ready') renderThread();
 }
 
 function removeScene(id: string) {
@@ -957,7 +673,6 @@ async function refreshHealth() {
     setHealth(await getHealth());
   } catch {
     setHealth(undefined);
-    for (const el of document.querySelectorAll('.health-item[data-k] .v')) el.textContent = 'unknown';
   }
 }
 
@@ -1015,19 +730,29 @@ function onGridClick(e: MouseEvent) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Hero group chat: the link a friend pastes unfurls into the newest real world in the gallery.
 
-function setLive(state: 'connecting' | 'open' | 'closed') {
-  const dot = $('#live-dot');
-  const txt = $('#live-txt');
-  if (!dot || !txt) return;
-  dot.className = 'dot' + (state === 'open' ? ' on pulse' : state === 'connecting' ? ' warn' : ' bad');
-  txt.textContent = state === 'open' ? 'live' : state === 'connecting' ? 'connecting' : 'reconnecting';
-  $('#live')?.setAttribute('title', state === 'open' ? 'Live updates on' : 'Live updates paused; polling');
+/** The newest ready world with a thumbnail, preferring one somebody made over the bundled samples. */
+function featured(): Scene | null {
+  const ready = ordered().filter((s) => s.status === 'ready' && s.thumb);
+  return ready.find((s) => s.mode !== 'sample') ?? ready[0] ?? null;
+}
+
+let threadId: string | null = null;
+function renderThread() {
+  const s = featured();
+  if (!s || s.id === threadId) return;
+  threadId = s.id;
+  const img = $<HTMLImageElement>('#chat-link-img');
+  if (img) img.src = sceneAssetUrl(s.id, s.thumb!);
+  const title = $('#chat-link-title');
+  if (title) title.textContent = s.name || 'Game night';
+  $<HTMLAnchorElement>('#chat-link')?.setAttribute('href', viewUrl(s.id));
 }
 
 function main() {
-  const canvas = $<HTMLCanvasElement>('#hero-canvas');
-  if (canvas) startHero(canvas);
+  // The chat plays in once; without scripts it is simply there.
+  $('#chat')?.classList.add('play');
 
   $('#grid')?.addEventListener('click', onGridClick);
   $('#filters')?.addEventListener('click', (e) => {
@@ -1045,7 +770,6 @@ function main() {
   const events = new LiveEvents();
   let opened = false;
   events.onState((s) => {
-    setLive(s);
     if (s === 'open') {
       // After a reconnect, events may have been missed.
       if (opened) void refreshScenes();
