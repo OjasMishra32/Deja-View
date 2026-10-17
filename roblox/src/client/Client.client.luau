@@ -95,6 +95,8 @@ local function anyoneInLobby(): boolean
 	return false
 end
 
+-- Phones start with the host panel folded away so it doesn't cover the joystick.
+local hostOpen = not UserInputService.TouchEnabled or UserInputService.KeyboardEnabled
 local bootDone = false
 local function refresh()
 	local phase = W("Phase") or "lobby"
@@ -148,7 +150,10 @@ local function refresh()
 
 	-- buttons
 	local host = isHost()
-	ui.host.Visible = host
+	ui.host.Visible = host and hostOpen
+	ui.hostToggle.Visible = host
+	ui.hostToggle.BackgroundColor3 = if hostOpen then Theme.Accent else Theme.Surface
+	ui.hostToggle.TextColor3 = if hostOpen then Theme.Bg else Theme.Text
 	ui.joinBtn.Visible = host and phase == "room" and anyoneInLobby()
 	ui.hopBtn.Visible = (phase == "room" and not inRoom and not host) or inRoom
 	ui.hopBtn.Text = if inRoom then "LOBBY" else "HOP IN"
@@ -227,6 +232,10 @@ GhostState.OnClientEvent:Connect(Ghosts.push)
 local function host(action: string, value: any?)
 	HostAction:FireServer(action, value)
 end
+ui.hostToggle.Activated:Connect(function()
+	hostOpen = not hostOpen
+	refresh()
+end)
 ui.roomsBtn.Activated:Connect(function()
 	ui.panel.Visible = not ui.panel.Visible
 	renderCards()
@@ -331,9 +340,13 @@ end)
 
 -- Small screens: compact scoreboard
 local function layoutForScreen()
-	local w = workspace.CurrentCamera.ViewportSize.X
-	ui.scoreRows.Visible = w >= 700
-	ui.panelList:FindFirstChildOfClass("UIGridLayout").CellSize = if w < 700 then UDim2.new(0.48, 0, 0, 140) else UDim2.new(0.31, 0, 0, 150)
+	local size = workspace.CurrentCamera.ViewportSize
+	-- 1 on a laptop, down to 0.6 on a phone in landscape.
+	Ui.setScale(ui, math.clamp(math.min(size.X / 1100, size.Y / 620), 0.6, 1))
+	local small = size.X < 900
+	ui.scoreRows.Visible = size.X >= 700
+	ui.roomsBtn.Text = if UserInputService.KeyboardEnabled then "ROOMS (R)" else "ROOMS"
+	ui.panelList:FindFirstChildOfClass("UIGridLayout").CellSize = if small then UDim2.new(0.48, 0, 0, 140) else UDim2.new(0.31, 0, 0, 150)
 end
 workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(layoutForScreen)
 layoutForScreen()
