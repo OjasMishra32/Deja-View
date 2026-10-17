@@ -1,7 +1,7 @@
 // Capture / upload flow, phone first: pick a mode, take or choose media, name it, upload with
 // progress, land on the gallery with the new card highlighted.
 
-import { ApiError, createScene, getHealth, lanUrls, type CreatableMode, type UploadFile, type UploadHandle } from './api.ts';
+import { createScene, getHealth, lanUrls, splitErrorMessage, type CreatableMode, type UploadFile, type UploadHandle } from './api.ts';
 import { qrSvg } from './gallery.ts';
 
 export type MediaKind = 'image' | 'video';
@@ -41,6 +41,12 @@ export function kindOf(file: { type: string; name: string }): MediaKind | null {
   if (['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'avif', 'gif', 'bmp'].includes(ext)) return 'image';
   if (['mp4', 'mov', 'm4v', 'webm', 'mkv', 'avi'].includes(ext)) return 'video';
   return null;
+}
+
+/** The message to keep on the page after a failed upload. */
+export function uploadErrorMessage(error: unknown): string {
+  const msg = error instanceof Error ? error.message : String(error ?? '');
+  return msg.trim() || 'The upload failed without a reason. Try again.';
 }
 
 /** Size that fits inside max x max, never upscaling. */
@@ -290,6 +296,9 @@ const COPY: Record<CreatableMode, {
   },
 };
 
+const ICON_PHOTO =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>';
+
 function esc(s: unknown): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
@@ -317,6 +326,10 @@ function main() {
   let nameTouched = false;
   let busy: UploadHandle | null = null;
   let triedSubmit = false;
+  // Messages that outlive revalidate(): the server's answer to the last upload, and notes about
+  // the last pick (skipped files, a long clip). Both clear when the selection or mode changes.
+  let uploadError: string | null = null;
+  let pickNotes: string[] = [];
 
   const summary = (): SelectionSummary => ({
     images: items.filter((i) => i.kind === 'image').length,
@@ -324,19 +337,46 @@ function main() {
     prompt: promptInput.value,
   });
 
+  /** Shows a message; server errors keep their tool output in a collapsed details block. */
   function showError(msg: string | null) {
-    errorEl.textContent = msg ?? '';
+    if (errorEl.dataset.msg === (msg ?? '')) return; // keep an opened details block open
+    errorEl.dataset.msg = msg ?? '';
+    const { headline, detail } = splitErrorMessage(msg);
+    errorEl.replaceChildren();
+    if (!headline) return;
+    const line = document.createElement('span');
+    line.className = 'form-error-text';
+    line.textContent = headline;
+    errorEl.append(line);
+    if (detail) {
+      const more = document.createElement('details');
+      const sum = document.createElement('summary');
+      sum.textContent = 'Details';
+      const pre = document.createElement('pre');
+      pre.textContent = detail;
+      more.append(sum, pre);
+      errorEl.append(more);
+    }
+  }
+
+  /** The selection changed: earlier server answers and pick notes no longer apply. */
+  function selectionChanged() {
+    uploadError = null;
+    pickNotes = [];
   }
 
   function revalidate() {
     // Do not nag before the first attempt, except for picks that can never work in this mode.
-    const err = validateSelection(mode, summary());
-    const hardWrong = mode === 'thirdwheel' && (summary().images > 0 || summary().videos > 1);
-    showError(triedSubmit || hardWrong ? err : null);
+    const sel = summary();
+    const err = validateSelection(mode, sel);
+    const hardWrong = mode === 'thirdwheel' && (sel.images > 0 || sel.videos > 1);
+    const validation = triedSubmit || hardWrong ? err : null;
+    showError(validation ?? uploadError ?? (pickNotes.length ? pickNotes.join(' ') : null));
     submit.disabled = !!busy || items.some((i) => i.status === 'processing');
   }
 
   function applyMode(next: CreatableMode) {
+    if (next !== mode) selectionChanged();
     mode = next;
     const c = COPY[mode];
     for (const b of document.querySelectorAll<HTMLButtonElement>('.mode-opt')) b.setAttribute('aria-checked', String(b.dataset.mode === mode));
@@ -377,10 +417,13 @@ function main() {
               : it.width
                 ? `${it.width}×${it.height} · ${formatBytes(it.blob?.size ?? it.file.size)}`
                 : it.note ?? formatBytes(it.file.size);
+        // A photo this browser could not decode (status 'raw') would only show a broken-image icon.
         const media =
           it.kind === 'video'
             ? `<video src="${esc(it.url)}#t=0.1" muted playsinline preload="metadata"></video>`
-            : `<img src="${esc(it.url)}" alt="">`;
+            : it.status === 'raw'
+              ? `<div class="pv-ph" aria-hidden="true">${ICON_PHOTO}</div>`
+              : `<img src="${esc(it.url)}" alt="">`;
         return `<div class="pv${it.kind === 'video' ? ' wide' : ''}" data-id="${it.id}">${media}<span class="pv-meta">${esc(meta)}</span><button type="button" class="pv-x" aria-label="Remove">&times;</button></div>`;
       })
       .join('');
@@ -389,11 +432,12 @@ function main() {
   async function addFiles(list: FileList | File[]) {
     const files = [...list];
     if (!files.length) return;
+    selectionChanged();
     const fresh: Item[] = [];
     for (const file of files) {
       const kind = kindOf(file);
       if (!kind) {
-        showError(`${file.name}: not a photo or a video.`);
+        pickNotes.push(`${file.name}: not a photo or a video, skipped.`);
         continue;
       }
       // Third Wheel holds exactly one video: a new pick replaces the old one.
@@ -412,7 +456,7 @@ function main() {
         if (it.kind === 'video') {
           const info = await videoInfo(it.file);
           Object.assign(it, info);
-          if (mode === 'thirdwheel' && info.duration > 60) showError('Long clip. Anything past 30 s just takes longer to process.');
+          if (mode === 'thirdwheel' && info.duration > 60 && items.includes(it)) pickNotes.push('Long clip. Anything past 30 s just takes longer to process.');
           return;
         }
         try {
@@ -458,6 +502,7 @@ function main() {
       showError('Still shrinking your photos, one second.');
       return;
     }
+    uploadError = null;
     showError(null);
     const files: UploadFile[] = items.map((it, i) =>
       it.kind === 'image' && it.blob
@@ -476,12 +521,13 @@ function main() {
       $('up-stage').textContent = 'Uploaded. Off it goes.';
       location.href = `/?new=${encodeURIComponent(scene.id)}#gallery`;
     } catch (error) {
-      const msg = error instanceof ApiError ? error.message : error instanceof Error ? error.message : String(error);
-      showError(msg);
+      // Stored, not just shown: revalidate() would otherwise clear it straight away.
+      uploadError = uploadErrorMessage(error);
       upload.classList.remove('show');
       busy = null;
       cancel.hidden = true;
       revalidate();
+      errorEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
   }
 
@@ -511,6 +557,7 @@ function main() {
     const it = items.find((i) => i.id === id);
     if (it) URL.revokeObjectURL(it.url);
     items = items.filter((i) => i.id !== id);
+    selectionChanged();
     renderPreviews();
     revalidate();
   });
@@ -555,7 +602,8 @@ function main() {
         const full = `${url}/capture?mode=${mode}`;
         $('phone-hint').hidden = false;
         const link = $<HTMLAnchorElement>('lan-url');
-        link.textContent = url.replace(/^https?:\/\//, '') + '/capture';
+        // Break before "/capture" rather than mid-word when the side card is narrow.
+        link.replaceChildren(url.replace(/^https?:\/\//, ''), document.createElement('wbr'), '/capture');
         link.href = full;
         try {
           $('qr').innerHTML = qrSvg(`${url}/capture`);

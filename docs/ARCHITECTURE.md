@@ -29,7 +29,7 @@ phone / laptop ──upload──▶ Bun server (Mac) ──ssh socket──▶ 
 | `pipeline/` | Python pipelines shared by HPG and the Mac: `tw/` (video → packed RGBD), `plate_room.py`, `flashworld_run.py`, `anysplat_run.py`, `run_job.py` | Python |
 | `hpg/` | HiPerGator: env setup, sbatch templates, warm worker | bash/Python |
 | `scripts/` | Dev utilities (samples, certs, smoke tests) | TS |
-| `tests/` | `bun test` unit tests | TS |
+| `tests/` | `*.test.ts` for `bun test` (server, capture page, viewer, Third Wheel layer); `gpu/` and `pipeline/` are pytest suites for the Python code; `harness/` holds the test servers the browser checks start. See [Tests](#tests) | TS/Python |
 | `data/` (gitignored) | Scenes and their assets | — |
 
 ## Coordinate frames
@@ -189,6 +189,28 @@ profile) so XR code paths can be tested in desktop Chrome.
 
 Main server 8787 (`bun run dev`). Throwaway test harnesses: viewer 8790, Third Wheel layer 8791. Kill only processes
 you started.
+
+## Tests
+
+```bash
+bunx tsc --noEmit -p .                            # type-check server, web/src, shared, scripts and tests
+bun test tests                                    # TypeScript unit tests
+VIEWER_E2E=1 bun test tests/viewer-e2e.test.ts    # opt-in: the viewer in headless Chrome (needs Chrome and the samples)
+.venv/bin/python -m pytest tests -q               # both Python suites in one run
+.venv/bin/python -m pytest tests/gpu -q           # splat formats, transforms, floor, runners, HPG worker (CPU only)
+.venv/bin/python -m pytest tests/pipeline -q      # Third Wheel video pipeline, plate room, run_job.py
+```
+
+`scripts/setup-local.sh` creates `.venv` with pytest included. The pipeline tests that build clips skip themselves
+when `ffmpeg` is missing. docs/HPG.md lists the GPU-side checks.
+
+To run both Python suites at once, give pytest the `tests` directory (or no path at all), not
+`tests/gpu tests/pipeline` as two arguments. Each suite has its own top-level `conftest.py` and no `__init__.py`,
+and some test modules import shared helpers with `from conftest import ...`. When both directories are named on the
+command line, pytest loads both conftests before it imports any test module, so that import finds the other
+suite's conftest and collection stops with an `ImportError`. When it walks `tests`, each conftest is loaded right
+before its own suite and the imports resolve. Put any new helper that test modules import in a uniquely named
+module beside the conftest instead of in the conftest itself.
 
 ## Quality bar
 

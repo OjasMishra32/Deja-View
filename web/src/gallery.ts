@@ -7,8 +7,10 @@ import {
   getHealth,
   lanUrls,
   listScenes,
+  productCopy,
   retryScene,
   sceneAssetUrl,
+  splitErrorMessage,
   summarizeHealth,
   viewUrl,
   type HealthInfo,
@@ -681,7 +683,7 @@ const STATUS_LABEL: Record<string, string> = {
 const BACKEND_LABEL: Record<string, string> = {
   'hpg-worker': 'HiPerGator worker',
   'hpg-batch': 'HiPerGator batch',
-  'hf-space': 'HF Space',
+  'hf-space': 'cloud GPU',
   local: 'this Mac',
   bundled: 'bundled',
 };
@@ -735,12 +737,25 @@ function metaLine(s: Scene): string {
   return [ago(s.createdAt), clip, s.backend ? BACKEND_LABEL[s.backend] ?? s.backend : ''].filter(Boolean).join(' · ');
 }
 
+/** Stage line in product language; falls back to the status. */
+function stageText(s: Scene): string {
+  return productCopy(s.stage) || STATUS_LABEL[s.status] || s.status;
+}
+
 function subline(s: Scene): string {
-  if (s.status === 'failed') return s.stage ? `Stopped at: ${s.stage}` : 'Something went sideways.';
-  if (ACTIVE.has(s.status)) return s.input?.prompt ? `“${s.input.prompt}”` : s.caption ?? (s.mode === 'thirdwheel' ? 'Lifting your friend into 3D' : 'Building the room');
-  if (s.caption) return s.caption;
+  // Prompts are the user's own words and stay as typed; captions and stages come from the pipelines.
+  const caption = s.caption ? productCopy(s.caption) : '';
+  if (s.status === 'failed') return s.stage && s.stage !== 'Failed' ? `Stopped at: ${stageText(s)}` : 'Something went sideways.';
+  if (ACTIVE.has(s.status)) return s.input?.prompt ? `“${s.input.prompt}”` : caption || (s.mode === 'thirdwheel' ? 'Lifting your friend into 3D' : 'Building the room');
+  if (caption) return caption;
   if (s.input?.prompt) return `“${s.input.prompt}”`;
   return s.mode === 'thirdwheel' ? 'Walkable kitchen, real friend, original audio' : s.mode === 'sample' ? 'Bundled sample world' : 'Walkable world';
+}
+
+/** The failure reason, with any tool output folded into a details block. */
+function errorBox(error: string | undefined): string {
+  const { headline, detail } = splitErrorMessage(error || 'The job failed without saying why. Check log.txt in the scene folder.');
+  return `<div class="error-box">${esc(headline)}${detail ? `<details><summary>Details</summary><pre>${esc(detail)}</pre></details>` : ''}</div>`;
 }
 
 function cardBody(s: Scene): string {
@@ -753,11 +768,11 @@ function cardBody(s: Scene): string {
     <p class="card-sub">${esc(subline(s))}</p>
     ${
       active
-        ? `<div class="stage-line"><b class="stage">${esc(s.stage ?? STATUS_LABEL[s.status])}</b><span class="pct">${pct !== null ? pct + '%' : ''}</span></div>
+        ? `<div class="stage-line"><b class="stage">${esc(stageText(s))}</b><span class="pct">${pct !== null ? pct + '%' : ''}</span></div>
            <div class="progress${pct === null ? ' indeterminate' : ''}"><div class="progress-fill" style="transform:scaleX(${pct !== null ? Math.max(0.02, pct / 100) : 0.3})"></div></div>`
         : ''
     }
-    ${s.status === 'failed' ? `<div class="error-box">${esc(s.error || 'The job failed without saying why. Check log.txt in the scene folder.')}</div>` : ''}
+    ${s.status === 'failed' ? errorBox(s.error) : ''}
     <div class="card-foot">
       <span class="meta" title="${esc(s.createdAt)}">${esc(meta)}</span>
       ${s.status === 'failed' ? `<button class="btn btn-xs" data-act="retry" type="button">Retry</button>` : ''}
@@ -812,7 +827,7 @@ function fillCard(el: HTMLElement, s: Scene, fresh = false) {
     const fill = $('.progress-fill', body)!;
     $('.progress', body)!.classList.toggle('indeterminate', pct === null);
     fill.style.transform = `scaleX(${pct !== null ? Math.max(0.02, pct / 100) : 0.3})`;
-    $('.stage', body)!.textContent = s.stage ?? STATUS_LABEL[s.status];
+    $('.stage', body)!.textContent = stageText(s);
     $('.pct', body)!.textContent = pct !== null ? `${pct}%` : '';
     $('.card-sub', body)!.textContent = subline(s);
     $('.card-title', body)!.textContent = s.name || 'Untitled';

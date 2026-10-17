@@ -184,6 +184,9 @@ FLASHWORLD_SRC=/path/to/FlashWorld .venv/bin/python -m pytest tests/gpu -q   # +
 .venv/bin/python tests/gpu/spark_fixtures.py && bun tests/gpu/spark_check.ts # our SPZ/PLY files rendered by Spark in headless Chrome
 ```
 
+`.venv/bin/python -m pytest tests -q` runs this suite together with `tests/pipeline`; pass `tests`, not the two
+directories as separate arguments (docs/ARCHITECTURE.md, Tests, explains why).
+
 On HiPerGator, `hpg/tw.sh smoke` (one GPU, about 15 minutes) runs `hpg/smoke/smoke_gpu.py`, `smoke_flashworld.py` and
 `smoke_anysplat.py`; results land in `$HPG_ROOT/smoke/<time>/`.
 

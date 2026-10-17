@@ -121,6 +121,15 @@ export interface UploadHandle {
   abort(): void;
 }
 
+/** What to say when an upload is refused and the server sent no message of its own. */
+export function uploadStatusMessage(status: number, statusText = ''): string {
+  if (status === 413) return 'That file is too big to upload. Trim the clip (10 to 30 s is plenty) or pick a smaller file.';
+  if (status === 415) return 'The server does not accept that file type. Use a photo (JPEG, PNG, HEIC) or a video (MP4, MOV, WebM).';
+  if (status === 429) return 'The server is busy with other uploads. Try again in a moment.';
+  if (status >= 500) return `The server hit a problem with this upload (${status}). Try again; if it keeps happening, check the server log.`;
+  return `Upload failed (${`${status} ${statusText}`.trim()}).`;
+}
+
 /**
  * POST /api/scenes as multipart. Uses XMLHttpRequest because fetch has no upload progress.
  */
@@ -145,7 +154,7 @@ export function createScene(input: CreateSceneInput, onProgress?: (p: UploadProg
         if (scene && typeof scene === 'object' && typeof scene.id === 'string') resolve(scene);
         else reject(new ApiError('The server accepted the upload but did not return a scene.', xhr.status, body));
       } else {
-        reject(new ApiError(messageFromBody(body) ?? `Upload failed (${xhr.status} ${xhr.statusText})`, xhr.status, body));
+        reject(new ApiError(messageFromBody(body) ?? uploadStatusMessage(xhr.status, xhr.statusText), xhr.status, body));
       }
     };
     xhr.onerror = () => reject(new ApiError('Upload failed: the connection dropped. Same Wi-Fi as the laptop?', 0));
@@ -332,6 +341,95 @@ export class LiveEvents {
   }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Text from the server and the pipelines (stage lines, captions, errors) is shown as is. These
+// helpers keep it in product language and split tool output off the readable sentence.
+
+const DETERMINER = /\b(?:a|an|the|no|this|that|your|our|its)\s+$/i;
+const SENTENCE_START = /(?:^|[.!?]\s+|\n\s*)$/;
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Replacement that reads right wherever it lands: "the" when needed, capitalised at a sentence start. */
+function noun(word: string) {
+  return (before: string) => {
+    const text = DETERMINER.test(before) ? word : `the ${word}`;
+    return SENTENCE_START.test(before) ? capitalize(text) : text;
+  };
+}
+
+const COPY_RULES: [RegExp, (before: string, ...groups: string[]) => string][] = [
+  // "Rent Free (ModelName) needs ..." -> "Rent Free needs ..."
+  [/\s*\((?:FlashWorld|AnySplat|Video Depth Anything)\)/g, () => ''],
+  // Hosted demo backends.
+  [/\b(?:FlashWorld\s+(?:Hugging\s?Face\s+)?|Hugging\s?Face\s+|HF\s+)Spaces?\b/g, noun('cloud GPU')],
+  [/\b([Tt]he)\s+Space\b/g, (_b, the) => `${the} cloud GPU`],
+  // "... with ModelName." -> "..."
+  [/\s+(?:with|using|via|by)\s+(?:FlashWorld|AnySplat|Video Depth Anything)\b/g, () => ''],
+  [/\bFlashWorld\s+(world)\b/g, (before, w) => (SENTENCE_START.test(before) ? capitalize(w) : w)],
+  [/\b(?:Video\s+)?Depth\s+Anything(?:\s+V2)?\b/g, noun('depth model')],
+  [/\bFlashWorld\b/g, noun('world model')],
+  [/\bAnySplat\b/g, noun('reconstruction model')],
+  [/\bHugging\s?Face\b/g, () => 'cloud'],
+];
+
+/**
+ * Rewrites model and hosting names in server-provided text into product language, so a stage
+ * line like "Loading <model> onto the GPU" reads "Loading the world model onto the GPU".
+ * URLs are left untouched. User-written text (names, prompts) should not be passed through.
+ */
+export function productCopy(text: string | undefined | null): string {
+  const src = String(text ?? '');
+  if (!/FlashWorld|AnySplat|Depth Anything|Hugging\s?Face|HF Space|\bSpace\b/.test(src)) return src;
+  return src
+    .split(/(https?:\/\/\S+)/)
+    .map((part, i) => {
+      if (i % 2) return part; // a URL
+      let out = part;
+      for (const [re, fn] of COPY_RULES) {
+        out = out.replace(re, (...args: unknown[]) => {
+          const offset = args[args.length - 2] as number;
+          const whole = args[args.length - 1] as string;
+          const groups = args.slice(1, -2) as string[];
+          return fn(whole.slice(0, offset), ...groups);
+        });
+      }
+      return out;
+    })
+    .join('');
+}
+
+/** Where tool output starts inside a message: an ffmpeg log tag, a traceback, or a new line. */
+const TOOL_OUTPUT = /\s*\(?\s*\[[^\]\n]{1,80} @ 0x[0-9a-f]+\]|\s*\(?\s*Traceback \(most recent call last\)|\n/;
+
+/**
+ * Splits an error into the sentence a person reads and the tool output behind it, for example
+ * '"clip.mp4": not a readable video ([mov,mp4 @ 0x1] moov atom not found)' becomes
+ * { headline: '"clip.mp4": not a readable video', detail: '[mov,mp4 @ 0x1] moov atom not found' }.
+ */
+export function splitErrorMessage(message: string | undefined | null): { headline: string; detail: string } {
+  const msg = productCopy(String(message ?? '').trim());
+  const m = TOOL_OUTPUT.exec(msg);
+  if (!m || m.index < 8) return { headline: clip(msg, 400), detail: '' };
+  let headline = msg.slice(0, m.index).replace(/[\s:;,(]+$/, '');
+  let detail = msg.slice(m.index).trim().replace(/^\(\s*/, '');
+  if (m[0].includes('(') && detail.endsWith(')')) detail = detail.slice(0, -1).trimEnd();
+  // Keep a closing summary such as "Not available: ..." with the readable part.
+  const tail = /\.?\s+(Not available: [^\n]*)$/.exec(detail);
+  if (tail) {
+    detail = detail.slice(0, tail.index).trimEnd();
+    headline = `${headline}. ${tail[1]}`;
+  }
+  if (!/[.!?]$/.test(headline)) headline += '.';
+  return { headline: clip(headline, 400), detail };
+}
+
+function clip(s: string, n: number): string {
+  return s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s;
+}
+
 /** Human summary of where jobs will run, for the health strip. */
 export interface HealthSummary {
   gpu: { ok: boolean; label: string; detail: string };
@@ -349,7 +447,7 @@ export function summarizeHealth(h: HealthInfo | undefined): HealthSummary {
   }
   const w = h.hpg?.worker;
   const fb: string[] = [];
-  if (h.space?.available) fb.push('HF Space');
+  if (h.space?.available) fb.push('cloud GPU');
   if (h.local?.python) fb.push('local Mac');
   return {
     gpu: {

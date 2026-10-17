@@ -65,6 +65,8 @@ body::after {
   left: 0;
   right: 0;
   height: 1400px;
+  /* Never taller than the page: otherwise short pages scroll past the grain into a flat band. */
+  max-height: 100%;
   pointer-events: none;
   background:
     radial-gradient(1100px 620px at 85% -8%, rgba(212, 255, 58, 0.075), transparent 62%),
@@ -1415,6 +1417,23 @@ kbd {
   aspect-ratio: 16 / 10;
 }
 
+.pv .pv-ph {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--dim);
+}
+
+.pv .pv-ph svg {
+  width: 34%;
+  max-width: 44px;
+}
+
+.side-card .lan-url {
+  font-size: 16px;
+}
+
 .pv .pv-meta {
   position: absolute;
   left: 6px;
@@ -1514,6 +1533,53 @@ kbd {
   min-height: 1.4em;
   color: #ffb3a9;
   font-size: 15px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.form-error:not(:empty) {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 107, 91, 0.3);
+  background: var(--danger-soft);
+}
+
+.form-error details,
+.error-box details {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.form-error summary,
+.error-box summary {
+  width: fit-content;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: #ffc9c2;
+  opacity: 0.8;
+}
+
+.form-error summary:hover,
+.error-box summary:hover {
+  opacity: 1;
+}
+
+.form-error pre,
+.error-box pre {
+  max-height: 180px;
+  margin: 8px 0 0;
+  padding: 10px;
+  overflow: auto;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .upload-progress {
