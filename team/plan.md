@@ -24,8 +24,9 @@ No stickers. Each sponsor makes the next moment possible.
    in seconds, so a judge can do it for real on stage.
 4. **Reality check (for the host sponsor, Vobile, who protect real content).** One toggle tints every part of the
    world the AI imagined. What the camera captured stays untinted.
-5. **Roblox lets friends without a headset be there.** The same room becomes a Roblox map. Friends join from laptops
-   and play tag with the person in the headset.
+5. **Roblox turns every photo into a game.** Each Photo world also becomes a real Roblox place: a textured model of the
+   room, not blocks. Friends join from the Roblox app on a Quest or a phone and play tag with the person in the headset.
+   (Video memories stay in the headset and the browser.)
 6. **DeepSpace remembers who was there and what they said.** Live presence and trails across headset, Roblox and web,
    and notes left inside the memory that pop up in the headset and stay for the next visitor.
 
@@ -96,8 +97,8 @@ Our own footage leads; Fortnite comes second.
 | 0:15 | The judge puts on the Quest and is inside the game-night memory: the room, the team in 3D, the upset, the yelling, with sound | Déjà View viewer, Video |
 | 0:40 | Floating labels pin onto the screen, the controllers, the snacks. The judge looks at the screen and asks "who won?" The room answers out loud | Gemini `/hotspots`, `/ask` (audio in, speech out) |
 | 1:00 | Host flips the reality check: the AI-imagined parts of the room tint | Reality check (Vobile) |
-| 1:10 | Shivin and Brianna join as Roblox avatars and play tag with the judge (the judge is "it"; rounds are 90 s, set to 25 s for the skit so it ends at about 1:40) | Roblox presence relay, tag events |
-| 1:40 | On the table laptop, the DeepSpace map shows everyone moving live with trails. Brianna clicks the couch and types "Seb's seat. He was too scared to show up." It pops up in the headset as a sticky note | DeepSpace realtime, notes |
+| 1:10 | Host: "and every photo is also a game." The host drops the judge into the Fortnite world; Shivin and Brianna join that same world in Roblox (a phone and a laptop) and play tag with the judge (the judge is "it"; rounds are 90 s, set to 25 s for the skit so it ends at about 1:40) | Roblox presence relay, tag events |
+| 1:40 | On the table laptop, the DeepSpace map shows everyone moving live with trails. Brianna clicks a spot on the map and types "Seb would have dropped here first." It pops up in the headset as a sticky note | DeepSpace realtime, notes |
 | 2:00 | **"Now do it."** The judge lifts the headset and snaps a photo on the table iPhone into Seb's "Add a memory" page | live path, Gemini `/describe` |
 | 2:10 | While it builds, the host drops the judge into the Fortnite world (skip if the build is already done) | pre-built Photo world |
 | 2:25 | Their world is ready: the card in Seb's app turns to "Walk in", the headset swaps into it, the room greets them, labels pop in. The same room appears in the Roblox picker and the DeepSpace gallery; Shivin hops in | warm GPU, Gemini `/narrate` + `/hotspots`, Roblox, DeepSpace |

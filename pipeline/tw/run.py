@@ -2,14 +2,15 @@
 
 Passes over the clip (frames are decoded by ffmpeg each time instead of being held in memory;
 per-frame analysis lives in memory-mapped arrays under work/):
-  A  sample ~70 frames: person segmentation, camera-motion check, background plate
+  A  sample ~70 frames: person segmentation, camera-motion check, background plate (never-seen
+     pixels inpainted with Big LaMa, depth there filled from the surrounding background)
   B  every frame: person probability, change against the plate, monocular depth
   C  masks: temporal decision, cleanup, feathering
   D  depth: align each frame to the plate on background pixels, smooth over time, composite
   E  encode RGB + depth + mask with ffmpeg, with the original audio
 
 CLI (without a job directory):
-  python pipeline/tw/run.py VIDEO OUT_DIR [--max-seconds 60] [--fov 65] [--keep-work]
+  python pipeline/tw/run.py VIDEO OUT_DIR [--max-seconds 60] [--fov 65] [--keep-work] [--plate-inpaint lama|mirror]
 """
 from __future__ import annotations
 
@@ -36,7 +37,7 @@ from common.media import count_frames, fit_size, iter_frames, output_fps, probe,
 
 from . import depthstab, mask as maskmod, motion  # noqa: E402
 from .pack import LAYOUT, PackWriter, encode_inverse, pack_frame  # noqa: E402
-from .plate import build_plate  # noqa: E402
+from .plate import LamaFill, build_plate, fill_depth_holes  # noqa: E402
 
 Progress = Callable[[str | None, float | None], None]
 
@@ -57,6 +58,7 @@ class TwConfig:
     seg_short: int = 368
     seg_stride: int = 2  # person segmentation on every n-th frame (the change mask covers fast motion)
     stabilize: str = "auto"  # auto | on | off
+    plate_inpaint: str = "lama"  # lama (Big LaMa, mirrored-texture fallback) | mirror
     crf: int = 18
     preset: str = "medium"
     batch: int | None = None
@@ -81,7 +83,8 @@ class TwConfig:
     @classmethod
     def from_params(cls, params: dict, device: str | None = None) -> "TwConfig":
         """Job params (camelCase, all optional): maxSeconds, start, fovDeg, stabilize, crf,
-        preset, depthModel, plateDepthModel, depthShort, segmenter, plateSamples, keepWork, batch."""
+        preset, depthModel, plateDepthModel, depthShort, segmenter, plateSamples, keepWork, batch,
+        segStride, plateInpaint."""
         p = params or {}
         m = {
             "max_seconds": ("maxSeconds", float),
@@ -99,6 +102,7 @@ class TwConfig:
             "keep_work": ("keepWork", bool),
             "batch": ("batch", int),
             "seg_stride": ("segStride", int),
+            "plate_inpaint": ("plateInpaint", str),
         }
         over = {}
         for attr, (key, typ) in m.items():
@@ -117,6 +121,15 @@ def _models(cfg: TwConfig):
         DepthEstimator(cfg.frame_depth_model, device=cfg.device, short_side=cfg.depth_short),
         PersonSegmenter(cfg.segmenter, device=cfg.device, short_side=cfg.seg_short),
     )
+
+
+def _plate_inpainter(cfg: TwConfig) -> LamaFill | None:
+    """Big LaMa for the never-seen part of the plate (loaded on first use), or None for the
+    mirrored-texture fill: plateInpaint=mirror, TW_PLATE_INPAINT=mirror or TW_FAKE_MODELS=1."""
+    choice = (os.environ.get("TW_PLATE_INPAINT") or cfg.plate_inpaint or "lama").strip().lower()
+    if choice != "lama" or os.environ.get("TW_FAKE_MODELS") == "1":
+        return None
+    return LamaFill(device=cfg.device)
 
 
 def _plate_depth_model(cfg: TwConfig):
@@ -299,8 +312,11 @@ def process_video(
 
     t0 = time.time()
     progress("Finding the room behind everyone", 0.12)
-    plate, holes, plate_stats = build_plate(samples_arr, person_samples, log=log)
-    del samples_arr, person_samples
+    inpainter = _plate_inpainter(cfg)
+    plate, holes, plate_stats = build_plate(samples_arr, person_samples, log=log, inpaint=inpainter)
+    if inpainter is not None:
+        inpainter.release()
+    del samples_arr, person_samples, inpainter
     save_jpg(out_dir / "plate.jpg", plate, quality=93)
     timings["plate"] = time.time() - t0
 
@@ -312,6 +328,19 @@ def process_video(
     plate_depth = estimate_plate_depth(pde, plate) if not isinstance(pde, _FakeDepth) else pde(plate[None])[0]
     del pde
     empty_cache(cfg.device)
+    if holes.any():
+        # The never-seen region is where people stood: its depth comes from the background around
+        # it (the depth network guesses freely on inpainted pixels), so the room and the
+        # person-in-front-of-the-room test see a continuous surface there.
+        td = time.time()
+        try:
+            plate_depth, dinfo = fill_depth_holes(plate_depth, plate, holes)
+            plate_stats["depthFill"] = {**dinfo, "seconds": round(time.time() - td, 3)}
+            log(f"plate depth: filled {dinfo['region']:.2%} of the plate (never seen + margin) from the surrounding background, "
+                f"{dinfo['occluderPx']} boundary px treated as in front ({time.time() - td:.2f}s)")
+        except Exception as e:  # keep the network's depth of the inpainted plate
+            plate_stats["depthFill"] = {"error": f"{type(e).__name__}: {e}"[:300]}
+            warn(f"plate depth fill failed ({e}); keeping the estimated depth in the never-seen region")
     np.save(work_dir / "plate_depth.npy", plate_depth.astype(np.float32))
     plate_inv = _resize(1.0 / np.maximum(plate_depth, 1e-3), (w2, h2)).astype(np.float32)
     plate_small = _resize(plate, (w2, h2))
@@ -617,9 +646,11 @@ def main(argv=None) -> int:
     ap.add_argument("--stabilize", choices=["auto", "on", "off"])
     ap.add_argument("--crf", type=int)
     ap.add_argument("--keep-work", action="store_true", default=None)
+    ap.add_argument("--plate-inpaint", choices=["lama", "mirror"], help="fill for never-seen plate pixels (default lama)")
     args = ap.parse_args(argv)
     cfg = TwConfig.for_device(
-        max_seconds=args.max_seconds, start=args.start, fov_deg=args.fov_deg, stabilize=args.stabilize, crf=args.crf, keep_work=args.keep_work
+        max_seconds=args.max_seconds, start=args.start, fov_deg=args.fov_deg, stabilize=args.stabilize, crf=args.crf, keep_work=args.keep_work,
+        plate_inpaint=args.plate_inpaint,
     )
     out = Path(args.out_dir)
     work = Path(args.work) if args.work else out.parent / "work"

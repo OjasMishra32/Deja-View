@@ -359,7 +359,7 @@ const COPY: Record<UploadMode, {
   note: string;
 }> = {
   photo: {
-    eyebrow: 'New world · Photo',
+    eyebrow: 'New world',
     title: 'One photo. The whole room.',
     lede: 'Take one photo of a room, or just describe one. The parts the camera missed get built around it, so you can turn around and walk in.',
     media: 'Add your photo',
@@ -368,7 +368,7 @@ const COPY: Record<UploadMode, {
     name: 'My room',
     promptLabel: 'Describe it',
     promptHint: 'optional; with no photo, this alone builds the room',
-    promptPlaceholder: 'A sunlit kitchen with green tiles and a very judgmental cat',
+    promptPlaceholder: 'A sunlit living room with a big sectional and a very judgmental cat',
     submit: 'Build my world',
     sideTitle: 'One wide photo from a corner.',
     tips: [
@@ -379,16 +379,16 @@ const COPY: Record<UploadMode, {
     note: 'What happens next: the rest of the room is generated around your photo, including what was behind you. Seconds on the warm GPU, a few minutes on a backup.',
   },
   video: {
-    eyebrow: 'New world · Video',
+    eyebrow: 'New world',
     title: 'Roll camera. Step inside.',
-    lede: 'One video from a phone that stays put: someone cooking, dancing, explaining their sourdough starter. You get the room, with the real footage standing in it, sound and all.',
+    lede: 'One video from a phone that stays put: game night, a jam session, the moment you will want back. You get the room, with the real footage standing in it, sound and all.',
     media: 'Add one video',
     camera: ['Record a video', 'Opens the camera on a phone', 'video/*'],
     files: ['Choose a video', 'Or drop it here', 'video/*'],
-    name: 'Kitchen, take one',
+    name: 'Game night, take one',
     promptLabel: 'Describe the room',
     promptHint: 'optional, helps fill in what the camera missed',
-    promptPlaceholder: 'A small kitchen with open shelves and a window over the sink',
+    promptPlaceholder: 'A living room with a big TV, a couch and controllers everywhere',
     submit: 'Make it walkable',
     sideTitle: 'Prop the phone. Do not hold it.',
     tips: [
@@ -487,10 +487,10 @@ function main() {
     promptInput.placeholder = c.promptPlaceholder;
     nameInput.placeholder = c.name;
     if (!nameTouched) nameInput.value = c.name;
-    submit.innerHTML = `${esc(c.submit)} <span class="arrow">&rarr;</span>`;
+    submit.textContent = c.submit;
     $('side-title').textContent = c.sideTitle;
     $('side-tips').innerHTML = c.tips
-      .map(([b, t], i) => `<li><span>${String(i + 1).padStart(2, '0')}</span><span><b>${esc(b)}</b> ${esc(t)}</span></li>`)
+      .map(([b, t]) => `<li><b>${esc(b)}</b> ${esc(t)}</li>`)
       .join('');
     $('side-note').textContent = c.note;
     const url = new URL(location.href);

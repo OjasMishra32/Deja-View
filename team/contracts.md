@@ -253,11 +253,13 @@ so the viewer gets its ghosts with no second call. Errors: 400 (`{"error":"x mus
 
 ### 6.1 Room picker: `GET BASE/api/scenes`
 
-The picker lists ready scenes (filter `status === "ready"`, newest first, show at most 12), with the name and Photo or
-Video from `mode`. Poll every 3 s while the picker is open, so a room built live in the finale appears within seconds
+The picker lists ready **Photo** scenes (filter `status === "ready"` and `mode !== "video"`, newest first, show at
+most 12): only photos and screenshots become Roblox places; a video memory stays in the headset and the browser. Poll every 3 s while the picker is open, so a room built live in the finale appears within seconds
 of being ready. A room is loadable once its map (6.2) returns 200.
 
 ### 6.2 Map: `GET BASE/api/roblox/:sceneId/map`
+
+(Photo scenes only; a video scene answers 404. The textured room model is 6.2b.)
 
 ```json
 { "sceneId": "game-night-k3x9a", "name": "Game night", "studsPerMeter": 3.57,
@@ -276,6 +278,14 @@ of being ready. A room is loadable once its map (6.2) returns 200.
   imagined, `0` = captured) for the reality-check tint.
 - Errors: `202 {"status":"building","retryAfter":2}` (wait and retry), `404 {"error":"No such scene"}`,
   `409 {"error":"Scene is not ready","status":"running"}`, `401 {"error":"Bad key"}`.
+
+### 6.2b The real room: `GET BASE/api/roblox/:sceneId/model` and `.../model.glb`
+
+Photo scenes only. `model.glb` is the room as a textured mesh in named chunks (`room_00`, ...), each under Roblox's
+triangle limit, in the same frame as the map. `model` is JSON: units, studsPerMeter, chunk names and triangle counts,
+bounds, spawn in studs, and `assetId` once the server has uploaded it with Open Cloud (only when `ROBLOX_API_KEY` and
+`ROBLOX_CREATOR_ID` are set). Load an `assetId` on the Roblox server with `AssetService:LoadAssetAsync`; without one,
+build the map (6.2). Demo worlds are imported in Studio ahead of time.
 
 ### 6.3 Presence: `POST BASE/api/roblox/:sceneId/presence` (4 Hz, one loop per Roblox server)
 

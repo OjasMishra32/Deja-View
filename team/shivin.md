@@ -8,6 +8,30 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 2 (Sat ~2 AM): only Photo worlds go to Roblox, and the room becomes the real room.**
+>
+> 1. **Photo worlds only.** A photo or screenshot of a place becomes a Roblox place; a video memory stays in the headset
+>    and the browser. The picker lists `status == "ready"` and `mode != "video"`. For a video scene the server's map
+>    and model answer 404.
+> 2. **The real room, not blocks.** For every Photo world the server now also builds `roblox.glb`: the room as a
+>    textured 3D model split into chunks (each under Roblox's triangle limit), in exactly the same frame as the block
+>    map. `GET BASE/api/roblox/<sceneId>/model` returns its details (units, chunk names, spawn in studs, and an
+>    `assetId` once uploaded); `GET BASE/api/roblox/<sceneId>/model.glb` is the file.
+>    - **Demo worlds** (Fortnite and the backup photo world): Ojasva posts the `.glb` files Saturday morning. Import
+>      each with Studio's 3D Importer, use the units the `model` route names, anchor every part, and keep it in
+>      `ServerStorage/Rooms/<sceneId>`. The loader clones that instead of building blocks.
+>    - **New worlds** (the finale): create an Open Cloud API key (Creator Dashboard → Open Cloud → API Keys, Assets
+>      read + write) and send it with your user id to Ojasva **privately**. The server then uploads each new world's
+>      model, `model` returns `assetId`, and your server loads it with `AssetService:LoadAssetAsync(assetId)` (it
+>      replicates to everyone). While there is no `assetId`, build the block map exactly as today.
+>    - **Walking:** keep the block map's floor as invisible collision under the model, or use the MeshParts' own
+>      collision, whichever walks better on a phone.
+> 3. **Quest and phones.** It must play in the Roblox app on the Meta Quest (turn on VR / Meta Quest support for the
+>    experience in the Creator Dashboard; the default PlayerModule handles VR movement) and on phones (7.7). Ojasva
+>    tests it on his Quest Saturday afternoon.
+> 4. **Demo change:** you join in the **Fortnite world** (a Photo world), not the game-night memory. At 1:10 the host
+>    drops the judge into Fortnite and you press JOIN there; have Fortnite pre-loaded in your server.
+
 Someone drops a photo or a clip of a real place into Déjà View, it becomes a 3D world, and you and friends join
 that same room in Roblox and play tag with the person in the VR headset. Roblox is how friends without a headset can
 be there.
@@ -50,10 +74,10 @@ real server by **Sat 4 PM**; full demo run **Sat 10 PM**; feature freeze **Sun 4
 
 | Time | What happens | Your piece |
 | --- | --- | --- |
-| before | The game-night room (pre-built) is already loaded in your Roblox server. You and Brianna wait in the lobby on two laptops. Auto-join is off | picker, loader, baked room |
+| before | The Fortnite room (pre-built, the imported model) is already loaded in your Roblox server. You and Brianna wait in the lobby on two laptops. Auto-join is off | picker, loader, baked room |
 | 0:00 | Seb drops the clip into his DeepSpace app. The memory's card carries a "Join in Roblox" link | your place id + launch data (7.7) |
-| 0:15 | The judge is in the memory in the Quest. Your lobby board shows "JUDGE IS IN GAME NIGHT" | presence (7.3) |
-| 1:10 | Host: "and friends without a headset can still be there." You press **JOIN**: you and Brianna spawn in the room within a second. A lime ghost (head, two hands, faint body) moves exactly as the judge moves, and the judge sees your avatars. 3-2-1, the tag round starts with the judge as "it". The judge reaches out, your avatar bursts into lime sparks, the headset shows **TAGGED**, a scoreboard and a winner card follow | ghost (7.4), tag (7.5), events (5.4) |
+| 0:15 | The judge is in the memory in the Quest. Your lobby board shows "JUDGE IS IN GAME NIGHT" (the Video memory; not a Roblox room) | presence (7.3) |
+| 1:10 | Host: "and every photo is also a game." The host drops the judge into the Fortnite world; you press **JOIN**: you and Brianna spawn in the room within a second. A lime ghost (head, two hands, faint body) moves exactly as the judge moves, and the judge sees your avatars. 3-2-1, the tag round starts with the judge as "it". The judge reaches out, your avatar bursts into lime sparks, the headset shows **TAGGED**, a scoreboard and a winner card follow | ghost (7.4), tag (7.5), events (5.4) |
 | 1:40 | The DeepSpace map on the table laptop shows everyone live. Your Roblox dots are on it. Keep running around the couch so your dot moves; Brianna switches to her browser to leave the note | presence (7.3) |
 | 2:25 | Finale: the judge's own photo became a world. It appears in your picker within 3 s of being ready. You hop in (or Follow moves you) and the judge sees you standing in their brand-new world | picker + follow (7.2) |
 

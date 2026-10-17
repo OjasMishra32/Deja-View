@@ -3,6 +3,10 @@
 # The PyPI macOS arm64 torch wheels include the MPS backend.
 # Tested on an M4 MacBook Air with torch 2.14.1, torchvision 0.29.1, transformers 5.20.1,
 # numpy 2.5.4, opencv-python-headless 5.0.0.93, scipy 1.18.1.
+# Plate inpainting: Big LaMa (Apache-2.0) runs as TorchScript on torch alone, no extra package
+# (simple-lama-inpainting pins numpy<2, pillow<10, opencv-python<5). Its weights, big-lama.pt (206 MB,
+# sha256 7ba7aa7a...), go to TORCH_HOME/hub/checkpoints with pipeline/common/models.py --prefetch;
+# scipy below solves the plate depth fill.
 torch>=2.6
 torchvision>=0.21
 transformers>=4.49,<6

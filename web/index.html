@@ -6,7 +6,8 @@
     <title>Déjà View</title>
     <meta name="description" content="You've seen this before. Now walk around in it. One photo becomes a world you walk into; one video becomes a room with the real footage in 3D." />
     <meta name="application-name" content="Déjà View" />
-    <meta name="theme-color" content="#0b0b0d" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="color-scheme" content="light" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Déjà View" />
     <meta property="og:title" content="Déjà View" />
@@ -21,12 +22,6 @@
     <meta name="twitter:image" content="/public/og.png" />
     <link rel="icon" href="./public/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./public/apple-touch-icon.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=JetBrains+Mono:wght@400;500&display=swap"
-    />
     <link rel="stylesheet" href="./src/styles.css" />
   </head>
   <body>
@@ -35,131 +30,126 @@
       <div class="wrap">
         <a class="brand" href="/" aria-label="Déjà View home">
           <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
-            <rect x="9.5" y="4.5" width="18" height="18" rx="4.5" fill="none" stroke="#d4ff3a" stroke-width="2.2" />
-            <rect x="4" y="9.5" width="18" height="18" rx="4.5" fill="currentColor" />
-            <circle cx="13" cy="18.5" r="3.1" fill="#0b0b0d" />
+            <defs>
+              <linearGradient id="dv-mark" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#5ac8fa" />
+                <stop offset="1" stop-color="#007aff" />
+              </linearGradient>
+            </defs>
+            <rect width="32" height="32" rx="7.2" fill="url(#dv-mark)" />
+            <path d="M16 7.6c-5.2 0-9.4 3.4-9.4 7.7 0 2.5 1.4 4.7 3.7 6.1-.2 1.3-.9 2.5-1.9 3.4 2-.1 3.8-.8 5.1-1.9.8.1 1.6.2 2.5.2 5.2 0 9.4-3.4 9.4-7.8S21.2 7.6 16 7.6z" fill="#fff" />
+            <path d="M13.7 19.4v-4.2a2.3 2.3 0 0 1 4.6 0v4.2z" fill="#007aff" />
           </svg>
           <span class="wordmark">Déjà View</span>
         </a>
         <nav class="topnav" aria-label="Sections">
-          <a href="#modes">How it works</a>
+          <a href="#how">How it works</a>
           <a href="#gallery">Gallery</a>
           <a href="#headset">Headset</a>
         </nav>
         <div class="spacer"></div>
-        <span class="live" id="live" title="Live updates">
-          <span class="dot" id="live-dot"></span><span class="txt" id="live-txt">connecting</span>
-        </span>
         <a class="btn btn-primary btn-sm" href="/capture">Make one</a>
       </div>
     </header>
 
     <main id="main">
       <section class="hero">
-        <div class="wrap">
-          <div class="hero-grid">
-            <div class="hero-copy">
-              <div class="eyebrow">Photo or video in &middot; walkable world out</div>
-              <h1 aria-label="You've seen this before. Now walk around in it.">
-                <span class="line" aria-hidden="true"><span class="echo" data-echo="You've seen">You've seen</span></span>
-                <span class="line" aria-hidden="true"><span class="echo" data-echo="this before.">this before.</span></span>
-                <span class="line kicker" aria-hidden="true"
-                  ><span
-                    ><span class="accent-word"
-                      >Now walk around in it.<svg class="squiggle" viewBox="0 0 300 20" preserveAspectRatio="none" aria-hidden="true">
-                        <path d="M3 13 C 40 3, 70 19, 105 10 S 170 3, 205 11 S 265 18, 297 7" /></svg></span></span
-                ></span>
-              </h1>
-              <p class="lede">
-                <strong>One photo becomes the whole room</strong>, the corners you missed and the wall behind you included.
-                <strong>One video becomes the room it was shot in</strong>, with the real footage standing there in 3D. Walk
-                around in a VR headset or right here in the browser.
-              </p>
-              <div class="cta-row">
-                <a class="btn btn-primary" href="/capture?mode=photo">Start with a photo <span class="arrow">&rarr;</span></a>
-                <a class="btn" href="/capture?mode=video">Start with a video</a>
-              </div>
-            </div>
-            <div class="hero-art" aria-hidden="true">
-              <canvas id="hero-canvas"></canvas>
-              <span class="tag shot">The part you shot</span>
-              <span class="tag made">The part we made up</span>
+        <div class="wrap hero-grid">
+          <div class="hero-copy">
+            <h1>You've seen this before. <span class="soft">Now walk around in it.</span></h1>
+            <p class="lede">
+              Add one photo or one video. Déjà View builds the whole room around it, so you can step inside in a headset or
+              right here in your browser.
+            </p>
+            <div class="cta-row">
+              <a class="btn btn-primary btn-lg" href="/capture?mode=photo">Start with a photo</a>
+              <a class="link-more" href="/capture?mode=video">Start with a video</a>
             </div>
           </div>
 
-          <div class="health" id="health" aria-live="polite">
-            <span class="label">Compute</span>
-            <span class="health-item" data-k="gpu"><span class="dot"></span><span><b>GPU cluster</b> <span class="v">checking</span></span></span>
-            <span class="health-item" data-k="worker"><span class="dot"></span><span><b>Warm GPU</b> <span class="v">checking</span></span></span>
-            <span class="health-item" data-k="fallbacks"><span class="dot"></span><span><b>Backup</b> <span class="v">checking</span></span></span>
-            <span class="lan health-item"><span class="label">Same Wi-Fi</span><a class="mono" id="lan-inline" href="#headset">finding address</a></span>
+          <div class="phone" aria-label="Example: a friend shares a Déjà View link in the group chat" role="img">
+            <div class="phone-screen">
+              <div class="statusbar" aria-hidden="true">
+                <span>9:41</span>
+                <span class="island"></span>
+                <span class="sb-icons">
+                  <svg viewBox="0 0 18 12" width="17" height="11"><path d="M1 9h2v2H1zM5 7h2v4H5zM9 4.5h2V11H9zM13 2h2v9h-2z" fill="currentColor" /></svg>
+                  <svg viewBox="0 0 26 12" width="25" height="12"><rect x=".5" y=".5" width="22" height="11" rx="3.2" fill="none" stroke="currentColor" opacity=".4" /><rect x="2" y="2" width="16" height="8" rx="2" fill="currentColor" /><path d="M24 4v4c.8-.3 1.3-1.1 1.3-2S24.8 4.3 24 4z" fill="currentColor" opacity=".4" /></svg>
+                </span>
+              </div>
+              <div class="chat-head" aria-hidden="true">
+                <svg class="back" viewBox="0 0 12 20" width="11" height="19"><path d="M10 2 2 10l8 8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                <div class="group">
+                  <div class="avatars"><span>M</span><span>S</span><span>B</span></div>
+                  <div class="group-name">Game Night <span>&rsaquo;</span></div>
+                </div>
+                <svg class="video-call" viewBox="0 0 26 18" width="25" height="17"><rect x="1" y="2" width="16" height="14" rx="3.5" fill="currentColor" /><path d="m18 7 6-3.5v11L18 11z" fill="currentColor" /></svg>
+              </div>
+              <div class="chat" id="chat" aria-hidden="true">
+                <div class="msg in"><span class="who">Seb</span><p class="bubble">sorry I missed it. what happened</p></div>
+                <div class="msg out"><p class="bubble">don't look at pics. walk into it</p></div>
+                <div class="msg out">
+                  <a class="bubble preview" id="chat-link" href="#gallery" tabindex="-1">
+                    <span class="preview-img"><img id="chat-link-img" alt="" /></span>
+                    <span class="preview-text"><b id="chat-link-title">Game night</b><span>Déjà View</span></span>
+                  </a>
+                  <span class="receipt">Delivered</span>
+                </div>
+                <div class="msg in"><span class="who">Maya</span><p class="bubble">wait I can actually stand in it??</p></div>
+                <div class="msg in"><span class="who">Seb</span><p class="bubble">ok I'm never missing game night again</p></div>
+              </div>
+              <div class="composer" aria-hidden="true">
+                <span class="plus">+</span>
+                <span class="field">iMessage</span>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <section class="section" id="modes">
+      <section class="section tint" id="how">
         <div class="wrap">
-          <div class="section-head">
-            <div>
-              <div class="eyebrow">Two modes</div>
-              <h2>Two ways back<br />into a moment.</h2>
-            </div>
-            <p>Both end the same way: you, standing somewhere you have only ever seen in a picture, finally able to look around.</p>
-          </div>
+          <h2 class="section-title">Three steps. <span class="soft">No 3D skills.</span></h2>
+          <ol class="steps">
+            <li>
+              <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M8 11.5A3.5 3.5 0 0 1 11.5 8h17A3.5 3.5 0 0 1 32 11.5v11a3.5 3.5 0 0 1-3.5 3.5H18l-6.5 5.5V26h0A3.5 3.5 0 0 1 8 22.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" /></svg>
+              <h3>Send a photo or a video.</h3>
+              <p>Upload it here from your phone or laptop. A room, a game, a night you want back.</p>
+            </li>
+            <li>
+              <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 6 33 13.5v13L20 34 7 26.5v-13z M7 13.5 20 21l13-7.5M20 21v13" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" /></svg>
+              <h3>We build the room.</h3>
+              <p>The parts the camera never saw get filled in, behind you included. Seconds on a warm GPU.</p>
+            </li>
+            <li>
+              <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M11 33V12a9 9 0 0 1 18 0v21M6 33h28M24 21.5v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              <h3>Walk in.</h3>
+              <p>In a VR headset or the browser. Friends can join the same room from Roblox and leave notes.</p>
+            </li>
+          </ol>
 
-          <div class="modes">
+          <div class="modes" id="modes">
             <article class="mode">
-              <div class="mode-top">
-                <svg class="mode-glyph" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
-                  <path d="M22 18h-6v6M42 18h6v6M22 46h-6v-6M42 46h6v-6" />
-                  <rect x="22" y="24" width="20" height="16" rx="2" fill="currentColor" fill-opacity=".15" />
-                  <circle cx="7" cy="14" r="1.6" fill="currentColor" stroke="none" />
-                  <circle cx="57" cy="12" r="1.6" fill="currentColor" stroke="none" />
-                  <circle cx="5" cy="34" r="1.3" fill="currentColor" stroke="none" />
-                  <circle cx="59" cy="38" r="1.6" fill="currentColor" stroke="none" />
-                  <circle cx="10" cy="55" r="1.3" fill="currentColor" stroke="none" />
-                  <circle cx="54" cy="56" r="1.3" fill="currentColor" stroke="none" />
-                  <circle cx="32" cy="6" r="1.3" fill="currentColor" stroke="none" />
-                  <circle cx="32" cy="58" r="1.6" fill="currentColor" stroke="none" />
-                </svg>
-                <span class="chip accent">One photo &middot; or a prompt</span>
-              </div>
-              <h3>Photo. <em>One shot, the whole room.</em></h3>
-              <p>
-                Point, shoot, walk in. A world model fills in everything the camera never saw, so you can actually turn
-                around. No photo? Describe a room and it gets built anyway. A calm clip works too: the sharpest, steadiest
-                frame is the one that gets used.
-              </p>
-              <ul class="tips">
-                <li class="tips-title">How to shoot</li>
-                <li><span>01</span><span><b>Back into a corner and shoot wide.</b> Get the floor and the ceiling in the frame.</span></li>
-                <li><span>02</span><span><b>Lights on, no zoom, landscape.</b> Hold still for a beat before you tap.</span></li>
-                <li><span>03</span><span><b>Clips: keep the camera calm.</b> Slow pans, no menus, no motion blur.</span></li>
-              </ul>
-              <a class="btn btn-primary" href="/capture?mode=photo">Start with a photo <span class="arrow">&rarr;</span></a>
+              <h3>Photo</h3>
+              <p class="mode-lede">One shot. The whole room.</p>
+              <p>A world model fills in everything the camera missed, so you can turn around. No photo? Describe a room and it gets built anyway.</p>
+              <ol class="tips">
+                <li><b>Back into a corner and shoot wide.</b> Get the floor and the ceiling in the frame.</li>
+                <li><b>Lights on, no zoom, landscape.</b> Hold still for a beat before you tap.</li>
+                <li><b>Using a clip?</b> Keep it calm. The sharpest frame is the one that gets used.</li>
+              </ol>
+              <a class="link-more" href="/capture?mode=photo">Start with a photo</a>
             </article>
-
             <article class="mode">
-              <div class="mode-top">
-                <svg class="mode-glyph" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true">
-                  <rect x="6" y="14" width="38" height="28" rx="4" stroke-dasharray="3 3.4" />
-                  <rect x="18" y="22" width="40" height="30" rx="4" fill="currentColor" fill-opacity=".15" />
-                  <path d="M34 30.5v13l11-6.5z" fill="currentColor" stroke="none" />
-                </svg>
-                <span class="chip accent">One still-camera video</span>
-              </div>
-              <h3>Video. <em>The real footage, in the room.</em></h3>
-              <p>
-                Prop up your phone and hit record. The room becomes a space you can walk around, and the people in it are
-                the real footage lifted into 3D, sound and all. You stand right there. Slightly too close.
-              </p>
-              <ul class="tips">
-                <li class="tips-title">How to shoot</li>
-                <li><span>01</span><span><b>Prop the phone. Do not hold it.</b> The room is built from whatever stays still.</span></li>
-                <li><span>02</span><span><b>Whole person in frame, 1 to 3 m away.</b> Feet included, please.</span></li>
-                <li><span>03</span><span><b>10 to 30 seconds, good light.</b> Nobody walking through the shot.</span></li>
-              </ul>
-              <a class="btn btn-primary" href="/capture?mode=video">Start with a video <span class="arrow">&rarr;</span></a>
+              <h3>Video</h3>
+              <p class="mode-lede">The real footage, in the room.</p>
+              <p>Prop up your phone and hit record. You get the room, and the people in it are the real footage standing there in 3D, sound and all.</p>
+              <ol class="tips">
+                <li><b>Prop the phone. Don't hold it.</b> The room is built from whatever stays still.</li>
+                <li><b>Whole person in frame, 1 to 3 m away.</b> Feet included, please.</li>
+                <li><b>10 to 30 seconds, good light.</b> Nobody walking through the shot.</li>
+              </ol>
+              <a class="link-more" href="/capture?mode=video">Start with a video</a>
             </article>
           </div>
         </div>
@@ -168,11 +158,8 @@
       <section class="section" id="gallery">
         <div class="wrap">
           <div class="section-head">
-            <div>
-              <div class="eyebrow">Gallery</div>
-              <h2>Your worlds</h2>
-            </div>
-            <div class="filters" id="filters" role="toolbar" aria-label="Filter worlds"></div>
+            <h2 class="section-title">Your worlds.</h2>
+            <div class="segmented" id="filters" role="toolbar" aria-label="Filter worlds"></div>
           </div>
           <div class="banner" id="gallery-error" role="alert"></div>
           <div class="grid" id="grid" aria-live="polite">
@@ -183,52 +170,51 @@
         </div>
       </section>
 
-      <section class="section" id="headset">
+      <section class="section tint" id="headset">
         <div class="wrap">
+          <h2 class="section-title">On your phone or headset.</h2>
           <div class="duo">
             <div class="panel">
-              <div class="eyebrow">Phone or headset</div>
               <h3>Same Wi-Fi? Open this.</h3>
               <div class="lan-box">
                 <div class="qr" id="qr" aria-hidden="true"></div>
                 <div>
-                  <a class="lan-url" id="lan-url" href="#">finding this laptop&hellip;</a>
+                  <a class="lan-url" id="lan-url" href="#">Finding this laptop&hellip;</a>
                   <p class="lan-note" id="lan-note">Scan it with your phone camera, or type it into the headset browser.</p>
                   <div class="lan-actions">
-                    <button class="btn btn-sm" id="lan-copy" type="button">Copy link</button>
-                    <a class="btn btn-sm" id="lan-capture" href="/capture">Capture page</a>
+                    <button class="btn btn-gray btn-sm" id="lan-copy" type="button">Copy link</button>
+                    <a class="link-more" id="lan-capture" href="/capture">Capture page</a>
                   </div>
                 </div>
               </div>
             </div>
             <div class="panel">
-              <div class="eyebrow">Once you're in</div>
-              <h3>How to walk around</h3>
+              <h3>Getting around</h3>
               <div class="controls">
                 <div>
                   <h4>Laptop</h4>
                   <dl>
-                    <div><dt><kbd>Click</kbd></dt><dd>look around</dd></div>
-                    <div><dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>walk, <kbd>Shift</kbd> to run</dd></div>
-                    <div><dt><kbd>Space</kbd></dt><dd>play / pause video</dd></div>
-                    <div><dt><kbd>F</kbd></dt><dd>fly, <kbd>Q</kbd>/<kbd>E</kbd> down/up</dd></div>
-                    <div><dt><kbd>R</kbd></dt><dd>back to start</dd></div>
+                    <div><dt><kbd>Click</kbd></dt><dd>Look around</dd></div>
+                    <div><dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Walk, <kbd>Shift</kbd> to run</dd></div>
+                    <div><dt><kbd>Space</kbd></dt><dd>Play or pause the video</dd></div>
+                    <div><dt><kbd>F</kbd></dt><dd>Fly, <kbd>Q</kbd> <kbd>E</kbd> down and up</dd></div>
+                    <div><dt><kbd>R</kbd></dt><dd>Back to the start</dd></div>
                   </dl>
                 </div>
                 <div>
                   <h4>Phone</h4>
                   <dl>
-                    <div><dt>Left half</dt><dd>drag to move</dd></div>
-                    <div><dt>Right half</dt><dd>drag to look</dd></div>
-                    <div><dt>Tap</dt><dd>play with sound</dd></div>
+                    <div><dt>Left half</dt><dd>Drag to move</dd></div>
+                    <div><dt>Right half</dt><dd>Drag to look</dd></div>
+                    <div><dt>Tap</dt><dd>Play with sound</dd></div>
                   </dl>
                 </div>
                 <div>
                   <h4>VR headset</h4>
                   <dl>
-                    <div><dt>Left stick</dt><dd>walk</dd></div>
-                    <div><dt>Right stick</dt><dd>snap turn; push forward to teleport</dd></div>
-                    <div><dt><kbd>A</kbd> / <kbd>B</kbd></dt><dd>play / back to start</dd></div>
+                    <div><dt>Left stick</dt><dd>Walk</dd></div>
+                    <div><dt>Right stick</dt><dd>Turn, push forward to teleport</dd></div>
+                    <div><dt><kbd>A</kbd> <kbd>B</kbd></dt><dd>Play, back to the start</dd></div>
                   </dl>
                 </div>
               </div>
@@ -236,15 +222,11 @@
           </div>
         </div>
       </section>
-
-      <div class="wrap">
-        <div class="bigword" aria-hidden="true" data-word="Déjà View">Déjà View</div>
-      </div>
     </main>
 
     <footer class="footer">
       <div class="wrap">
-        <span class="footer-brand">Déjà View &middot; made at SwampHacks XII</span>
+        <span>Déjà View &middot; Made at SwampHacks XII</span>
         <span>You've seen this before. Now walk around in it.</span>
       </div>
     </footer>

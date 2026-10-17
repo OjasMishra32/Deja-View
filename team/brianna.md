@@ -9,6 +9,10 @@ Everything below was checked against the live Gemini docs and SDK on Fri Oct 16,
 checked, it says so and tells you how to check it. If something here turns out to be wrong on the night, tell Ojasva
 right away and use the fallback listed for it.
 
+> **Update after your pushes (Sat ~2 AM):** your service is merged into `main` (`integrations/guide/`). `/ask` now hears
+> the spoken `audio` and both `/ask` and `/narrate` return `speech`, so the contract is complete. Next: tune answers on
+> real headset views with Ojasva on Saturday (the 0:40 beat: labels on entry, "who won?" answered within 2.5 s).
+
 > **Update (Sat early morning):** the Photon group-chat bot is dropped (not a Devpost prize, and it did not work).
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.

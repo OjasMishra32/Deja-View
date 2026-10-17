@@ -30,6 +30,8 @@ domain fixes a real problem for the whole team, so that takes Photon's place.
    - In the skit (0:00) you drop the game-night clip in from the table iPhone through this page; demo mode answers at
      once. The finale ("now do it") uses it too: the judge snaps a photo on the table iPhone and it goes in here.
    - Each ready memory gets a "Copy link" button, so anyone can paste the walk-in link into a group chat.
+   - Photo memories also get "Join in Roblox" (Shivin's link format, 7.7 in `shivin.md`); video memories do not (a
+     video is not a Roblox place).
 3. **New, about 1 h: the domain (MLH Best Domain Name from GoDaddy Registry).**
    - Why: today the public link is a quick tunnel whose address changes every time it restarts, so Roblox, the
      headset, your app and the judges' phones all break at once. A domain makes one link that never changes. It goes
