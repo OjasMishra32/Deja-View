@@ -91,3 +91,19 @@ the real room once it answers. Server killed mid-game → banner, room stays; ba
 ## Sounds
 
 `Theme.Sounds` uses built-in client sounds as placeholders. Swap in Roblox-made Creator Store audio and credit it on Devpost.
+
+## Per-world checklist (Update 9)
+
+Each world: join from a phone, a laptop and the Quest Roblox app; spawn on the floor; walls hold you in; the world's
+game starts from one host button; nothing falls through. ✅ = checked in Studio, ⬜ = still to check on that device.
+
+| World (scene id) | Game (host button) | Textured model | Laptop | Phone | Quest |
+| --- | --- | --- | --- | --- | --- |
+| Infinity Hall game lawn (`the-courts`) | PING PONG, FOOSBALL | waiting on server | ✅ spawn, walls, games | ⬜ | ⬜ |
+| Chess room (`chess-room`) | CHESS BOARD | not on server yet | ⬜ | ⬜ | ⬜ |
+| Kitchen (`kitchen`) | COOKING RUSH | not on server yet | ✅ (tested on the court) | ⬜ | ⬜ |
+| Tilted Towers (`tilted-towers`) | FLOOR IS LAVA (or tag) | v1 model worked | ✅ (tested on the court) | ⬜ | ⬜ |
+| Brick House apartment (`brick-apartment`) | HIDE & SEEK | waiting on server | ⬜ needs 2 players | ⬜ | ⬜ |
+
+Also any world: START ROUND (tag with the judge), START HUNT (Gemini labels), NOTE, BIG SCREEN.
+Pressing a game's button again while it is up gives a rematch. END ROUND stops any game.

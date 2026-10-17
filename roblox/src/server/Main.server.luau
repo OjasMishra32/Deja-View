@@ -13,6 +13,7 @@ local Chess = require(DV.Chess)
 local Pong = require(DV.Pong)
 local Foosball = require(DV.Foosball)
 local Stats = require(DV.Stats)
+local WorldGames = require(DV.WorldGames)
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local Vote = Remotes:WaitForChild("Vote") :: RemoteEvent
@@ -20,7 +21,7 @@ local HostAction = Remotes:WaitForChild("HostAction") :: RemoteEvent
 
 for name, value in {
 	Phase = "lobby", SceneId = "", RoomName = "", LoadProgress = 0, LoadStage = "", Banner = "",
-	Offline = false, JudgeHere = false, JudgeName = "", JudgeRoom = "", LabelCount = 0, HuntJson = "", RoundState = "idle", RoundEndsAt = 0,
+	Offline = false, JudgeHere = false, JudgeName = "", JudgeRoom = "", LabelCount = 0, HuntJson = "", GameJson = "", RoundState = "idle", RoundEndsAt = 0,
 	CountdownEndsAt = 0, RoundIt = "", ScoresJson = "", RoomsJson = "[]", AutoJoin = Config.AUTO_JOIN_DEFAULT,
 	Follow = true, MockJudge = false, HasImagined = false, UsingMock = Config.useMock(),
 } do
@@ -67,6 +68,10 @@ local actions: { [string]: (Player, any) -> () } = {
 		end)
 	end,
 	start_round = function(p)
+		if WorldGames.active() then
+			World.toast("Finish the current game first", p)
+			return
+		end
 		if Extras.huntActive() then
 			World.toast("Finish the hunt first", p)
 			return
@@ -76,8 +81,34 @@ local actions: { [string]: (Player, any) -> () } = {
 	end_round = function()
 		TagGame.finish()
 		Extras.endHunt(nil)
+		WorldGames.stop()
+	end,
+	hideseek = function(p)
+		if TagGame.isPlaying() or Extras.huntActive() then
+			World.toast("Finish the current round first", p)
+			return
+		end
+		WorldGames.hideAndSeek(p)
+	end,
+	lava = function(p)
+		if TagGame.isPlaying() or Extras.huntActive() then
+			World.toast("Finish the current round first", p)
+			return
+		end
+		WorldGames.lava(p)
+	end,
+	cooking = function(p)
+		if TagGame.isPlaying() or Extras.huntActive() then
+			World.toast("Finish the current round first", p)
+			return
+		end
+		WorldGames.cooking(p)
 	end,
 	start_hunt = function(p)
+		if WorldGames.active() then
+			World.toast("Finish the current game first", p)
+			return
+		end
 		if TagGame.isPlaying() then
 			World.toast("Finish the tag round first", p)
 			return
@@ -158,6 +189,7 @@ end
 TagGame.start10Hz()
 Extras.start()
 Chess.start()
+WorldGames.start()
 Pong.start()
 Foosball.start()
 

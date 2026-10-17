@@ -108,6 +108,9 @@ function Ui.build()
 	hostBtn("chessBtn", "CHESS BOARD", 7)
 	hostBtn("pongBtn", "PING PONG", 7)
 	hostBtn("foosBtn", "FOOSBALL", 7)
+	hostBtn("hideBtn", "HIDE & SEEK", 7)
+	hostBtn("lavaBtn", "FLOOR IS LAVA", 7)
+	hostBtn("cookBtn", "COOKING RUSH", 7)
 	hostBtn("bigBtn", "BIG SCREEN: OFF", 7)
 	hostBtn("lobbyAllBtn", "ALL TO LOBBY", 8)
 
@@ -218,6 +221,13 @@ function Ui.build()
 	ui.unlockedJoin = button({ Text = "JOIN", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 30),
 		Size = UDim2.new(0, 130, 0, 52), BackgroundColor3 = Theme.Accent, TextColor3 = Theme.Bg, MaxText = 26, ZIndex = 25,
 		Parent = unlocked })
+
+	-- Hide and seek: the seeker can't look while the others hide
+	ui.blind = make("Frame", { Name = "Blind", Size = UDim2.fromScale(1, 1), BackgroundColor3 = Theme.Bg, Visible = false,
+		ZIndex = 44, Parent = ui.full })
+	ui.blindText = label({ Text = "", FontFace = Theme.Heading, TextXAlignment = Enum.TextXAlignment.Center,
+		AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(0.8, 0.12),
+		MaxText = 48, ZIndex = 45, Parent = ui.blind })
 
 	-- First-join controls card
 	local intro = make("Frame", { Name = "Intro", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
