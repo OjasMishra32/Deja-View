@@ -209,7 +209,7 @@ end
 
 -- Builds sceneId. moveRoom: players already in a room come along. joinLobby: lobby players too.
 function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: boolean? }?)
-	opts = opts or {}
+	local o = opts or {}
 	switching += 1
 	local mySwitch = switching
 	votes = {}
@@ -218,7 +218,7 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 	if Rooms.onSwitchStart then
 		Rooms.onSwitchStart()
 	end
-	local moveRoom = opts.moveRoom ~= false
+	local moveRoom = o.moveRoom ~= false
 	local previousRoomPlayers = World.inRoom()
 	World.holdRoomPlayers(true)
 	workspace:SetAttribute("Phase", "loading")
@@ -271,7 +271,7 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 		World.toRoom(previousRoomPlayers)
 	end
 	World.holdRoomPlayers(false)
-	local joinLobby = opts.joinLobby
+	local joinLobby = o.joinLobby
 	if joinLobby == nil then
 		joinLobby = workspace:GetAttribute("AutoJoin") == true
 	end

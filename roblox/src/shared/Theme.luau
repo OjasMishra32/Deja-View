@@ -24,14 +24,14 @@ Theme.Sounds = {
 function Theme.make(className: string, props: { [string]: any }?, children: { Instance }?): any
 	local inst = Instance.new(className)
 	local parent = nil
-	for k, v in props or {} do
+	for k, v in (props or {}) :: { [string]: any } do
 		if k == "Parent" then
 			parent = v
 		else
 			(inst :: any)[k] = v
 		end
 	end
-	for _, child in children or {} do
+	for _, child in (children or {}) :: { Instance } do
 		child.Parent = inst
 	end
 	if parent then

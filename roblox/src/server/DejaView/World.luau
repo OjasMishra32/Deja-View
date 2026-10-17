@@ -30,7 +30,7 @@ function World.isHost(player: Player): boolean
 		return true
 	end
 	if game.CreatorType == Enum.CreatorType.Group then
-		local ok, rank = pcall(player.GetRankInGroup, player, game.CreatorId)
+		local ok, rank = pcall(player.GetRankInGroupAsync, player, game.CreatorId)
 		if ok and rank >= 255 then
 			return true
 		end
@@ -39,7 +39,7 @@ function World.isHost(player: Player): boolean
 end
 
 function World.where(player: Player): string
-	return player:GetAttribute("Where") or "lobby"
+	return (player:GetAttribute("Where") :: string?) or "lobby"
 end
 
 function World.inRoom(): { Player }
