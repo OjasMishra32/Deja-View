@@ -8,6 +8,42 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 18 (Sat ~3:30 PM): your list for the rest of the night, in order.** Each is written so you can hand it to
+> an agent: paste the rule block from seb.md Update 8 first (own branch `shivin/<task>`, no attribution or timestamps
+> in commits, `git config core.hooksPath .githooks`, no keys in chat, nothing uploaded to Roblox). BASE is the live
+> link; it becomes `https://deja-view.photo` once its DNS finishes switching (Ojasva posts when).
+>
+> **1. The Devpost video (Update 17, still first, due before 8 AM).** If it's done, send Ojasva the MP4. If not, start
+> now. Two new beats are live to film: the old Pennsylvania house kitchen rebuilt from four listing photos
+> (`/view?scene=old-house-kitchen`), and Seb cooking with the fridge doors opening and the milk jug carried to the
+> stove (`/view?scene=kitchen-cooking`, 13 to 36 s).
+>
+> **2. Cooking rush on the real kitchen (Luau in the repo, no Studio needed; Seb runs the Play test).**
+> `GET BASE/api/roblox/kitchen/model` now has `features.surfaces`: `{kind, name, corners, centre, height, length,
+> width, yaw}` in studs, kinds `stove` (2), `counter` (2), `table` (3), `fridge`.
+> - In `roblox/src/server/DejaView/WorldGames.luau`, split spot picking into a pure function
+>   `cookingSpots(features, info)`. It returns the stove from the first `stove` centre, plus ingredient spots on the
+>   `counter` and `table` tops (a few per top, inside its corners, 0.3 studs above `height`).
+> - `WorldGames.cooking` uses it when `features.surfaces` has a stove, and keeps today's `counterSpots` raycast as
+>   the fallback.
+> - Add `roblox/tests/cooking_spots_test.luau` like `pingpong_sim_test.luau`. It should cover: the stove lands on the
+>   stove, every spot is inside a top, and no surfaces means the fallback is used.
+> - Done when: the tests pass, `selene` is clean, and Seb confirms in a Play test that the STOVE marker sits on the
+>   real range.
+>
+> **3. The Devpost page, drafted, not submitted.** Copy `docs/DEVPOST.md` into the SwampHacks Devpost form
+> (title, tagline, story, "Built with"), and pick Entertainment & Creative Tech as the one track. Add the sponsor
+> challenges listed in the draft, and gallery images from `web/public/landing/` (`people-3d.jpg`, `roblox-lawn.jpg`,
+> `worlds/*.jpg`). Leave it as a draft; Ojasva submits.
+>
+> **4. Expo rehearsal.** Run `docs/DEMO.md` start to finish with a timer (3 min demo + 1 min Q&A) on the real Quest
+> and a laptop. Write the real timings and anything that broke into `team/qa-quest.md`.
+>
+> **5. Headset QA (Update 17 item 2), now also** `old-house-kitchen`, `kitchen-cooking` (doors and jug) and
+> `chess-match` once Ojasva says it's live.
+>
+> **6. Reviewer for Seb's censor sheets** (Update 17 item 3), whenever Seb sends them.
+
 > **Order of work:** the Devpost video below first (hard deadline 8 AM Sunday), then the headset QA, then Seb's
 > reconstruction loop (`team/shivin-reconstruction-loop.md`) as Seb directs it.
 
