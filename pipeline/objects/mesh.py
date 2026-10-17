@@ -77,7 +77,9 @@ def object_room(splats: sio.Splats, scene: dict, scene_dir: Path, lo: np.ndarray
 
 def build_object(scene_dir: str | Path, object_id: str, out_dir: str | Path, triangles: int = 20000,
                  texture: int = 1024, margin: float = 0.12, size: int = 512, count: int = 12,
-                 device: str | None = None, ink: float | None = None, log=print) -> dict:
+                 device: str | None = None, ink: float | None = None, voxel: float | None = None,
+                 room_chunks: int = 1, chunk_triangles: int = 20000, min_component: float = 0.001,
+                 airborne_m2: float = 0.0, log=print) -> dict:
     scene_dir = Path(scene_dir)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -101,8 +103,9 @@ def build_object(scene_dir: str | Path, object_id: str, out_dir: str | Path, tri
     room = object_room(crop, scene, scene_dir, lo, hi, centre)
     log(f"{object_id}: {len(crop)} splats, bounds {np.round(lo, 2)}..{np.round(hi, 2)} m, {len(views)} views")
     result = rm.build_model(
-        scene_dir, out_dir, triangles=triangles, texture=texture, device=device,
-        room_override=room, views_override=(views, []), ink=ink, log=log,
+        scene_dir, out_dir, triangles=triangles, texture=texture, device=device, voxel=voxel,
+        room_override=room, views_override=(views, []), ink=ink, room_chunks=room_chunks,
+        chunk_triangles=chunk_triangles, min_component=min_component, airborne_m2=airborne_m2, log=log,
     )
     return result
 
@@ -119,9 +122,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--count", type=int, default=12)
     ap.add_argument("--device", default=None)
     ap.add_argument("--ink", type=float, default=None, help="ink/smooth the texture for signs and posters")
+    ap.add_argument("--voxel", type=float, default=None, help="TSDF voxel in metres; 0.01 for objects")
+    ap.add_argument("--room-chunks", type=int, default=1, help="one atlas per object")
+    ap.add_argument("--chunk-triangles", type=int, default=20000)
+    ap.add_argument("--min-component", type=float, default=0.001, help="m2; objects keep small parts")
+    ap.add_argument("--airborne-m2", type=float, default=0.0, help="0 keeps high parts like wall cabinets")
     args = ap.parse_args(argv)
     result = build_object(args.scene, args.object, args.out, args.triangles, args.texture, args.margin,
-                          args.size, args.count, args.device, args.ink)
+                          args.size, args.count, args.device, args.ink, args.voxel, args.room_chunks,
+                          args.chunk_triangles, args.min_component, args.airborne_m2)
     print(f"{result['triangles']} triangles, {result['bytes'] / 1e6:.1f} MB -> {args.out}")
     return 0
 

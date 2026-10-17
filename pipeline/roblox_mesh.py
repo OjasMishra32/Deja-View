@@ -1378,7 +1378,9 @@ def build_model(scene_dir: Path | str, out_dir: Path | str | None = None, triang
                 face_res: int = FACE_RES, textured: bool = True, device: str | None = None, workers: int = 8,
                 key: str | None = None, sheet: Path | str | None = None, hole_edges: int = HOLE_EDGES,
                 room_override: "Room | None" = None, views_override: "tuple[list[View], list] | None" = None,
-                ink: float | None = None, log: Callable[[str], None] = _log_noop) -> dict:
+                ink: float | None = None, room_chunks: int = ROOM_CHUNKS,
+                chunk_triangles: int = CHUNK_TRIANGLES, min_component: float | None = None,
+                airborne_m2: float | None = None, log: Callable[[str], None] = _log_noop) -> dict:
     t0 = time.time()
     timings: dict[str, float] = {}
 
@@ -1467,8 +1469,9 @@ def build_model(scene_dir: Path | str, out_dir: Path | str | None = None, triang
     keep = keep[~underside]
     Vr, Fr = compact(V, F[keep])
     _, area = face_normals(Vr, Fr)
-    min_piece = max(MIN_COMPONENT_M2, 2e-4 * float(area.sum()))
-    airborne = AIRBORNE_MAX_M2 if lid_h is not None else AIRBORNE_SKY_M2
+    min_piece = max(MIN_COMPONENT_M2 if min_component is None else float(min_component),
+                    2e-4 * float(area.sum()))
+    airborne = (AIRBORNE_MAX_M2 if lid_h is not None else AIRBORNE_SKY_M2) if airborne_m2 is None else float(airborne_m2)
     Vr, Fr, n_small = drop_small_components(Vr, Fr, min_piece, airborne)
     if len(Fr) == 0:
         raise MeshError("nothing is left of the room after cleaning it up")
@@ -1513,8 +1516,8 @@ def build_model(scene_dir: Path | str, out_dir: Path | str | None = None, triang
 
     parts = []
     for kind, Vg, Fg, Ng, size in groups:
-        limit = CHUNK_TRIANGLES // 2 if kind == "floor" else CHUNK_TRIANGLES
-        for k, idx in enumerate(kd_chunks(Vg, Fg, limit, ROOM_CHUNKS if kind == "room" else 1)):
+        limit = CHUNK_TRIANGLES // 2 if kind == "floor" else chunk_triangles
+        for k, idx in enumerate(kd_chunks(Vg, Fg, limit, room_chunks if kind == "room" else 1)):
             used, inv = np.unique(Fg[idx], return_inverse=True)
             parts.append(Part(f"{kind}_{k:02d}", kind, Vg[used], inv.reshape(-1, 3), Ng[used], size))
     chunks = build_atlases(parts, workers)
