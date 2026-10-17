@@ -20,8 +20,8 @@ they win: say so in the team chat.
 >   about 43 min, not 21) and pack its 12-min limit. Now: the cut scales to the camera's size, estimates come from
 >   the chess and kitchen logs (register every 4th frame, 24 min), every step runs in an env with python and ffmpeg,
 >   and the world folder is checked up front. The chess memory itself was finished by hand and is live.
-> - When you're back: headset QA on `https://deja-view.photo` (every world and memory, Quest browser), notes in the
->   team chat. Still no Roblox and no Devpost.
+> - **What's next is in `team/SHIVIN-README.md`:** headset and phone QA, three small code fixes, and (optional) a
+>   new place to capture. Still no Roblox and no Devpost.
 
 > **Update 20 (Sat ~4 PM): the site is on its own domain now: `https://deja-view.photo`.** It's permanent. Use it as
 > BASE everywhere, and open it in the Quest browser for headset QA (no more changing links). The old `trycloudflare`
