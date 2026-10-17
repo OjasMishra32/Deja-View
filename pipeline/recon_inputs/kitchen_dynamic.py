@@ -181,7 +181,10 @@ def apply(a) -> int:
         shutil.copytree(work / "masks", person)
         print(f"person masks kept in {person}")
     dyn_dir = work / "masks-dynamic"
-    if dyn_dir.exists():
+    # a later run's work folder links to the earlier run's: drop the link, never the folder behind it
+    if dyn_dir.is_symlink():
+        dyn_dir.unlink()
+    elif dyn_dir.exists():
         shutil.rmtree(dyn_dir)
     stats = []
     sheet = []
