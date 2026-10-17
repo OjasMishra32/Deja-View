@@ -32,8 +32,13 @@ local function now()
 end
 
 -- Only Photo worlds become Roblox places; a video memory stays in the headset (shivin.md Update 2).
+-- The live server still reports its internal mode names: "thirdwheel" is a video memory.
+local function isVideo(s: any): boolean
+	return s ~= nil and (s.mode == "video" or s.mode == "thirdwheel")
+end
+
 local function playable(s: any): boolean
-	return s ~= nil and s.status == "ready" and s.mode ~= "video"
+	return s ~= nil and s.status == "ready" and not isVideo(s)
 end
 
 local function sceneById(id: string): any?
@@ -165,7 +170,7 @@ local function publishBoard()
 		if #cards >= Config.PICKER_MAX then
 			break
 		end
-		if s.status == "failed" or s.mode == "video" then
+		if s.status == "failed" or isVideo(s) then
 			continue
 		end
 		local e = cache[s.id]
@@ -381,7 +386,7 @@ function Rooms.vote(player: Player, sceneId: string)
 		return
 	end
 	local s = sceneById(sceneId)
-	if s.mode == "video" then
+	if isVideo(s) then
 		World.toast("Video memories live in the headset only", player)
 		return
 	end
