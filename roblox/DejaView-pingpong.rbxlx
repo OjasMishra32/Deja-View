@@ -3684,9 +3684,24 @@ local function buildTable(tableCf: CFrame, length: number, width: number, visibl
 	board.Text = ""
 	board.Parent = gui
 
+	local signGui = Instance.new("BillboardGui")
+	signGui.Name = "RealPingPongSign"
+	signGui.Size = UDim2.fromOffset(360, 72)
+	signGui.AlwaysOnTop = true
+	signGui.Parent = anchor
+	local sign = Instance.new("TextLabel")
+	sign.Size = UDim2.fromScale(1, 1)
+	sign.BackgroundTransparency = 1
+	sign.Font = Enum.Font.GothamBlack
+	sign.TextSize = 26
+	sign.TextColor3 = Color3.fromRGB(0, 122, 255)
+	sign.TextStrokeTransparency = 0.2
+	sign.Text = "REAL PING PONG\nhold to charge, release to hit"
+	sign.Parent = signGui
+
 	prompt = Instance.new("ProximityPrompt")
 	prompt.ActionText = "Play real ping pong"
-	prompt.ObjectText = "Game Lawn"
+	prompt.ObjectText = "Real ping pong table"
 	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = 10
 	prompt.Parent = anchor
@@ -4066,10 +4081,6 @@ function PingPong.join(player: Player)
 		World.toast("No table here yet", player)
 		return
 	end
-	if Pong.isActive() then
-		World.toast("Finish the arcade game first", player)
-		return
-	end
 	local side = playerSide(player)
 	if side then
 		return
@@ -4080,6 +4091,7 @@ function PingPong.join(player: Player)
 			if PPSide then
 				PPSide:FireClient(player, s)
 			end
+			World.toast("Real ping pong: hold to charge, release to hit", player)
 			World.toast(if s == "A" then "You are on the near side" else "You are on the far side", player)
 			if over then
 				return
@@ -4158,9 +4170,6 @@ function PingPong.start()
 			return
 		end
 		if workspace:GetAttribute("SceneId") ~= "the-courts" or folder then
-			return
-		end
-		if Pong.isActive() then
 			return
 		end
 		local info = Rooms.modelInfo("the-courts")
