@@ -8,6 +8,39 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 4 (Sat ~3:10 AM): the server is public. Your work list, in order.**
+>
+> **The link (live now):** `https://prozac-covered-burke-oklahoma.trycloudflare.com` (it changes if the tunnel
+> restarts; Ojasva posts the new one; Seb's fixed domain replaces it later). Checked from outside: `/api/scenes`,
+> `/api/roblox/<id>/map`, `/presence` and `/event` all answer. No `dejaview_key` is required yet.
+>
+> **A. Right now (30 min): go live.** `dejaview_base` = the link, `use_mock` = false, publish, run your transport test.
+> Join `fortnite-tilted-night` (an old test world; the four real worlds arrive Saturday morning). Ojasva opens
+> `/view?scene=fortnite-tilted-night` in his browser or Quest so you see a real ghost. Report anything that breaks.
+>
+> **B. Build next (each one makes the demo better; do them in this order):**
+> 1. **Walk limits in Roblox.** The rebuilt worlds only look right where the camera went, and the same goes for Roblox.
+>    Build invisible walls at the world's walkable box: `GET BASE/api/roblox/<id>/model` will return `walkBounds` (studs,
+>    same frame as the map) with the room model; until that route is live, use the extent of the map's floor parts.
+> 2. **Gemini labels in Roblox.** `GET BASE/api/scenes/<id>/hotspots` returns `{hotspots:[{label, blurb, x, y, z}]}`
+>    in room metres (studs = metres x 3.57, the same transform as the map). Show each as a floating label
+>    (BillboardGui, readable on a phone). Then a **"Hunt" round**: players race to touch every label; the first to finish
+>    wins; send `POST /event {type:"hunt", by, found, total}` (unknown event types pass through to the headset).
+> 3. **Notes in Roblox.** `GET BASE/api/notes/<id>` every 2 s returns `{notes:[{id, author, text, x, y, z}]}` (metres):
+>    show each as a floating note bubble at its spot (gray message bubble, author on top). Let a Roblox player leave
+>    one: `POST BASE/api/notes/<id> {author, text, x, y, z}` (metres). It shows up in the headset and on Seb's map.
+>    Until Seb's DeepSpace is connected, POST answers an error: show "Notes are offline" and keep going.
+> 4. **The judge as a person, not floating parts.** Drive an R15 rig with IKControl from the presence `head` and
+>    `hands`, so the VR player in Roblox walks, turns and reaches like a real avatar.
+> 5. **Roblox in VR.** Play the published game in the Roblox app on Ojasva's Quest: movement comfort (snap turn,
+>    vignette), the HUD readable in VR, tag works with motion controllers. Friends with a Quest could join this way.
+> 6. **Big-screen camera.** A host-bar toggle for a smooth spectator camera that follows the judge's ghost, for the
+>    table laptop and projector during the demo.
+> 7. **"New room unlocked."** When a scene turns ready (the finale), a lobby moment: a portal or banner with its name,
+>    and everyone gets a JOIN prompt.
+> 8. **Phones.** StreamingEnabled and a part budget so a phone keeps 30+ fps in the biggest world; test on a phone.
+> 9. **Devpost clips.** 10 s screen recordings: joining a world, a tag, labels, a note appearing, a phone and a Quest.
+
 > **Update 3 (Sat ~3 AM): your Update 2 work is merged, thanks. What is next for you:**
 > 1. **The worlds are changing:** the four rebuilt worlds (real footage, every angle; walking limited to where the camera went): **`tilted-towers`**
 > (outdoor town centre), **`brick-apartment`** (the Brick House apartment), **`the-courts`** (our table-tennis and
