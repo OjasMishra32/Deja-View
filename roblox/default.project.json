@@ -1,0 +1,46 @@
+{
+  "name": "DejaView",
+  "tree": {
+    "$className": "DataModel",
+    "HttpService": {
+      "$properties": { "HttpEnabled": true }
+    },
+    "Workspace": {
+      "$properties": { "StreamingEnabled": false }
+    },
+    "Lighting": {
+      "$properties": {
+        "Ambient": [0.55, 0.55, 0.55],
+        "OutdoorAmbient": [0.55, 0.55, 0.55],
+        "ClockTime": 13,
+        "Brightness": 2
+      }
+    },
+    "StarterPlayer": {
+      "$properties": {
+        "DevCameraOcclusionMode": "Invisicam",
+        "CameraMaxZoomDistance": 25
+      },
+      "StarterPlayerScripts": {
+        "$path": "src/client"
+      }
+    },
+    "ServerScriptService": {
+      "Main": { "$path": "src/server/Main.server.luau" },
+      "DejaView": { "$path": "src/server/DejaView" }
+    },
+    "ServerStorage": {
+      "BakedRooms": { "$className": "Folder" }
+    },
+    "ReplicatedStorage": {
+      "Shared": { "$path": "src/shared" },
+      "Remotes": {
+        "$className": "Folder",
+        "GhostState": { "$className": "UnreliableRemoteEvent" },
+        "Moment": { "$className": "RemoteEvent" },
+        "Vote": { "$className": "RemoteEvent" },
+        "HostAction": { "$className": "RemoteEvent" }
+      }
+    }
+  }
+}
