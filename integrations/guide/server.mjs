@@ -48,14 +48,14 @@ createServer(async (req, res) => {
   if (req.url === '/hotspots') return endpoint(req, res, async ({ image: rawImage, scene = {} }) => {
     const validImage = image(rawImage); const key = cacheKey(scene, validImage);
     const cached = hotspotCache.get(key) || await loadCache('hotspots', key);
-    if (cached) return { ...cached, cached: true };
+    if (cached) return { ...cached, cached: true, ms: { understand: 0 } };
     const result = { ...(await hotspots(validImage, scene)), cached: false };
     if (!result.degraded && scene.id) { hotspotCache.set(key, result); await saveCache('hotspots', key, result); }
     return result;
   });
   if (req.url === '/narrate') return endpoint(req, res, async ({ image: rawImage, scene = {} }) => {
     const cached = scene.id && (narrateCache.get(scene.id) || await loadCache('narrate', scene.id));
-    if (cached && cached.expires > Date.now()) return { ...cached.value, cached: true };
+    if (cached && cached.expires > Date.now()) return { ...cached.value, cached: true, ms: { understand: 0, tts: 0, total: 0 } };
     const validImage = image(rawImage); const result = { ...(await narrate(validImage, scene)), cached: false };
     if (!result.degraded && scene.id) { const entry = { value: result, expires: Date.now() + 30 * 60_000 }; narrateCache.set(scene.id, entry); await saveCache('narrate', scene.id, entry); }
     return result;
