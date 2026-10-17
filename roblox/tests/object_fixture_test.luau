@@ -13,7 +13,7 @@ local function check(name: string, ok: boolean, detail: string?)
 end
 
 check("kitchen has a fallback", ObjectFixtures.kitchen ~= nil)
-local plan = ObjectLayout.plan(ObjectFixtures.kitchen)
+local plan = ObjectLayout.plan(ObjectFixtures.kitchen, { inflate = 0.15 })
 check("one fridge is planned", #plan.objects == 1, `n={#plan.objects}`)
 check("the fridge is white", plan.objects[1].color[1] == 245 and plan.objects[1].color[3] == 242)
 check(
