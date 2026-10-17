@@ -24,13 +24,25 @@ KEY="$(tr -d '\r\n' < "$KEY_FILE")"
 if [[ "${1:-}" == "--upload-object" ]]; then
 	FILE="${2:-}"
 	NAME="${3:-DejaView object}"
-	REPORT="$(dirname "$FILE")/preflight/preflight.json"
-	if [[ "${APPROVE_ASSET:-}" != "1" ]]; then
-		echo "No upload. Run pipeline/objects/preflight.py, inspect its sheet, then set APPROVE_ASSET=1." >&2
+	APPROVAL="$(dirname "$FILE")/preflight/approval.json"
+	if [[ ! -f "$APPROVAL" ]]; then
+		echo "No upload: no personal approval. Run pipeline/objects/review.py after inspecting the preflight sheet." >&2
 		exit 2
 	fi
-	if [[ ! -f "$REPORT" ]] || ! python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("clear") is True else 1)' "$REPORT"; then
-		echo "No upload: the preflight is missing or not clear. The sheet and scan must be reviewed." >&2
+	if ! python3 - "$FILE" "$APPROVAL" <<'PY'
+import hashlib, json, sys
+glb, approval = sys.argv[1], sys.argv[2]
+d = json.load(open(approval))
+h = hashlib.sha1()
+with open(glb, "rb") as f:
+    for chunk in iter(lambda: f.read(1 << 20), b""):
+        h.update(chunk)
+ok = d.get("approved") is True and d.get("sha1") == h.hexdigest()
+if not ok:
+    print("approval does not match this file (not approved, or the file changed)")
+sys.exit(0 if ok else 1)
+PY
+	then
 		exit 2
 	fi
 	CREATOR="${ROBLOX_CREATOR_ID:-4348140549}"

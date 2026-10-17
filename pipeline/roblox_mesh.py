@@ -1378,7 +1378,7 @@ def build_model(scene_dir: Path | str, out_dir: Path | str | None = None, triang
                 face_res: int = FACE_RES, textured: bool = True, device: str | None = None, workers: int = 8,
                 key: str | None = None, sheet: Path | str | None = None, hole_edges: int = HOLE_EDGES,
                 room_override: "Room | None" = None, views_override: "tuple[list[View], list] | None" = None,
-                log: Callable[[str], None] = _log_noop) -> dict:
+                ink: float | None = None, log: Callable[[str], None] = _log_noop) -> dict:
     t0 = time.time()
     timings: dict[str, float] = {}
 
@@ -1411,6 +1411,11 @@ def build_model(scene_dir: Path | str, out_dir: Path | str | None = None, triang
     shots, view_stats = render_views(renderer, views, log)
     if not shots:
         raise MeshError("every view of this world is empty")
+    if ink:
+        from objects.ink import ink_tensor
+        for s in shots:
+            s.rgb = ink_tensor(s.rgb, strength=float(ink))
+        log(f"ink pass on {len(shots)} views (strength {ink})")
     if sheet:
         write_sheet(shots, Path(sheet))
     del renderer

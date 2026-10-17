@@ -87,9 +87,10 @@ def scan_codes(images: list[dict], tex_dir: str | Path) -> dict:
     try:
         import cv2
     except Exception as e:  # noqa: BLE001
-        return {"status": "unavailable", "reason": str(e), "qr": [], "barcodes": []}
+        return {"status": "unavailable", "reason": str(e), "qr": [], "qrCandidates": [], "barcodes": []}
     tex = Path(tex_dir)
     qr = []
+    candidates = []
     bars = []
     try:
         detector = cv2.QRCodeDetector()
@@ -108,12 +109,15 @@ def scan_codes(images: list[dict], tex_dir: str | Path) -> dict:
             if detector is not None:
                 text, points, _ = detector.detectAndDecode(probe)
                 if points is not None and len(points):
-                    qr.append({"file": info["file"], "scale": scale, "text": text})
+                    # A real QR or link has a payload. An empty payload on a fragmented texture atlas
+                    # is a pattern hit, not a promotion: show it for review, do not call it a violation.
+                    entry = {"file": info["file"], "scale": scale, "text": text}
+                    (qr if str(text).strip() else candidates).append(entry)
             if barcode is not None:
                 ok, texts, _, _ = barcode.detectAndDecode(probe)
                 if ok:
                     bars.append({"file": info["file"], "scale": scale, "text": list(texts)})
-    return {"status": "ok", "qr": qr, "barcodes": bars}
+    return {"status": "ok", "qr": qr, "qrCandidates": candidates, "barcodes": bars}
 
 
 def preflight(glb_path: str | Path, out_dir: str | Path) -> dict:
@@ -148,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
     report = preflight(args.glb, out)
     print(f"textures: {len(report['images'])}")
     print(f"sheet: {report['sheet']}")
-    print(f"scan: {report['scan']['status']}  qr={len(report['scan']['qr'])}  barcodes={len(report['scan']['barcodes'])}")
+    print(f"scan: {report['scan']['status']}  qr={len(report['scan']['qr'])}  candidates={len(report['scan'].get('qrCandidates', []))}  barcodes={len(report['scan']['barcodes'])}")
     print(f"clear: {report['clear']}")
     print("Inspect the sheet yourself. The report does not approve the upload.")
     return 0

@@ -77,7 +77,7 @@ def object_room(splats: sio.Splats, scene: dict, scene_dir: Path, lo: np.ndarray
 
 def build_object(scene_dir: str | Path, object_id: str, out_dir: str | Path, triangles: int = 20000,
                  texture: int = 1024, margin: float = 0.12, size: int = 512, count: int = 12,
-                 device: str | None = None, log=print) -> dict:
+                 device: str | None = None, ink: float | None = None, log=print) -> dict:
     scene_dir = Path(scene_dir)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -102,7 +102,7 @@ def build_object(scene_dir: str | Path, object_id: str, out_dir: str | Path, tri
     log(f"{object_id}: {len(crop)} splats, bounds {np.round(lo, 2)}..{np.round(hi, 2)} m, {len(views)} views")
     result = rm.build_model(
         scene_dir, out_dir, triangles=triangles, texture=texture, device=device,
-        room_override=room, views_override=(views, []), log=log,
+        room_override=room, views_override=(views, []), ink=ink, log=log,
     )
     return result
 
@@ -118,9 +118,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--size", type=int, default=512)
     ap.add_argument("--count", type=int, default=12)
     ap.add_argument("--device", default=None)
+    ap.add_argument("--ink", type=float, default=None, help="ink/smooth the texture for signs and posters")
     args = ap.parse_args(argv)
     result = build_object(args.scene, args.object, args.out, args.triangles, args.texture, args.margin,
-                          args.size, args.count, args.device)
+                          args.size, args.count, args.device, args.ink)
     print(f"{result['triangles']} triangles, {result['bytes'] / 1e6:.1f} MB -> {args.out}")
     return 0
 
