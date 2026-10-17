@@ -31,6 +31,7 @@ local serveSide: string? = nil
 local lastBlade: CFrame? = nil
 local paddleVel = Vector3.zero
 
+print("[PingPong] client charge v3")
 local tableC: Vector3? = nil
 local tableYaw = 0
 local tableLen = 9.78
@@ -140,7 +141,7 @@ local function aimDir(): Vector3?
 end
 
 local function beginCharge()
-	if not active or not canHit or charging then
+	if not active or not mySide or charging then
 		return
 	end
 	charging = true

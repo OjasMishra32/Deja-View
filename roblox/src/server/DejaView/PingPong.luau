@@ -438,8 +438,11 @@ local function onHit(player: Player, payload: any)
 	if not side or side ~= state.to or state.serving then
 		return
 	end
-	if lastBounce ~= side then
-		return -- they must let it bounce on their half first
+	-- the ball must be on their half; a volley there is allowed (friendlier than a strict bounce gate)
+	local lp = frame:PointToObjectSpace(state.p)
+	local onSide = (side == "A" and lp.Z < 0) or (side == "B" and lp.Z > 0)
+	if not onSide then
+		return
 	end
 	if type(payload) ~= "table" then
 		return
