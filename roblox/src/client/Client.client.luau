@@ -54,7 +54,7 @@ task.spawn(function()
 		return
 	end
 	local sg = make("SurfaceGui", { Name = "LobbyBoard", Adornee = part, Face = Enum.NormalId.Front,
-		SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud, PixelsPerStud = 40, LightInfluence = 0,
+		SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud, PixelsPerStud = 22, LightInfluence = 0,
 		ResetOnSpawn = false, Parent = player:WaitForChild("PlayerGui") })
 	local root = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = Theme.Bg, Parent = sg },
 		{ make("UIPadding", { PaddingLeft = UDim.new(0, 40), PaddingRight = UDim.new(0, 40), PaddingTop = UDim.new(0, 30),
@@ -64,7 +64,7 @@ task.spawn(function()
 	boardStatus = label({ Text = "", FontFace = Theme.Heading, Size = UDim2.new(1, 0, 0, 70), Position = UDim2.new(0, 0, 0, 64),
 		MaxText = 64, Parent = root })
 	local list = make("Frame", { BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 160), Size = UDim2.new(1, 0, 1, -160),
-		Parent = root }, { make("UIGridLayout", { CellSize = UDim2.new(0.235, 0, 0.3, 0), CellPadding = UDim2.new(0.02, 0, 0.04, 0),
+		Parent = root }, { make("UIGridLayout", { CellSize = UDim2.new(0.235, 0, 0.45, 0), CellPadding = UDim2.new(0.02, 0, 0.05, 0),
 		SortOrder = Enum.SortOrder.LayoutOrder }) })
 	boardList = list
 end)

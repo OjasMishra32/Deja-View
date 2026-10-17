@@ -108,7 +108,7 @@ local function buildLobby()
 		return p
 	end
 	part("Floor", Vector3.new(80, 2, 70), Vector3.new(0, -1, 0), Theme.Bg)
-	part("Trim", Vector3.new(80, 0.2, 0.6), Vector3.new(0, 0.1, -20), Theme.Accent, Enum.Material.Neon)
+	part("Trim", Vector3.new(80, 0.2, 0.6), Vector3.new(0, 0.1, -12), Theme.Accent, Enum.Material.Neon)
 	for _, side in { -1, 1 } do
 		part("Wall", Vector3.new(2, 30, 70), Vector3.new(side * 41, 15, 0), Theme.Surface)
 	end
@@ -116,8 +116,8 @@ local function buildLobby()
 	part("Front", Vector3.new(80, 30, 2), Vector3.new(0, 15, -36), Theme.Surface)
 	part("Roof", Vector3.new(84, 2, 74), Vector3.new(0, 31, 0), Theme.Bg, nil, { Transparency = 0.2 })
 	-- The board faces +Z (towards the spawn). The client puts a SurfaceGui on it.
-	local board = part("Board", Vector3.new(44, 22, 1), Vector3.new(0, 13, -30), Theme.Surface)
-	board.CFrame = CFrame.new(c + Vector3.new(0, 13, -30)) * CFrame.Angles(0, math.pi, 0)
+	local board = part("Board", Vector3.new(40, 20, 1), Vector3.new(0, 11, -14), Theme.Surface)
+	board.CFrame = CFrame.new(c + Vector3.new(0, 11, -14)) * CFrame.Angles(0, math.pi, 0)
 	local light = Instance.new("PointLight")
 	light.Color = Theme.Accent
 	light.Range = 40
@@ -129,9 +129,12 @@ local function buildLobby()
 	spawn.Anchored = true
 	spawn.Size = Vector3.new(10, 1, 10)
 	spawn.CFrame = CFrame.new(c + Vector3.new(0, 0.5, 12))
-	spawn.Color = Theme.Accent
-	spawn.Material = Enum.Material.Neon
-	spawn.Transparency = 0.6
+	spawn.Color = Theme.Bg
+	spawn.Transparency = 1
+	local decal = spawn:FindFirstChildOfClass("Decal")
+	if decal then
+		decal:Destroy()
+	end
 	spawn.Duration = 0
 	spawn.Neutral = true
 	spawn.Parent = lobby
