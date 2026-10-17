@@ -20,10 +20,13 @@ It's now one job:
 1. **Prepare.** The photos are normalised as in any reconstruct job.
 2. **Remove watermarks and logos** (`listing.clean_photos`).
    - **Shared marks.** A listing's photos share their overlay, in the same place on every photo, while the room
-     behind it changes. With 3 or more photos, a pixel is overlay where every photo has a crisp, high-contrast
-     edge (the per-pixel minimum of the edge maps) and nearly the same brightness (low spread across the photos).
-     This catches corner text and big translucent marks across the middle. Photos are compared only with photos of
-     the same size, so a portrait photo among landscape ones doesn't hide the mark the landscape ones share.
+     behind it changes. With 3 or more photos, a pixel is overlay where its strongest photos all have a crisp,
+     high-contrast edge and nearly the same brightness (low spread across them). "Strongest" means every photo of
+     3, all but one of 4 to 6, and all but two of 7 or more, never fewer than 3. So a floor plan or an unstamped hero
+     shot in the set doesn't hide the mark on the rest. The mark is then removed only from the photos that carry it
+     (a crisp edge on most of it). This catches corner text and big translucent marks across the middle. Photos are
+     compared only with photos of the same size, so a portrait photo among landscape ones doesn't hide the mark the
+     landscape ones share.
    - **Corner marks.** For a lone photo, or a mark on only some photos, the corner check looks for a dense patch of
      fine strokes (letters, logo lines) in a corner band, far denser than the rest of the photo.
    - **Cleaning.** Stray pixels are dropped. Strokes are closed into marks. Anything covering more than a fifth of
@@ -60,6 +63,8 @@ On synthetic listings (photo-like rooms with listing-style text and logos):
 | Clean photos, 12 sets of 4 | 0 / 48 changed (no false alarms) |
 | Marked photos: bottom-right and bottom-left agent text, a top-left credit, a translucent mark across the middle (12 sets of 4) | 48 / 48 found and removed. Corner text is cropped off with its band; the middle mark is inpainted |
 | A lone photo with a corner logo | found by the corner check, cropped |
+| Clean photos, 6 sets of 7 plus a floor plan | 0 / 48 changed (no false alarms with the tolerance) |
+| A centre mark on 5 of 6 photos, the sixth a floor plan (8 sets) | 40 / 40 marks found and removed; 0 / 8 floor plans touched |
 | The whole job, rebuild stubbed with a synthetic room | the watermark band is cropped from all 4 photos before the rebuild; walk zone, collider and a spawn facing the photographed wall; caption "Rebuilt from 4 listing photos." |
 
 Still to check on the real thing: the four photos in `data/inputs/old-house-kitchen/` (Ojasva has them), through
@@ -69,8 +74,8 @@ the real rebuild on the GPU. Done means it looks like today's hand-made world wi
 
 - Shared-mark detection needs 3 or more photos of the same size, so a 2-photo listing, or a lone portrait photo
   among landscape ones, relies on the corner check alone. A mark across the middle of such a photo stays.
-- One photo without the mark (a floor plan, say) in a group hides a mark across the middle on all of them; a
-  corner mark is still caught by the corner check.
+- A mark on fewer photos than that (two of 5, say) is still hidden from the shared check. A corner mark is still
+  caught by the corner check.
 - A frame drawn on every photo is ignored when it is thin or wide, but one about 1 % of the long side wide can
   still cost a sliver along an edge. The edge of a letterbox bar that every photo has is taken for a mark and
   inpainted.

@@ -115,9 +115,17 @@ def _clean_mask(m: np.ndarray, grow: int = 3, min_pixels: int = MIN_PIXELS) -> n
     return keep.astype(bool)
 
 
+def absent_allowed(n: int) -> int:
+    """How many photos of a same-size group may lack a shared mark: none of 3, one of 4 to 6, two of 7 or more."""
+    return 0 if n < 4 else 1 if n < 7 else 2
+
+
 def shared_overlay(images: list[np.ndarray]) -> np.ndarray | None:
-    """The overlay every photo shares, at WORK size (aspect of the first photo), or None with fewer than 3 photos
-    (two photos agree on too much by chance)."""
+    """The overlay the photos share, at WORK size (aspect of the first photo), or None with fewer than 3 photos
+    (two photos agree on too much by chance). A listing often has a photo or two without the mark (a floor plan, an
+    unstamped hero shot), so a pixel counts when its `m` strongest photos (m = all but `absent_allowed(n)`, never
+    fewer than 3) all have a crisp edge there and nearly the same brightness. `carriers` then says which photos have
+    it."""
     if len(images) < 3:
         return None
     h0, w0 = images[0].shape[:2]
@@ -125,12 +133,30 @@ def shared_overlay(images: list[np.ndarray]) -> np.ndarray | None:
     W, H = int(round(w0 * s)), int(round(h0 * s))
     grays = [_resize(_gray(im), W, H) for im in images]
     edges = np.stack([edge_map(g) for g in grays])
-    common = edges.min(axis=0)
-    spread = np.stack(grays).std(axis=0)
+    k = max(3, len(images) - absent_allowed(len(images)))
+    order = np.argsort(-edges, axis=0)[:k]  # per pixel, the k photos with the strongest edge there
+    common = np.take_along_axis(edges, order[-1:], axis=0)[0]  # the k-th strongest
+    spread = np.take_along_axis(np.stack(grays), order, axis=0).std(axis=0)
     m = (common > EDGE_T) & (spread < SPREAD_T)
     # a thin frame along every photo's edge is not a mark, and a wide one is one big outline that _clean_mask drops
     # as scene; a frame about as wide as the ring, or the edge of a letterbox bar further in, can still leave a mark
     return _clean_mask(_clear_ring(m))
+
+
+CARRY_SHARE = 0.5  # a photo carries a shared mark when it has a strong edge on at least this share of the mark
+
+
+def carriers(images: list[np.ndarray], mark: np.ndarray) -> list[bool]:
+    """Which photos carry `mark` (a WORK-size mask from shared_overlay): the ones with a crisp edge on most of it.
+    The mark is only removed from those, so a photo without it (a floor plan, an unstamped shot) is never touched."""
+    if mark is None or not mark.any():
+        return [False] * len(images)
+    H, W = mark.shape
+    out = []
+    for im in images:
+        e = edge_map(_resize(_gray(im), W, H))
+        out.append(bool((e[mark] > EDGE_T * 0.6).mean() >= CARRY_SHARE))
+    return out
 
 
 def size_groups(images: list[np.ndarray], tol: float = 0.02) -> list[list[int]]:
@@ -187,9 +213,10 @@ def detect(images: list[np.ndarray]) -> list[Overlay]:
     """One Overlay per photo (an empty mask where there is nothing to remove)."""
     shared_of: list[np.ndarray | None] = [None] * len(images)
     for g in size_groups(images):
-        found = shared_overlay([images[i] for i in g])
-        for i in g:
-            shared_of[i] = found
+        group = [images[i] for i in g]
+        found = shared_overlay(group)
+        for i, carries in zip(g, carriers(group, found)):
+            shared_of[i] = found if carries else None
     out = []
     for im, shared in zip(images, shared_of):
         h, w = im.shape[:2]
