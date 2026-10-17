@@ -68,7 +68,7 @@ import { createScoreboard, type Scoreboard } from './scores/scoreboard.ts';
 import { isLocalRequest, keyRejected, type RequestIpSource } from './social/http.ts';
 import { robloxWsMessage } from './social/presence.ts';
 import type { MapBake } from './social/roblox.ts';
-import { createRobloxModelRoutes, RobloxModelService, uploaderFromEnv } from './social/roblox-model.ts';
+import { createRobloxModelRoutes, RobloxModelService, uploaderFromEnv, uploadScenesFromEnv } from './social/roblox-model.ts';
 import { createSocial, type Social } from './social/routes.ts';
 import { SceneStore } from './store.ts';
 
@@ -245,7 +245,7 @@ function attachLive(core: Core): void {
   });
   core.readySeen ??= new Map();
   core.describing ??= new Set();
-  core.models ??= new RobloxModelService({ sceneDir: (id) => store.sceneDir(id), uploader: uploaderFromEnv() });
+  core.models ??= new RobloxModelService({ sceneDir: (id) => store.sceneDir(id), uploader: uploaderFromEnv(), uploadScenes: uploadScenesFromEnv() });
   if (core.auth === undefined) {
     let config = null;
     try {

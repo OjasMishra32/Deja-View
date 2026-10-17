@@ -315,6 +315,17 @@ export interface ModelServiceOptions {
   /** After a failed upload, GETs do not retry it for this long (POST always does). Default 60 s. */
   failureHoldMs?: number;
   log?: (msg: string) => void;
+  /**
+   * The only scenes that may ever upload (ROBLOX_UPLOAD_SCENES, comma separated). Every other scene stays 'off' even
+   * with an uploader, so a world that must never reach Roblox (game-derived, someone else's photos) cannot go up
+   * because a game asked for it. Unset: no scene uploads.
+   */
+  uploadScenes?: ReadonlySet<string>;
+}
+
+/** ROBLOX_UPLOAD_SCENES as a set of scene ids. */
+export function uploadScenesFromEnv(env: Record<string, string | undefined> = process.env): Set<string> {
+  return new Set((env.ROBLOX_UPLOAD_SCENES ?? '').split(',').map((s) => s.trim()).filter(Boolean));
 }
 
 /** Reads models and sidecars from scene directories and runs at most one upload job per scene at a time. */
@@ -383,7 +394,7 @@ export class RobloxModelService {
       const at = Math.max(0, ...items.map((it) => it.record?.at ?? 0));
       return { state: 'done', assetId, at: at || undefined, done, total };
     }
-    if (!this.opts.uploader) return { state: 'off', done, total };
+    if (!this.opts.uploader || !this.opts.uploadScenes?.has(sceneId)) return { state: 'off', done, total };
     if (this.inflight.has(sceneId)) return { state: 'uploading', done, total };
     const f = this.failures.get(sceneId);
     if (f && f.sig === RobloxModelService.signature(s)) return { state: 'failed', error: f.error, at: Math.floor(f.at / 1000), done, total };

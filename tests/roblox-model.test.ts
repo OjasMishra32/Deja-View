@@ -10,6 +10,7 @@ import {
   RobloxAssetUploader,
   RobloxModelService,
   uploaderFromEnv,
+  uploadScenesFromEnv,
   type ModelHandler,
 } from '../server/social/roblox-model.ts';
 
@@ -110,7 +111,7 @@ async function rig(opts: { uploader?: RobloxAssetUploader | null; dvKey?: string
     JSON.stringify({ version: 1, sceneId: 'room-a', name: 'Room room-a', units: 'studs', studsPerMeter: 3.57, sha1: sha1(glb), triangles: 12, chunks: [{ name: 'room_00', kind: 'room', triangles: 12 }] }),
   );
   const logs: string[] = [];
-  const models = new RobloxModelService({ sceneDir: (id) => join(dir, id), uploader: opts.uploader, log: (m) => logs.push(m), failureHoldMs: 60_000 });
+  const models = new RobloxModelService({ sceneDir: (id) => join(dir, id), uploader: opts.uploader, log: (m) => logs.push(m), failureHoldMs: 60_000, uploadScenes: new Set(['room-a', 'room-b']) });
   const routes = createRobloxModelRoutes({ getScene: async (id) => scenes.get(id) ?? null, models, dvKey: opts.dvKey, log: (m) => logs.push(m) });
   return { dir, routes, models, logs };
 }
@@ -636,4 +637,20 @@ describe('the upload ledger', () => {
     await writeFile(join(r.dir, 'room-a', 'roblox-uploads.json'), '{"not json');
     expect(await r.models.ledger('room-a')).toEqual({});
   });
+});
+
+test('a scene missing from ROBLOX_UPLOAD_SCENES never uploads, even with an uploader', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'rbx-allow-'));
+  roots.push(dir);
+  await mkdir(join(dir, 'game-world'), { recursive: true });
+  const glb = fakeGlb(1);
+  await writeFile(join(dir, 'game-world', 'roblox.glb'), glb);
+  await writeFile(join(dir, 'game-world', 'roblox-model.json'), JSON.stringify({ version: 1, sceneId: 'game-world', name: 'Game world', units: 'studs', studsPerMeter: 3.57, sha1: sha1(glb), triangles: 12, chunks: [{ name: 'room_00', kind: 'room', triangles: 12 }] }));
+  let calls = 0;
+  const uploader = { upload: async () => { calls++; return { assetId: '1', operationId: 'op' }; } } as unknown as RobloxAssetUploader;
+  const models = new RobloxModelService({ sceneDir: (id) => join(dir, id), uploader, log: () => {}, uploadScenes: uploadScenesFromEnv({ ROBLOX_UPLOAD_SCENES: 'kitchen, the-courts' }) });
+  const s = JSON.parse(await Bun.file(join(dir, 'game-world', 'roblox-model.json')).text());
+  expect(models.ensureUploaded('game-world', s, true).state).toBe('off');
+  await models.settle('game-world');
+  expect(calls).toBe(0);
 });
