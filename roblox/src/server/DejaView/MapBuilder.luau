@@ -467,11 +467,44 @@ end
 
 -- Lines one part of a multi-part room model up on the server's box for that part ({min, max} in studs), so a part
 -- that loads somewhere of its own still joins the others.
+-- One file of a room split into several: every part shares the room's frame, so it is only scaled (when the import
+-- changed its units) and moved onto its own box. Never turned: a part's outline can be square-ish, and the turn guess
+-- that suits whole rooms would spin it out of place.
 function MapBuilder.alignPart(model: Model, box: any?)
 	local emin, emax = parseBox(box)
-	if emin and emax then
-		alignModel(model, emin, emax, false)
+	if not emin or not emax then
+		return
 	end
+	local amin, amax = partsBox(model)
+	if not amin or not amax then
+		return
+	end
+	local esize, asize = emax - emin, amax - amin
+	local ratios = {}
+	for _, axis in { "X", "Y", "Z" } do
+		local a, e = (asize :: any)[axis], (esize :: any)[axis]
+		if a > 0.05 and e > 0.05 then
+			table.insert(ratios, e / a)
+		end
+	end
+	if #ratios > 0 then
+		local f = 0
+		for _, r in ratios do
+			f += r
+		end
+		f /= #ratios
+		if math.abs(f - 1) > 0.03 then
+			pcall(function()
+				model:ScaleTo(model:GetScale() * f)
+			end)
+			amin, amax = partsBox(model)
+			if not amin or not amax then
+				return
+			end
+		end
+	end
+	local shift = (emin + emax) / 2 - (amin + amax) / 2
+	model:PivotTo(CFrame.new(shift) * model:GetPivot())
 end
 
 -- The server's box for a model ({min, max} in studs) to align it on exactly, or nil. With `checkShape` (a room
@@ -491,9 +524,6 @@ local function serverBox(model: Model, box: any?, checkShape: boolean?): (Vector
 	return emin, emax
 end
 
--- Puts a textured room model into the current Workspace.Room (over invisible collision blocks), turned, scaled and
--- moved onto `box` ({min, max} in studs): the server's own box for the model it loaded, else the block map's bounds
--- (loose). `checkShape`: see serverBox. Returns the model as placed.
 -- Under a textured room, a solid ground just below the scanned floor in the room's own ground colour: where the scan
 -- has holes you see ground, not the sky under the world.
 function MapBuilder.addGround(colour: Color3?)
@@ -518,6 +548,9 @@ function MapBuilder.addGround(colour: Color3?)
 	p.Parent = room
 end
 
+-- Puts a textured room model into the current Workspace.Room (over invisible collision blocks), turned, scaled and
+-- moved onto `box` ({min, max} in studs): the server's own box for the model it loaded, else the block map's bounds
+-- (loose). `checkShape`: see serverBox. Returns the model as placed.
 function MapBuilder.attachModel(container: Instance, box: any?, checkShape: boolean?): Model?
 	local room = workspace:FindFirstChild("Room")
 	if not room then
