@@ -474,6 +474,40 @@ def test_ceiling_fill_spans_the_room_its_walls_enclose(tmp_path):
     assert open2 < 1.0 and (len(Fc2) == 0 or Vc2[Fc2].mean(axis=1)[:, 2].max() < -0.3)
 
 
+def test_flat_ceiling_drops_the_folds_under_a_smeared_ceiling_and_closes_it(tmp_path):
+    """--flat-ceiling: a ceiling the cameras never looked at fuses as a band along the wall they faced plus folds
+    hanging under the rest. The folds (a curtain and a sagging sheet within the drop distance) go; the band, the walls
+    and a table stay; the fill then spans the whole room the walls enclose, band included."""
+    room = rmesh.load_room(_scene(tmp_path))
+    room.lo[:] = [-4.5, -0.3, -4.5]
+    room.hi[:] = [4.5, 4.0, 4.5]
+    band = _sheet(-2, 2, -2, -0.5, 3.0, 0.1, down=True)
+    walls = [_wall(0, -2.0, (-2, 2), (0, 3.0)), _wall(0, 2.0, (-2, 2), (0, 3.0)), _wall(2, -2.0, (-2, 2), (0, 3.0))]
+    curtain = _wall(0, 0.0, (-0.2, 1.0), (2.5, 2.95))
+    sag = _sheet(-1, 1, 0, 1, 2.6, 0.1, down=True)
+    table = _sheet(-0.5, 0.5, 0.5, 1.0, 0.75, 0.1)
+    V, F = _merge(band, *walls, curtain, sag, table)
+    kinds = np.concatenate([np.full(len(m[1]), k) for k, m in zip(
+        ["band", "wall", "wall", "wall", "curtain", "sag", "table"], [band, *walls, curtain, sag, table])])
+    plan = rmesh.ceiling_plan(V, F, room)
+    assert plan is not None and plan["h"] == pytest.approx(3.0, abs=0.05)
+    drop = rmesh.ceiling_folds(V, F, plan, 0.7)
+    assert drop[kinds == "curtain"].all() and drop[kinds == "sag"].all()
+    assert not drop[np.isin(kinds, ["band", "wall", "table"])].any()
+    keep = F[~drop]
+    Vc, Fc, h, open_m2 = rmesh.ceiling_fill(V, keep, room, lambda m: None, plan=plan, flat=True)
+    nc, ac = rmesh.face_normals(Vc, Fc)
+    c = Vc[Fc].mean(axis=1)
+    assert (nc[:, 1] < -0.99).all() and np.allclose(Vc[:, 1], h + 0.03)
+    assert 14.0 <= ac.sum() <= 17.5  # the 4 m x 4 m room, band included
+    assert ac[c[:, 2] < -0.5].sum() >= 4.0  # over the band too
+    assert np.abs(c[:, 0]).max() < 2.15 and np.abs(c[:, 2]).max() < 2.15
+    # without --flat-ceiling nothing changes: the fill stays out of the band
+    Vc0, Fc0, _, _ = rmesh.ceiling_fill(V, F, room, lambda m: None)
+    _, a0 = rmesh.face_normals(Vc0, Fc0)
+    assert a0[Vc0[Fc0].mean(axis=1)[:, 2] < -0.6].sum() < 0.5
+
+
 def test_small_pieces_standing_on_the_floor_survive():
     leg_V, leg_F = _sheet(0, 0.1, 0, 0.2, 0.0, 0.05)  # 0.02 m2 lying at floor height
     leg_V = leg_V[:, [0, 2, 1]] + [0, 0, 0]  # stand it up: x, y (height 0..0.2), z = 0

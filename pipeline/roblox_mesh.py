@@ -3,7 +3,7 @@
 
   python pipeline/roblox_mesh.py --scene data/scenes/<id> [--out DIR] [--triangles N] [--texture PX] [--key K]
   python pipeline/roblox_mesh.py --v2 --scene data/scenes/<id> --photos <reconstruction work folder> [--out DIR]
-         [--triangles 600000] [--near-margin 1.5] [--max-parts N] [--no-sky]
+         [--triangles 600000] [--near-margin 1.5] [--max-parts N] [--no-sky] [--flat-ceiling M]
 
 v2 (a reconstructed world with cameras.json and its photos/frames; see "v2" below build_model) meshes only the
 walkable area (world.bounds + a margin) at a finer voxel, textures it from the real photos (colour-matched to the
@@ -1737,6 +1737,8 @@ KEEP_PIECE_M2 = 0.015  # small pieces this big that reach below 1.2 m stay (chai
 CEILING_MIN_M2 = 4.0  # a ceiling fill needs at least this much down-facing surface at one height
 WALL_CELL_M2 = 0.25  # a 25 cm cell holds a wall when this much vertical surface stands in it under the ceiling
 WALL_MIN_CELLS = 8  # ... in a run of at least this many cells (2 m) that reaches the fused ceiling (not a tree trunk)
+FLAT_CEILING_KEEP_M = 0.08  # --flat-ceiling: fused faces facing down this close to the ceiling height are its flat parts
+FLAT_WALL_KEEP_M = 0.25  # ... and what stands this close to the room's walls (their top, the corner with the ceiling)
 
 
 def near_box(room: Room, margin: float = NEAR_MARGIN_M) -> tuple[np.ndarray, np.ndarray, str]:
@@ -2050,26 +2052,24 @@ def snap_planes(V: np.ndarray, F: np.ndarray, log: Callable[[str], None], tol: f
     return Vn, {"planes": used, "verticesMoved": moved}
 
 
-def ceiling_fill(V: np.ndarray, F: np.ndarray, room: Room, log: Callable[[str], None],
-                 cell: float = FLOOR_CELL_M, shots: list[Shot] | None = None) -> tuple[np.ndarray, np.ndarray, float | None, float]:
-    """Tiles (at most 1 m square, facing down) a few centimetres above a ceiling wherever the mesh's own ceiling is
-    open inside its outline: the height where down-facing surfaces above 2 m add up to the most area, the cells they
-    cover there, closed and with their holes filled. A ceiling is seen by few cameras (they look ahead, not up), so
-    it fuses torn, and through a tear a player would see the sky. Returns (vertices, faces, height, open m2)."""
+def ceiling_plan(V: np.ndarray, F: np.ndarray, room: Room, cell: float = FLOOR_CELL_M) -> dict | None:
+    """The ceiling ceiling_fill closes, or None: its height (where down-facing surfaces above 2 m add up to the most
+    area), the [z, x] cells of the room box's grid its fused faces cover there (`cover` m2, `covered`), its outline
+    (closed, holes filled, with the splats at that height that join it) and the room its walls enclose (`room_cells`,
+    `planes`: ceiling_room)."""
     from scipy import ndimage
 
-    empty = (np.zeros((0, 3)), np.zeros((0, 3), np.int64), None, 0.0)
     n, area = face_normals(V, F)
     c = V[F].mean(axis=1)
     down = (n[:, 1] < -0.7) & (c[:, 1] > 2.0) & (c[:, 1] < float(room.hi[1]))
     if area[down].sum() < CEILING_MIN_M2:
-        return empty
+        return None
     bins = np.arange(2.0, float(room.hi[1]) + 0.05, 0.05)
     hist, _ = np.histogram(c[down, 1], bins, weights=area[down])
     win = np.convolve(hist, np.ones(3), mode="same")
     k = int(np.argmax(win))
     if win[k] < CEILING_MIN_M2:
-        return empty
+        return None
     h = float(bins[k] + 0.025)
     at = down & (np.abs(c[:, 1] - h) < 0.15)
     ox, oz = float(room.lo[0]), float(room.lo[2])
@@ -2095,7 +2095,74 @@ def ceiling_fill(V: np.ndarray, F: np.ndarray, room: Room, log: Callable[[str], 
     # ceiling the cameras looked ahead, not up, so a ceiling fuses in a band along the walls they faced and stays
     # open over the rest of the room; the renders cannot confirm it there either (a faint ceiling, glare above it).
     room_cells, planes = ceiling_room(V, F, covered, h, ox, oz, cell, nx, nz)
-    missing = (outline | room_cells) & (cover < 0.7 * cell * cell)
+    return {"h": h, "cover": cover, "covered": covered, "outline": outline, "room_cells": room_cells, "planes": planes,
+            "ox": ox, "oz": oz, "nx": nx, "nz": nz, "cell": cell}
+
+
+def ceiling_folds(V: np.ndarray, F: np.ndarray, plan: dict, drop_m: float) -> np.ndarray:
+    """Faces (bool per face) of a ceiling the splats only smeared: when the cameras never looked up, the fused ceiling
+    is not a torn sheet (ceiling_fill closes those) but folds and curtains hanging up to most of a metre under it.
+    Under the ceiling's outline: everything within `drop_m` under the ceiling height or above it, except its flat
+    parts (facing down within FLAT_CEILING_KEEP_M of the height) and, in a room its walls enclose (ceiling_room), what
+    stands within FLAT_WALL_KEEP_M of those walls or behind them: the top of the walls and the corner they make with
+    the ceiling, which the fill (cut to the room through the cells the walls stand in) does not reach."""
+    h, ox, oz, cell, nx, nz = plan["h"], plan["ox"], plan["oz"], plan["cell"], plan["nx"], plan["nz"]
+    n, area = face_normals(V, F)
+    c = V[F].mean(axis=1)
+    ix = np.floor((c[:, 0] - ox) / cell).astype(np.int64)
+    iz = np.floor((c[:, 2] - oz) / cell).astype(np.int64)
+    inb = (ix >= 0) & (ix < nx) & (iz >= 0) & (iz < nz)
+    region = plan["outline"] | plan["room_cells"]
+    out = np.zeros(len(F), bool)
+    out[inb] = region[iz[inb], ix[inb]]
+    out &= (c[:, 1] > h - drop_m) & ~((n[:, 1] < -0.7) & (np.abs(c[:, 1] - h) < FLAT_CEILING_KEEP_M))
+    planes = plan["planes"]
+    if planes is not None:
+        # depth inside the room: the distance to its nearest side (a*x + b*z + c <= 0 inside, unit normals)
+        inside = -(c[:, [0, 2]] @ planes[:, :2].T + planes[:, 2]).max(axis=1)
+        out &= inside > FLAT_WALL_KEEP_M
+    return out
+
+
+def ceiling_colour(room: Room, plan: dict) -> np.ndarray | None:
+    """The colour (sRGB bytes) the splats give a ceiling: the weighted median, per channel, of the splats within 20 cm
+    of its height over its outline and room (ceiling_plan); None when there are too few."""
+    h, ox, oz, cell, nx, nz = plan["h"], plan["ox"], plan["oz"], plan["cell"], plan["nx"], plan["nz"]
+    idx = np.nonzero(np.abs(room.pos[:, 1] - h) < 0.2)[0]
+    ix = np.floor((room.pos[idx, 0] - ox) / cell).astype(np.int64)
+    iz = np.floor((room.pos[idx, 2] - oz) / cell).astype(np.int64)
+    ok = (ix >= 0) & (ix < nx) & (iz >= 0) & (iz < nz)
+    idx, ix, iz = idx[ok], ix[ok], iz[ok]
+    idx = idx[(plan["outline"] | plan["room_cells"])[iz, ix]]
+    if len(idx) < 50:
+        return None
+    w = room.w[idx].astype(np.float64)
+    out = []
+    for k in range(3):
+        v = room.lin[idx, k].astype(np.float64)
+        o = np.argsort(v)
+        cw = np.cumsum(w[o])
+        out.append(v[o[min(len(o) - 1, int(np.searchsorted(cw, 0.5 * cw[-1])))]])
+    return np.clip(np.round(linear_to_srgb_np(np.array(out)) * 255.0), 0, 255).astype(np.uint8)
+
+
+def ceiling_fill(V: np.ndarray, F: np.ndarray, room: Room, log: Callable[[str], None],
+                 cell: float = FLOOR_CELL_M, shots: list[Shot] | None = None, plan: dict | None = None,
+                 flat: bool = False) -> tuple[np.ndarray, np.ndarray, float | None, float]:
+    """Tiles (at most 1 m square, facing down) a few centimetres above a ceiling wherever the mesh's own ceiling is
+    open inside its outline (ceiling_plan, from V, F unless `plan` is given). A ceiling is seen by few cameras (they
+    look ahead, not up), so it fuses torn, and through a tear a player would see the sky. With `flat` (its folds were
+    taken out: ceiling_folds) the tiles span the whole outline and room. Returns (vertices, faces, height, open m2)."""
+    empty = (np.zeros((0, 3)), np.zeros((0, 3), np.int64), None, 0.0)
+    if plan is None:
+        plan = ceiling_plan(V, F, room, cell)
+    if plan is None:
+        return empty
+    h, cover, outline, room_cells, planes = plan["h"], plan["cover"], plan["outline"], plan["room_cells"], plan["planes"]
+    ox, oz, cell = plan["ox"], plan["oz"], plan["cell"]
+    missing = outline | room_cells
+    if not flat:
+        missing &= cover < 0.7 * cell * cell
     n_outline = int(missing.sum())
     if shots and (missing & ~room_cells).any():
         missing &= room_cells | ceiling_seen(missing & ~room_cells, ox, oz, cell, h, shots)
@@ -2739,7 +2806,7 @@ def build_model_v2(scene_dir: Path | str, out_dir: Path | str | None = None, pho
                    sky: bool = True, sky_size: int = SKY_SIZE, power: float = PHOTO_POWER, device: str | None = None,
                    workers: int = 8, key: str | None = None, hole_edges: int = HOLE_EDGES,
                    log: Callable[[str], None] = _log_noop, max_cams: int = 0, jpeg_quality: int = 88,
-                   max_parts: int = 0) -> dict:
+                   max_parts: int = 0, flat_ceiling: float = 0.0) -> dict:
     t0 = time.time()
     timings: dict[str, float] = {}
 
@@ -2838,17 +2905,31 @@ def build_model_v2(scene_dir: Path | str, out_dir: Path | str | None = None, pho
 
     Vf, Ff, open_m2 = floor_fill(Vr, Fr, room)
     fill_m2 = float(face_normals(Vf, Ff)[1].sum()) if len(Ff) else 0.0
-    Vc, Fc, ceil_h, ceil_open = ceiling_fill(Vr, Fr, room, log, shots=shots)
+    # a ceiling the splats only smeared (flat_ceiling > 0, metres): the fill spans it, and its folds go after the
+    # first decimation pass (whose normals tell a wall going on up from a fold, unlike the dense surface's), so the
+    # second pass spends the budget on the rest; without the airborne rule from then on, as the top of a wall may
+    # stand apart from its foot once the folds that joined them are gone
+    plan = ceiling_plan(Vr, Fr, room) if flat_ceiling > 0 else None
+    folds = None
+    Vc, Fc, ceil_h, ceil_open = ceiling_fill(Vr, Fr, room, log, shots=shots, plan=plan, flat=plan is not None)
     rim_before = boundary_edges(Fr)
     target = triangles - 2 * len(Ff) - 2 * len(Fc)
     n_turned = n_late = 0
-    for budget in (int(target * 1.4), target):
-        if len(Fr) <= budget:
-            continue
-        Vr, Fr = decimate(Vr, Fr, budget)
-        Fr, turned = orient_faces(Vr, Fr, tsdf)
-        Vr, Fr, late = drop_small_components(Vr, Fr, min_piece, airborne, keep_m2=KEEP_PIECE_M2)
-        n_turned, n_late = n_turned + turned, n_late + late
+    for k_pass, budget in enumerate((int(target * 1.4), target)):
+        if len(Fr) > budget:
+            Vr, Fr = decimate(Vr, Fr, budget)
+            Fr, turned = orient_faces(Vr, Fr, tsdf)
+            Vr, Fr, late = drop_small_components(Vr, Fr, min_piece, 0.0 if folds else airborne, keep_m2=KEEP_PIECE_M2)
+            n_turned, n_late = n_turned + turned, n_late + late
+        if plan is not None and k_pass == 0:
+            drop = ceiling_folds(Vr, Fr, plan, flat_ceiling)
+            folds = {"dropM": flat_ceiling, "height": round(plan["h"], 3), "faces": int(drop.sum()),
+                     "m2": round(float(face_normals(Vr, Fr[drop])[1].sum()) if drop.any() else 0.0, 2)}
+            Vr, Fr = compact(Vr, Fr[~drop])
+            Vr, Fr, folds["piecesLeft"] = drop_small_components(Vr, Fr, min_piece, 0.0, keep_m2=KEEP_PIECE_M2)
+            log(f"flat ceiling at {plan['h']:.2f} m: {folds['faces']} faces ({folds['m2']:.1f} m2) of folds within "
+                f"{flat_ceiling:.2f} m under it dropped (its flat parts and the walls stay), then {folds['piecesLeft']} "
+                f"pieces they held")
     rim_after = boundary_edges(Fr)
     Vr, Fr, n_split = split_opposed(Vr, Fr)
     Nr = vertex_normals(Vr, Fr)
@@ -2889,6 +2970,15 @@ def build_model_v2(scene_dir: Path | str, out_dir: Path | str | None = None, pho
                                  splat_only=fill_names)
     else:
         bake_stats = bake(chunks, shots, tsdf, room, log)
+    if plan is not None and fill_names:
+        # the flat ceiling: one colour, the one the splats give it, not the smear the splat renders show of a ceiling
+        # nobody filmed (it moves with the eye, so painted on a plane it looks like stains)
+        plain = ceiling_colour(room, plan)
+        if plain is not None:
+            for ch in chunks:
+                if ch.name in fill_names and ch.image is not None:
+                    ch.image[:] = plain
+            folds["colour"] = [int(x) for x in plain]
     for ch in chunks:
         if ch.kind == "floor":
             add_underside(ch)
@@ -3016,6 +3106,8 @@ def build_model_v2(scene_dir: Path | str, out_dir: Path | str | None = None, pho
             "coverage": sky_info["coverage"],
             "farSplats": sky_info["farSplats"],
         }
+    if folds:
+        result["build"]["flatCeiling"] = folds
     if key:
         result["build"]["key"] = key
     result["build"]["seconds"]["write"] = round(time.time() - t, 2)
@@ -3072,6 +3164,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--max-cams", type=int, default=0, help="v2: use at most this many training cameras (smoke tests)")
     ap.add_argument("--jpeg-quality", type=int, default=88, help="v2: texture JPEG quality")
     ap.add_argument("--max-parts", type=int, default=0, help="v2: lower the JPEG quality until the model fits this many files")
+    ap.add_argument("--flat-ceiling", type=float, default=0.0, metavar="M",
+                    help="v2: a ceiling the cameras never looked at fuses into folds hanging under it: inside its walls, "
+                         "drop what lies within M metres under it (not its flat parts or the walls) and close it flat")
     args = ap.parse_args(argv)
     log = _log_noop if args.quiet else (lambda m: print(f"[roblox_mesh] {m}", file=sys.stderr, flush=True))
     try:
@@ -3081,7 +3176,7 @@ def main(argv: list[str] | None = None) -> int:
             r = build_model_v2(args.scene, args.out, args.photos, tri, args.texture, args.voxel, args.near_margin, pos,
                                args.face_res, not args.no_sky, args.sky_size, args.power, args.device, args.workers,
                                args.key, args.hole_edges, log, max_cams=args.max_cams, jpeg_quality=args.jpeg_quality,
-                               max_parts=args.max_parts)
+                               max_parts=args.max_parts, flat_ceiling=args.flat_ceiling)
         else:
             r = build_model(args.scene, args.out, args.triangles, args.texture, args.voxel, args.positions,
                             args.face_res, not args.no_texture, args.device, args.workers, args.key, args.sheet,
