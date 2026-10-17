@@ -114,8 +114,9 @@ def scan_codes(images: list[dict], tex_dir: str | Path) -> dict:
                     entry = {"file": info["file"], "scale": scale, "text": text}
                     (qr if str(text).strip() else candidates).append(entry)
             if barcode is not None:
-                ok, texts, _, _ = barcode.detectAndDecode(probe)
-                if ok:
+                res = barcode.detectAndDecode(probe)
+                if res and len(res) >= 2 and res[0]:
+                    texts = res[1] if isinstance(res[1], (list, tuple)) else [res[1]]
                     bars.append({"file": info["file"], "scale": scale, "text": list(texts)})
     return {"status": "ok", "qr": qr, "qrCandidates": candidates, "barcodes": bars}
 
