@@ -62,8 +62,12 @@ local function request(method: string, path: string, body: any?, timeout: number
 	return res.Success, data, res.StatusCode
 end
 
+-- Scene ids are like "game-night-k3x9a": keep unreserved characters as they are
+-- (HttpService:UrlEncode turns "-" into "%2D", which some servers do not decode in paths).
 local function enc(id: string): string
-	return HttpService:UrlEncode(id)
+	return (id:gsub("[^%w%-%._~]", function(c)
+		return string.format("%%%02X", string.byte(c))
+	end))
 end
 
 function Api.scenes()

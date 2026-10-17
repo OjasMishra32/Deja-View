@@ -8,7 +8,7 @@ local Fixtures = require(ReplicatedStorage.Shared.Fixtures)
 local MockServer = {}
 
 local SPM = 3.57
-local T0 = os.clock()
+local T0 = time() -- game time: restarts with every play-test
 local FINALE_READY_AT = 30
 local FINALE_MEASURING = 5
 local JUDGE_MOVES_AT = 40
@@ -16,7 +16,7 @@ local JUDGE_MOVES_AT = 40
 local lastScene: string? = nil
 
 local function elapsed(): number
-	return os.clock() - T0
+	return time() - T0
 end
 
 local function now(): number

@@ -8,7 +8,8 @@ Rojo project for the Roblox experience in `team/shivin.md`. All game code is Lua
 2. Install the Rojo Studio plugin once: `rojo plugin install`.
 3. `cd roblox && rojo serve`, then in Studio: open your published "Déjà View" place → Plugins → Rojo → **Connect**.
    (Or build a fresh place file: `rojo build -o DejaView.rbxlx` and open it.)
-4. Experience Settings → Security → **Allow HTTP Requests: ON** (Rojo also sets `HttpEnabled`, but publish needs the setting).
+4. Experience Settings → Security → **Allow HTTP Requests: ON**. Rojo does NOT apply this for you; in an unpublished
+   place run `game:GetService("HttpService").HttpEnabled = true` in the command bar.
 5. Test: Test tab → **Server & Clients**, 2 clients, Play.
 
 ## Layout
@@ -35,6 +36,12 @@ Rojo project for the Roblox experience in `team/shivin.md`. All game code is Lua
 - 30 s: `mock-finale` turns ready, answers 202 ("Measuring the room...") for 5 s, then prefetches.
 - 40 s: the mock judge moves into `mock-finale`; with Follow on, everyone in a room is moved there.
 - Host bar (owner, or first player in Studio): Auto-join, Follow, Start/End round, Mock judge, All to lobby.
+
+## Testing the real HTTP path locally
+
+`python3 roblox/dev-server/stub.py` serves the contract's Roblox endpoints on `http://localhost:8788` (a circling fake
+judge, a 202 "building" room, request logging). Set `Config.USE_MOCK = false` and press Play: Studio's local server can
+reach localhost. Verified: scenes, maps with 202 retries, 4 Hz presence with `state`, round and tag events.
 
 ## Going live
 
