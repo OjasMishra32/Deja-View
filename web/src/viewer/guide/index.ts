@@ -38,7 +38,7 @@ import {
   type Vec3,
 } from './hotspots.ts';
 import { SnapshotTaker, loadImageAsJpeg, type Snapshot } from './snapshot.ts';
-import { MIN_RECORDING_SECONDS, SpeechPlayer, VoiceRecorder, playEarcon } from './voice.ts';
+import { MIN_RECORDING_SECONDS, SpeechPlayer, VoiceRecorder, playEarcon, speakWithDevice } from './voice.ts';
 
 /** Seconds the headset's first-use hint stays readable before anything may replace it for good. */
 const XR_HINT_MIN_S = 5;
@@ -1170,6 +1170,12 @@ class GuideImpl implements Guide {
         this.captionTimer = 12;
         return;
       }
+    }
+    if (!spoke && !a.speech && !a.error && a.answer) {
+      // the guide sent no audio (its speech models busy or out of quota): the device reads the answer instead
+      this.duckMedia(true);
+      spoke = await speakWithDevice(a.answer, readingSeconds(a.answer) * 1000 + 4000, this.lifetime.signal);
+      if (turn !== this.turn || this.disposed) return;
     }
     if (!spoke) {
       // no voice: leave time to read (minus the hold that follows)

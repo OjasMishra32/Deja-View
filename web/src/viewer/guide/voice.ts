@@ -539,3 +539,35 @@ export function playEarcon(kind: Earcon, volume = 0.07): void {
     /* sound is a nicety */
   }
 }
+
+/**
+ * Reads `text` aloud with the device's own voice (speechSynthesis) when the guide sent no audio, for instance when its
+ * speech models are out of quota. Resolves true when it finished speaking, false when the device has no voice, refused
+ * (some browsers want a tap first) or took longer than `maxMs`.
+ */
+export function speakWithDevice(text: string, maxMs: number, signal?: AbortSignal): Promise<boolean> {
+  const synth = typeof window !== 'undefined' ? window.speechSynthesis : undefined;
+  if (!synth || typeof SpeechSynthesisUtterance === 'undefined' || !text.trim()) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', stop);
+      resolve(ok);
+    };
+    const stop = () => {
+      synth.cancel();
+      finish(false);
+    };
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.02;
+    u.onend = () => finish(true);
+    u.onerror = () => finish(false);
+    const timer = setTimeout(stop, maxMs);
+    signal?.addEventListener('abort', stop, { once: true });
+    synth.cancel();
+    synth.speak(u);
+  });
+}
