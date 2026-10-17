@@ -10,6 +10,26 @@ up in the headset) and powers the finale (2:00 to 2:25, the judge's own photo be
 
 ---
 
+**Update 13 (Sat ~7 PM): the kitchen's v2 room is live on `/model`, and your code got a review.**
+1. **Kitchen v2 room:** `GET BASE/api/roblox/kitchen/model` now serves the photo-textured v2 kitchen: two parts
+   (`roblox.glb` 18.9 MB, `roblox-2.glb` 14.7 MB) plus six sky faces, same frame as before (floor at y = 0, same
+   headset spawn), so `features.surfaces` (the STOVE and the counters) still line up. It matches the real kitchen far
+   better than v1: no black holes, the sink, door, signs and fire extinguisher read clearly. It has no asset id yet:
+   it goes through your gate (contact sheet, `review.py`, then upload from your account, one part at a time). Until
+   then your game builds the kitchen from `/map`. Shivin's old v1 kitchen asset would not load in your experience
+   anyway.
+2. **Your code was reviewed and fixed on `main` (`git pull`):** it's real code, not filler, but it had bugs. Fixed:
+   the un-aimed hit crash in `PingPong.luau`; every return scoring an instant "Double bounce"; the serve never
+   changing after 10-10; the bot playing itself and posting bot-vs-bot results after everyone left; the paddle's own
+   speed missing from `paddleHit`; the invisible trail; the camera stuck in first person; the barcode scan in
+   `preflight.py` crashing on a real barcode; one view voting twice in `build.py`; black floor colours and a metres
+   ceiling in `mesh.py`; the review site open to the whole Wi-Fi and approving files nobody looked at;
+   `roblox-objects-upload.sh` never succeeding. Play test the ping pong rally once (the Luau couldn't run here).
+3. **Still yours to decide:** remove the green `PP CLIENT v5` debug HUD and the `ClientProbe` billboard before the
+   expo; the VR paddle only hits with one face; `ObjectLayer.loadMesh` never moves an uploaded mesh to its spot.
+4. **Uploads:** `scripts/roblox-upload-object.ts` now refuses unless you type `ROBLOX_UPLOAD=1` and set
+   `ROBLOX_CREATOR_ID` yourself (Bun loads the repo `.env`, which is Shivin's key). Use your own key and id.
+
 **Update 12 (Sat ~4 PM): the site is on its own domain now: `https://deja-view.photo`.** It's permanent, so it never
 changes on a restart again. Three settings, once:
 1. DeepSpace `/admin` → `baseUrl` = `https://deja-view.photo` (the gallery lists the worlds again).

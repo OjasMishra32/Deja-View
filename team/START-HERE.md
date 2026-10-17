@@ -19,7 +19,7 @@ Live on it:
   (`kitchen-cooking`: fridge doors and the milk jug included). The chess match (`chess-match`) is next.
 
 Who does what now, each in their own file's newest update:
-- Seb: Roblox on his account, censor pass and gate, cooking rush (seb.md Updates 11 and 12).
+- Seb: Roblox on his account, censor pass and gate, cooking rush, the kitchen v2 room (seb.md Updates 11 to 13).
 - Shivin: product work only: automatic walk zones, listing photos to a home, one-command video memories, headset QA
   (shivin.md Updates 19 and 20).
 - Brianna: turn the Gemini guide on first (brianna.md Updates 7 and 8).
