@@ -282,28 +282,6 @@ local function placeForScene(host: Player?, features: any?, cameraLook: Vector3?
 	buildTable(CFrame.new(centre2) * CFrame.Angles(0, math.atan2(look.X, look.Z), 0), Sim.LEN, Sim.WID, true)
 end
 
--- Power to distance: a soft return still clears the net, half power lands in the far half, full power reaches the
--- far edge or out from close range. Faster flight as the charge grows, and a lift that guarantees net clearance.
-local function aimedVelocity(p0: Vector3, dirLocal: Vector3, charge: number): Vector3
-	local reach = len * (0.68 + charge * 0.54)
-	local flight = math.clamp(0.55 - charge * 0.33, 0.22, 0.55)
-	local target = p0 + dirLocal * reach
-	if target.Y < Sim.TOP_Y + Sim.BALL_R then
-		target = Vector3.new(target.X, Sim.TOP_Y + Sim.BALL_R, target.Z)
-	end
-	local v = Sim.assistVelocity(p0, target, flight)
-	local tCross = math.abs(p0.Z) / math.max(1, math.abs(v.Z))
-	local yAtNet = p0.Y + v.Y * tCross - 0.5 * Sim.GRAVITY * tCross * tCross
-	local need = Sim.NET_H + Sim.BALL_R + 0.2
-	if yAtNet < need then
-		v = v + Vector3.new(0, (need - yAtNet) / math.max(0.12, tCross), 0)
-	end
-	if v.Magnitude > Sim.MAX_SPEED then
-		v = v.Unit * Sim.MAX_SPEED
-	end
-	return v
-end
-
 local function launch(to: string, p0: Vector3, flight: number, aim: number)
 	state.to = to
 	state.p = p0
@@ -533,7 +511,7 @@ local function onHit(player: Player, payload: any)
 	state.best = math.max(state.best or 0, state.rally)
 	if aimed and payload.vr ~= true then
 		-- hold to charge, aim with the camera: reach and pace grow with the hold, and a late aim sails out
-		local v = aimedVelocity(p0, frame:VectorToObjectSpace((dir :: Vector3).Unit), charge)
+		local v = Sim.aimedVelocity(p0, frame:VectorToObjectSpace((dir :: Vector3).Unit), charge, len)
 		state.to = other(side)
 		lastHitter = side
 		lastBounce = nil
@@ -597,7 +575,7 @@ local function serveHit(player: Player, payload: any)
 	local charge = type(payload) == "table" and math.clamp(tonumber(payload.charge) or 0.3, 0, 1) or 0.3
 	local dir = type(payload) == "table" and payload.dir or nil
 	if typeof(dir) == "Vector3" and dir.Magnitude > 0.1 then
-		local v = aimedVelocity(state.p, frame:VectorToObjectSpace(dir.Unit), charge)
+		local v = Sim.aimedVelocity(state.p, frame:VectorToObjectSpace(dir.Unit), charge, len)
 		state.to = other(side)
 		lastHitter = side
 		lastBounce = nil
