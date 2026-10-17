@@ -8,6 +8,43 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 17 (Sat ~1:30 PM): your new jobs, in this order.** All three need you, not Studio. The live link (BASE) is
+> `https://highlighted-filter-surf-other.trycloudflare.com` (Ojasva posts a new one if the tunnel restarts).
+>
+> **1. The Devpost video (you own it). Hard limit: under 2:00, due before 8 AM Sunday.** Lead with our own captures,
+> never Fortnite footage (Vobile, the overall sponsor, protects content). A beat sheet that fits in about 1:50:
+> - 0:00 the landing page on a laptop: the Quest 3S turns, look through the lens (BASE `/`).
+> - 0:12 "It starts with your phone": the Game Lawn photos, then walking into the rebuilt place
+>   (`/view?scene=the-courts`).
+> - 0:35 One phone video becomes people in 3D: `/view?scene=courts-foosball`. Pause mid-game (Space), walk all the way
+>   round both players, then play.
+> - 0:55 `/view?scene=kitchen-cooking`: Seb cooking at the counters, live in 3D, synced with the sound.
+> - 1:10 The headset: the same worlds on the Quest 3S (record on the Quest: Meta button > Camera > Record video).
+> - 1:25 Roblox: Seb's experience on the real table, when it's up (until then the landing's Roblox tile).
+> - 1:35 Why it matters: revisit a home you've moved out of, from its old listing photos. Or a clip of someone you've
+>   lost, standing in the room again. End on the name and the link.
+> Capture with macOS (Cmd+Shift+5, 1080p or higher), cut in anything you like. No copyrighted music (none, or a free
+> track you credit). Burn in short captions, since judges often watch muted. Give Ojasva the MP4 and he uploads it.
+> An agent can do the assembly: give it the clips, this beat sheet and ffmpeg, and ask for a 1920x1080 H.264 MP4
+> under 2:00 with captions.
+>
+> **2. Headset QA on the Quest 3S, every world and memory.** Open BASE in the Quest browser, then for each of
+> `the-courts`, `chess-room`, `kitchen`, `brick-apartment`, `tilted-towers`, `courts-foosball` and `kitchen-cooking`
+> (and `chess-match` plus the old-house kitchen once Ojasva says they're live) check:
+> - It loads.
+> - The spawn faces something good.
+> - You can walk the area; the kitchen was just opened up to its whole strip.
+> - Nothing broken right at the spawn.
+> - The wrist menu works.
+> - Video memories play in sync with sound, and the 3D people line up with the room.
+> Write one line per problem with a headset screenshot in `team/qa-quest.md` on a branch `shivin/qa` and push it.
+> Ojasva fixes from that list.
+>
+> **3. The second pair of eyes on Seb's censor pass.** Every Roblox upload needs a person to approve the exact file
+> (seb.md Update 8, Task C/D). When Seb sends contact sheets, look at every texture for readable text, faces, logos and
+> QR codes, then record the decision with `python pipeline/objects/review.py --glb <file> --approve --note "..."` (or
+> `--deny`). You don't upload anything.
+
 > **Update 16 (Sat ~1 PM): Seb takes Roblox over.** Your account can't use Studio, so Seb now owns the experience,
 > the uploads, the asset maker and the censor pass (seb.md Update 8). He starts a new experience on his account,
 > because LoadAssetAsync only loads the creator's own assets. Your handover, today:
@@ -16,7 +53,7 @@ they win: say so in the team chat.
 > 2. Write down in the team chat everything that lives only in Studio or Creator Hub and not in the repo: Experience
 >    Config keys and values, badges, game passes, DataStore names, and any settings you changed by hand.
 > 3. Don't upload, publish or make new Roblox accounts. Don't run the old upload paths with your key.
-> Ojasva will tell you what to pick up next.
+> Your next jobs are in Update 17 above.
 
 > **Update 15 (Sat ~1 PM): commit rule.** No `Co-Authored-By` lines (or any tool attribution) in commit messages
 > from now on, and no timestamps in messages. If your git tool adds a trailer, delete it before you commit. Ojasva will
