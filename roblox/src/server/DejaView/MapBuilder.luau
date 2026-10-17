@@ -494,6 +494,30 @@ end
 -- Puts a textured room model into the current Workspace.Room (over invisible collision blocks), turned, scaled and
 -- moved onto `box` ({min, max} in studs): the server's own box for the model it loaded, else the block map's bounds
 -- (loose). `checkShape`: see serverBox. Returns the model as placed.
+-- Under a textured room, a solid ground just below the scanned floor in the room's own ground colour: where the scan
+-- has holes you see ground, not the sky under the world.
+function MapBuilder.addGround(colour: Color3?)
+	local room = workspace:FindFirstChild("Room")
+	local info = MapBuilder.current
+	if not room or not info then
+		return
+	end
+	local old = room:FindFirstChild("GroundFill")
+	if old then
+		old:Destroy()
+	end
+	local mn, mx = info.boundsMin, info.boundsMax
+	local p = Instance.new("Part")
+	p.Name = "GroundFill"
+	p.Anchored, p.CanCollide, p.CanQuery, p.CanTouch, p.CastShadow = true, false, false, false, false
+	p.Material = Enum.Material.SmoothPlastic
+	p.Color = colour or Color3.fromRGB(128, 122, 114)
+	p.Size = Vector3.new(mx.X - mn.X + 40, 1, mx.Z - mn.Z + 40)
+	p.CFrame = CFrame.new((mn.X + mx.X) / 2, -0.62, (mn.Z + mx.Z) / 2)
+	p.TopSurface, p.BottomSurface = Enum.SurfaceType.Smooth, Enum.SurfaceType.Smooth
+	p.Parent = room
+end
+
 function MapBuilder.attachModel(container: Instance, box: any?, checkShape: boolean?): Model?
 	local room = workspace:FindFirstChild("Room")
 	if not room then

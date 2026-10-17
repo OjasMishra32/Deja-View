@@ -62,6 +62,38 @@ local function sceneById(id: string): any?
 	return nil
 end
 
+-- The colour of the room's own ground, from the map: area-weighted over the boxes that sit on the floor.
+local function groundColour(map: any): Color3?
+	local r, g, b, w = 0, 0, 0, 0
+	for _, p in map.parts do
+		if p[2] - p[5] / 2 <= 0.6 and p[5] <= 1.5 then
+			local a = p[4] * p[6]
+			r, g, b, w = r + p[7] * a, g + p[8] * a, b + p[9] * a, w + a
+		end
+	end
+	return if w > 0 then Color3.fromRGB(r / w, g / w, b / w) else nil
+end
+
+-- Sky faces go up as Decals; a Sky needs the image inside the decal, so look it up once per face.
+local InsertService = game:GetService("InsertService")
+local skyImages: { [string]: string } = {}
+local function skyImage(id: string): string
+	if skyImages[id] then
+		return skyImages[id]
+	end
+	local url = "rbxassetid://" .. id
+	local ok, m = pcall(InsertService.LoadAsset, InsertService, tonumber(id))
+	if ok and typeof(m) == "Instance" then
+		local d = m:FindFirstChildWhichIsA("Decal", true)
+		if d and d.Texture ~= "" then
+			url = d.Texture
+		end
+		m:Destroy()
+	end
+	skyImages[id] = url
+	return url
+end
+
 local function swatches(map: any): { string }
 	local weight: { [number]: number } = {}
 	for _, p in map.parts do
@@ -478,6 +510,8 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 		end
 		if visual then
 			MapBuilder.attachModel(visual, box, stored ~= nil)
+			local e = cache[sceneId]
+			MapBuilder.addGround(e and e.map and groundColour(e.map) or nil)
 		end
 		-- Per-world skybox rendered from the splat viewer (Update 10): six asset ids for the clients to show
 		local sky = mi and mi.sky
@@ -487,7 +521,7 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 				{ front = "SkyFt", back = "SkyBk", left = "SkyLf", right = "SkyRt", up = "SkyUp", down = "SkyDn" }
 			do
 				if sky[key] then
-					room:SetAttribute(attr, "rbxassetid://" .. tostring(sky[key]))
+					room:SetAttribute(attr, skyImage(tostring(sky[key])))
 				end
 			end
 			print("[DejaView] skybox set for", sceneId)
