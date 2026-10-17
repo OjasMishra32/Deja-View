@@ -4,7 +4,11 @@ Read `START-HERE.md` first (the short spec), then `plan.md` (the story), then th
 `contracts.md` has the wiring for the whole team. If this page ever disagrees with `START-HERE.md` or `contracts.md`,
 they win: say so in the team chat.
 
-Someone drops a photo or a clip of a real place in the group chat, it becomes a 3D world, and you and friends join
+> **Update (Sat early morning):** the Photon group-chat bot is dropped (not a Devpost prize, and it did not work).
+> Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
+> chat", read "Seb's app". Nothing else changes for you.
+
+Someone drops a photo or a clip of a real place into Déjà View, it becomes a 3D world, and you and friends join
 that same room in Roblox and play tag with the person in the VR headset. Roblox is how friends without a headset can
 be there.
 
@@ -47,7 +51,7 @@ real server by **Sat 4 PM**; full demo run **Sat 10 PM**; feature freeze **Sun 4
 | Time | What happens | Your piece |
 | --- | --- | --- |
 | before | The game-night room (pre-built) is already loaded in your Roblox server. You and Brianna wait in the lobby on two laptops. Auto-join is off | picker, loader, baked room |
-| 0:00 | Seb drops the clip in the group chat. The bot's reply carries a "Join in Roblox" link | your place id + launch data (7.7) |
+| 0:00 | Seb drops the clip into his DeepSpace app. The memory's card carries a "Join in Roblox" link | your place id + launch data (7.7) |
 | 0:15 | The judge is in the memory in the Quest. Your lobby board shows "JUDGE IS IN GAME NIGHT" | presence (7.3) |
 | 1:10 | Host: "and friends without a headset can still be there." You press **JOIN**: you and Brianna spawn in the room within a second. A lime ghost (head, two hands, faint body) moves exactly as the judge moves, and the judge sees your avatars. 3-2-1, the tag round starts with the judge as "it". The judge reaches out, your avatar bursts into lime sparks, the headset shows **TAGGED**, a scoreboard and a winner card follow | ghost (7.4), tag (7.5), events (5.4) |
 | 1:40 | The DeepSpace map on the table laptop shows everyone live. Your Roblox dots are on it. Keep running around the couch so your dot moves; Brianna switches to her browser to leave the note | presence (7.3) |
@@ -591,8 +595,8 @@ Rules (constants in `Config`; the round length comes from the `round_seconds` co
   `https://www.roblox.com/games/start?placeId=<PLACE_ID>&launchData=<sceneId>`. On the server,
   `player:GetJoinData().LaunchData` holds the scene id. If the server is in the lobby, load that room. If it is already
   in a room, ignore it, because Follow keeps everyone together. Roblox now calls deep links deprecated in favour of
-  share links, but they still work. Send your place id and this format to **Seb and Ojasva by Sat 12 PM**, so the bot
-  adds "No headset? Join in Roblox" to its group-chat reply.
+  share links, but they still work. Send your place id and this format to **Seb and Ojasva by Sat 12 PM**, so Seb's app
+  shows "No headset? Join in Roblox" on every memory.
 - **Phones:** every UI element uses Scale sizes plus `UIAspectRatioConstraint`. Touch targets are at least 44 px. Keep
   the bottom-left (thumbstick) and bottom-right (jump) corners clear. Test with Studio's Device Simulator (phone
   profile) before Sat 4 PM. On small screens, the scoreboard collapses to a single line.
@@ -821,7 +825,7 @@ convention is off somewhere: tell Ojasva with the numbers you see.
 3. Coordinates: Ojasva stands in a corner in VR, you walk your avatar to the ghost's feet. Positions agree within
    0.3 m (about 1 stud).
 4. Check that Seb's DeepSpace map shows your dots moving the same way as in Roblox.
-5. The finale path: Seb texts a new photo to the group chat; the room appears in your picker within 3 s of `ready`, the
+5. The finale path: a new photo goes in through Seb's app; the room appears in your picker within 3 s of `ready`, the
    map loads, and Follow (or a click) puts you in it while the judge is there.
 6. Run the full skit and finale with a timer, twice (Sat 10 PM). Note where the room-load time goes.
 

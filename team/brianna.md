@@ -9,6 +9,10 @@ Everything below was checked against the live Gemini docs and SDK on Fri Oct 16,
 checked, it says so and tells you how to check it. If something here turns out to be wrong on the night, tell Ojasva
 right away and use the fallback listed for it.
 
+> **Update (Sat early morning):** the Photon group-chat bot is dropped (not a Devpost prize, and it did not work).
+> Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
+> chat", read "Seb's app". Nothing else changes for you.
+
 ---
 
 ## 1. What you are building, and the demo moments
@@ -95,8 +99,8 @@ These are not builds, just accounts so you are ready for your two beats.
 
 The Video memory at 0:15 is **the team's game-night session**, and you are in it. Ojasva runs the shoot by Sat 2 PM so he
 can build and freeze the world by 8 PM:
-- Filmed **on the table iPhone**, so the file Seb sends at 0:00 is exactly the file the world was built from (the bot
-  recognises it).
+- Filmed **on the table iPhone**, so the file Seb sends at 0:00 is exactly the file the world was built from (demo mode in
+  Seb's app recognises it).
 - The phone propped up and **completely still**, 1.5 to 3 m away, landscape. Everyone except Seb on a couch or around
   a table with controllers. The room is built from the still background, so the camera must not move.
 - 15 to 20 seconds with sound: a couple of seconds of the empty spot first, then everyone sits down and plays, a
@@ -232,7 +236,7 @@ Response:
   bright stylised hillside with wooden cabins, a winding dirt path and round cartoon trees under a clear sky; beyond the
   frame, more cabins, a small lake and rolling green hills in the same game art style."
 - The server uses `caption` as the world model's text prompt (the uploader's own text, if any, goes first) and stores
-  it as `scene.caption`. The bot reply and Seb's gallery may show it, and your own `/narrate` and `/ask` later get it
+  it as `scene.caption`. Seb's gallery may show it, and your own `/narrate` and `/ask` later get it
   back as context.
 - Target 1.5 s, hard limit 5 s (Ojasva's timeout). Use image `resolution: "medium"` here: detail matters more than
   speed, and nobody watches this call.

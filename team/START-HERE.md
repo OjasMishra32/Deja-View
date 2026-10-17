@@ -6,8 +6,8 @@ anything in them disagrees with this page, **this page wins** until they are ref
 **The product:** Déjà View. Two modes: **Photo** (one photo becomes a world you walk into) and **Video** (a still-camera
 video becomes a room with the real footage standing in it in 3D). Walk around in a Meta Quest 3S or a browser.
 
-**The demo (a short skit, then a live finale):** "We had a game night. Seb skipped it." Seb drops the game-night video into
-the group chat, the bot replies with the world, the judge puts on the headset and is standing in it with sound. Gemini
+**The demo (a short skit, then a live finale):** "We had a game night. Seb skipped it." Seb drops the game-night video into his
+Déjà View memory board (the DeepSpace app), the world comes back, the judge puts on the headset and is standing in it with sound. Gemini
 pins labels on things and answers "who won?" out loud. A reality-check toggle tints what the AI imagined. Shivin and
 Brianna join from Roblox and play tag with the judge. The DeepSpace map shows everyone live, and a note typed on the map
 pops up in the headset. Finale: "now do it": the judge's own photo becomes a world they walk into.
@@ -66,9 +66,14 @@ Gemini decides what the world looks like, then makes the room talk. **No Capital
 
 ---
 
-## Seb: Vultr, the text bot, DeepSpace
+## Seb: Vultr, DeepSpace, the domain
 
 How memories get in, and who is in them.
+
+**Update (Sat early morning):** Photon is not a prize on the Devpost and the bot is not working, so it is dropped.
+New: **"Add a memory"** in the DeepSpace app and a **free domain**
+(MLH Best Domain Name from GoDaddy Registry) that gives the whole team one link that never changes. Details: the update
+at the top of `seb.md`.
 
 **Right now (30 min)**
 1. **Vultr:**
@@ -81,12 +86,10 @@ How memories get in, and who is in them.
    credits are lost). Use Node 24.
 
 **Then build**
-- **Text-a-memory bot (Photon, iMessage):**
-  - Photon's free lines only talk to numbers you register first, so register the demo phones tonight.
-  - **Demo mode:** a table of known demo clips (by file hash) and keywords such as `#dejaview gamenight` that maps to
-    pre-built scene ids, so the bot replies instantly.
-  - **Live path:** upload to `POST /api/scenes` (`mode=photo` or `mode=video`, `name`, `files`), poll
-    `GET /api/scenes/<id>` until `status` is `ready`, then reply with the thumbnail and the `/view?scene=<id>` link.
+- **Text-a-memory bot (Photon): dropped.** Its two pieces move into "Add a memory" below:
+  - **Demo mode:** a table of known demo clips (by file hash) that maps to pre-built scene ids, so it answers at once.
+  - **Live path:** upload to `POST /api/scenes` (`mode=photo` or `mode=video`, `name`, `files`), watch
+    `GET /api/scenes/<id>` until `status` is `ready`, then show the thumbnail and the `/view?scene=<id>` link.
 - **DeepSpace app** (`npm create deepspace@latest`):
   - **Sign-in** and a **gallery** of memories from `GET /api/scenes`.
   - A **live top-down map** of who is inside a memory. The Déjà View server pushes positions to your
@@ -95,9 +98,15 @@ How memories get in, and who is in them.
   - **Notes inside the memory:** click a spot on the map, type a note; it appears floating in the headset. Store notes
     as `{id, sceneId, author, text, x, y, z, createdAt}`. The Déjà View server reads `GET /api/notes?sceneId=<id>` and
     forwards headset-made notes to `POST /api/notes` (same header).
+  - **"Add a memory"** (new): take or pick a photo or video, save it in DeepSpace storage, send it to
+    `POST /api/scenes` from your worker (demo mode: a known clip links its pre-built scene), and show the card building
+    live. This is how the clip comes in during the skit and how the judge's photo comes in at the finale.
+- **Domain** (new, MLH GoDaddy Registry): free with the MLH offer (do not pay), DNS on a free Cloudflare account, a
+  Cloudflare tunnel named `dejaview` pointing at `localhost:8788`; send Ojasva the tunnel token privately.
 - **Capital One (Nessie): optional, your idea, only after the rest works.** Nothing depends on it.
 
-**Deadlines:** Vultr tonight; the bot replying by Sat 10 AM; the DeepSpace map and notes by Sat 4 PM.
+**Deadlines:** Vultr tonight; the domain answering by Sat 12 PM; the DeepSpace map, notes and "Add a memory" by Sat
+4 PM.
 
 ---
 
