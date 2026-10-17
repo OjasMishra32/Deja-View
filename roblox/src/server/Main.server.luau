@@ -235,4 +235,41 @@ Players.PlayerAdded:Connect(function(p)
 	end
 end)
 
+-- Script audit: list every script in the place that isn't ours, so a backdoor from a free model (Toolbox) shows up
+-- in the Output. Read-only; it changes nothing.
+task.spawn(function()
+	local ours = {
+		game:GetService("ServerScriptService"):FindFirstChild("Main"),
+		game:GetService("ServerScriptService"):FindFirstChild("DejaView"),
+		game:GetService("ReplicatedStorage"):FindFirstChild("Shared"),
+		game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts"),
+	}
+	local function isOurs(inst: Instance): boolean
+		-- Roblox's own player scripts and the Animate script inside our judge rig are expected
+		local path = inst:GetFullName()
+		if string.find(path, "^StarterPlayer%.PlayerModule") or string.find(path, "^StarterPlayer%.StarterCharacterScripts")
+			or string.find(path, "JudgeRig") then
+			return true
+		end
+		for _, root in ours do
+			if root and (inst == root or inst:IsDescendantOf(root)) then
+				return true
+			end
+		end
+		return false
+	end
+	local found = 0
+	for _, svc in { workspace, game:GetService("ServerStorage"), game:GetService("ServerScriptService"),
+		game:GetService("ReplicatedStorage"), game:GetService("ReplicatedFirst"), game:GetService("StarterGui"),
+		game:GetService("StarterPack"), game:GetService("StarterPlayer"), game:GetService("Lighting") } do
+		for _, d in svc:GetDescendants() do
+			if d:IsA("LuaSourceContainer") and not isOurs(d) then
+				found += 1
+				warn("[DejaView][audit] script not from our code:", d.ClassName, d:GetFullName())
+			end
+		end
+	end
+	print("[DejaView][audit] done,", found, "foreign scripts")
+end)
+
 print("[DejaView] server up; mock =", Config.useMock(), "base =", Config.base())

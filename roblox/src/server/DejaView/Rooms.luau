@@ -356,6 +356,16 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 		if visual then
 			MapBuilder.attachModel(visual)
 		end
+		-- Per-world skybox rendered from the splat viewer (Update 10): six asset ids for the clients to show
+		local sky = mi and mi.sky
+		local room = workspace:FindFirstChild("Room")
+		if room and type(sky) == "table" then
+			for key, attr in { front = "SkyFt", back = "SkyBk", left = "SkyLf", right = "SkyRt", up = "SkyUp", down = "SkyDn" } do
+				if sky[key] then
+					room:SetAttribute(attr, "rbxassetid://" .. tostring(sky[key]))
+				end
+			end
+		end
 	elseif MapBuilder.hasBaked(sceneId) then
 		info = MapBuilder.buildBaked(sceneId)
 	else

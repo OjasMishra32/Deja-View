@@ -12,6 +12,7 @@ local Board = require(Modules.Board)
 local Ghosts = require(Modules.Ghosts)
 local Effects = require(Modules.Effects)
 local PongBall = require(Modules.PongBall)
+local RoomLook = require(Modules.RoomLook)
 local Theme = require(ReplicatedStorage:WaitForChild("Shared").Theme)
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -111,6 +112,8 @@ local function refresh()
 	local inRoom = where() == "room"
 	local judge = W("JudgeHere") == true
 	local round = W("RoundState") or "idle"
+
+	RoomLook.update(inRoom and phase == "room")
 
 	-- loading screen
 	local showLoading = (not bootDone) or (phase == "loading" and inRoom)
@@ -496,6 +499,14 @@ workspace:GetAttributeChangedSignal("RoomsJson"):Connect(renderCards)
 workspace:GetAttributeChangedSignal("ScoresJson"):Connect(renderScores)
 workspace:GetAttributeChangedSignal("HuntJson"):Connect(renderScores)
 workspace:GetAttributeChangedSignal("RoundState"):Connect(renderScores)
+-- the room's model (and its sky) can arrive a moment after the room itself
+workspace.ChildAdded:Connect(function(c)
+	if c.Name == "Room" then
+		c:GetAttributeChangedSignal("HasModel"):Connect(refresh)
+		c:GetAttributeChangedSignal("SkyFt"):Connect(refresh)
+		task.defer(refresh)
+	end
+end)
 workspace:GetAttributeChangedSignal("SceneId"):Connect(function()
 	Ghosts.clear()
 	reality = false

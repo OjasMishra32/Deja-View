@@ -230,6 +230,10 @@ local function prepareModel(model: Instance, meshCollision: boolean)
 			d.CanTouch = false
 			d.CanCollide = meshCollision
 			d.CanQuery = meshCollision
+			-- Baked textures already hold the photo's light: no extra shading on top (Update 10)
+			d.Material = Enum.Material.SmoothPlastic
+			d.Reflectance = 0
+			d.CastShadow = false
 		elseif d:IsA("Script") or d:IsA("LocalScript") then
 			d:Destroy() -- an imported or uploaded room must never run code
 		end
