@@ -1317,9 +1317,59 @@ def write_track(path: Path, meta: dict, frames: list[dict], c2ws: list[np.ndarra
     }, indent=None)
 
 
+BACKDROP_MANIFEST = "backdrop.json"  # pipeline/backdrop.py: what the viewer reads when world.backdrop is absent
+
+
+def world_files(world: dict, src_dir: Path) -> list[str]:
+    """Every file a place's `world` block names, relative to its folder: the splats, the collider, the top-down map
+    and the backdrop (its room mesh and sky). Without `world.backdrop` the viewer reads backdrop.json next to the world,
+    so that manifest and the files it names count too when the place has one."""
+    names: list[str] = []
+
+    def add(rel) -> None:
+        if isinstance(rel, str) and rel and rel not in names:
+            names.append(rel)
+
+    add(world.get("file"))
+    add(world.get("collider"))
+    add((world.get("topdown") or {}).get("file"))
+    backdrop = world.get("backdrop")
+    if not backdrop and (src_dir / BACKDROP_MANIFEST).is_file():
+        add(BACKDROP_MANIFEST)
+        backdrop = read_json(src_dir / BACKDROP_MANIFEST) or {}
+    if isinstance(backdrop, dict):
+        add(backdrop.get("file"))
+        add(backdrop.get("sky"))
+    return names
+
+
+def copy_world_files(world: dict, src_dir: Path, out_dir: Path) -> list[str]:
+    """Copies every file of `world_files` from the place's folder into the memory's, after checking all of them:
+    a missing file or a path that leaves the folder stops it before anything is copied, so a memory never names a
+    file it doesn't have. Returns the names copied."""
+    import shutil
+
+    src_dir, out_dir = Path(src_dir), Path(out_dir)
+    names = world_files(world, src_dir)
+    root = src_dir.resolve()
+    problems = []
+    for rel in names:
+        p = (src_dir / rel).resolve()
+        if Path(rel).is_absolute() or root not in p.parents:
+            problems.append(f"{rel} is outside {src_dir}")
+        elif not p.is_file():
+            problems.append(f"{rel} is missing")
+    if problems:
+        raise SystemExit(f"{src_dir}: the world names files the memory can't copy: " + "; ".join(problems))
+    for rel in names:
+        dst = out_dir / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_dir / rel, dst)
+    return names
+
+
 def write_scene(a, out_dir: Path, meta: dict, c2w0: np.ndarray, fps: Fraction, n: int, Kf: dict, W: int, H: int,
                 near: float, far: float, thumb: np.ndarray | None, previews: list, stats: dict) -> None:
-    import shutil
     from datetime import datetime, timezone
 
     from common.media import save_jpg
@@ -1329,11 +1379,8 @@ def write_scene(a, out_dir: Path, meta: dict, c2w0: np.ndarray, fps: Fraction, n
     if not src or not src.get("world"):
         raise SystemExit(f"{a.world_scene}/scene.json has no world")
     world = json.loads(json.dumps(src["world"]))
-    for key in ("file", "collider"):
-        if world.get(key):
-            shutil.copy2(Path(a.world_scene) / world[key], out_dir / world[key])
-    if world.get("topdown", {}).get("file"):
-        shutil.copy2(Path(a.world_scene) / world["topdown"]["file"], out_dir / world["topdown"]["file"])
+    # the memory writes the place's whole world block, so it gets every file the block names (backdrop included)
+    copy_world_files(world, Path(a.world_scene), out_dir)
     if thumb is not None:
         import cv2
 
