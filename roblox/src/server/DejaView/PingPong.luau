@@ -46,6 +46,8 @@ local PPHit: RemoteEvent
 local PPPaddle: UnreliableRemoteEvent
 local PPState: RemoteEvent
 local PPSide: RemoteEvent
+local PPJoin: RemoteEvent
+local PPWho: RemoteFunction
 
 local function now(): number
 	return workspace:GetServerTimeNow()
@@ -102,6 +104,7 @@ local function updateBoard()
 			yaw = tableYaw,
 			len = len,
 			wid = wid,
+			sides = { A = sides.A and sides.A.UserId or nil, B = sides.B and sides.B.UserId or nil },
 		})
 	end
 end
@@ -644,6 +647,15 @@ function PingPong.start()
 	PPPaddle = remote("PPPaddle", "UnreliableRemoteEvent")
 	PPState = remote("PPState", "RemoteEvent")
 	PPSide = remote("PPSide", "RemoteEvent")
+	PPJoin = remote("PPJoin", "RemoteEvent")
+	PPWho = remote("PPWho", "RemoteFunction")
+
+	PPJoin.OnServerEvent:Connect(function(player)
+		PingPong.join(player)
+	end)
+	PPWho.OnServerInvoke = function(player)
+		return playerSide(player)
+	end
 
 	PPHit.OnServerEvent:Connect(function(player, payload)
 		if state and state.serving then
