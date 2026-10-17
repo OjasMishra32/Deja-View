@@ -202,6 +202,14 @@ local function uploadedRoom(sceneId: string): (Instance?, any?)
 			if #items > 1 then
 				MapBuilder.alignPart(part, it.bounds)
 			end
+			-- the photo light is baked into the textures: no extra shadows, sheen or reflections on the room itself
+			for _, d in part:GetDescendants() do
+				if d:IsA("MeshPart") then
+					d.CastShadow = false
+					d.Material = Enum.Material.SmoothPlastic
+					d.Reflectance = 0
+				end
+			end
 			part.Parent = room
 			loaded += 1
 			if type(it.bounds) == "table" then
