@@ -13,7 +13,11 @@
         "Ambient": [0.55, 0.55, 0.55],
         "OutdoorAmbient": [0.55, 0.55, 0.55],
         "ClockTime": 13,
-        "Brightness": 2
+        "Brightness": 2,
+        "Technology": "Future",
+        "EnvironmentDiffuseScale": 1,
+        "EnvironmentSpecularScale": 0.4,
+        "GlobalShadows": true
       }
     },
     "StarterGui": {

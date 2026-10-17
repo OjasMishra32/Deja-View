@@ -17,7 +17,7 @@ local Config = {
 	COUNTDOWN = 3,
 	TAG_CHECK_HZ = 10,
 
-	MAX_PARTS = 6000,
+	MAX_PARTS = 12000, -- finer blocks (1.1-stud voxels on Tilted Towers vs 1.64 at 6000); max_parts config lowers it
 	BATCH = 400,
 
 	PRESENCE_PERIOD = 0.25,
