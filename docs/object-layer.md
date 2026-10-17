@@ -244,3 +244,22 @@ This is practical for hero objects against walls. It is not practical for everyt
 - Weights are never committed. `pipeline/models.lock.json` pins the download.
 - Prefer a pinned dependency over a copied file. Copy only when the upstream cannot
   be installed cleanly.
+
+## 14. Asset review and moderation
+
+Roblox moderation scans uploaded images for QR codes, links, contact details, and
+promotional text. A teammate was flagged for a QR code in a texture. Never bulk-upload
+object assets.
+
+1. `pipeline/objects/preflight.py --glb <glb>` extracts every texture, builds a
+   contact sheet, and scans for QR codes and barcodes. A decodable QR or link blocks.
+   A pattern hit with an empty payload is a review candidate, not a violation.
+2. Inspect the sheet yourself. The fridge's two hits are empty-payload fragments of
+   the texture atlas, not a poster or a link.
+3. For signs, posters, logos, and text, rebuild with `pipeline/objects/mesh.py --ink 1.2`.
+   The ink pass mega-smooths, blurs, posterizes, and grains the texture so it cannot be
+   read as a promotion or scanned as a QR code, while keeping the captured colours.
+4. Record your decision with `pipeline/objects/review.py --glb <glb> --approve --note "..."`
+   or `--deny`. The approval is bound to the file's SHA1.
+5. The upload script refuses without a matching approval file. Any change to the GLB
+   invalidates the approval.
