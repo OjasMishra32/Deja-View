@@ -30,7 +30,7 @@ Sim.fin = fin
 
 -- New ball state. `pos` and `vel` are table-frame vectors.
 function Sim.newState(pos: Vector3, vel: Vector3, t: number): any
-	return { p = pos, v = vel, t = t, live = true, lastTouch = t, bounces = 0, shot = 0 }
+	return { p = pos, v = vel, t = t, live = true, lastTouch = t, bounces = 0, shot = 0, lastBounceAt = -1 }
 end
 
 -- Table frame from the four top corners the server sends (contract 6.6): corners in order around the top.
@@ -99,7 +99,11 @@ function Sim.step(st: any, dt: number, len: number, wid: number): any
 			p = Vector3.new(hit.X, Sim.TOP_Y + Sim.BALL_R, hit.Z)
 			v = Vector3.new(v.X * 0.95, -v.Y * Sim.REST_TABLE, v.Z * 0.95)
 			st.bounces += 1
-			ev.table = if hit.Z < 0 then "A" else "B"
+			-- one physical contact can be detected for several frames while the ball skims the surface; report it once
+			if st.t - (st.lastBounceAt or -1) > 0.12 then
+				st.lastBounceAt = st.t
+				ev.table = if hit.Z < 0 then "A" else "B"
+			end
 		end
 	end
 
