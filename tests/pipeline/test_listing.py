@@ -336,3 +336,35 @@ def test_carriers_names_the_photos_that_have_the_shared_mark():
     assert L.carriers(stamped, mark) == [True] * 4
     assert L.carriers([room_photo(77)], mark) == [False]  # a clean photo of the same size never carries it
     assert L.carriers(stamped, np.zeros_like(mark)) == [False] * 4
+
+
+def floor_plan(w: int = 960, h: int = 640) -> np.ndarray:
+    """A listing's floor plan: white with thin dark walls, no mark."""
+    img = np.full((h, w, 3), 245, np.uint8)
+    for x in (120, 480, 840):
+        img[60:580, x - 2:x + 2] = 30
+    for y in (60, 320, 580):
+        img[y - 2:y + 2, 120:840] = 30
+    return img
+
+
+def test_a_mark_on_most_photos_is_found_when_one_lacks_it():
+    pairs = [stamp(room_photo(s), "Zillowish", "center", alpha=0.6, scale=4) for s in range(40, 44)]
+    photos = [p for p, _ in pairs] + [floor_plan()]
+    ovs = L.detect(photos)
+    for ov, (_, box) in zip(ovs[:4], pairs):
+        assert "shared" in ov.source and box_recall(ov.mask, box) > 0.3
+    assert ovs[4].box is None  # the floor plan has no mark and is not touched
+    assert L.remove(photos[4], ovs[4])[1]["action"] == "none"
+
+
+def test_two_unstamped_photos_of_seven_still_leave_the_mark_found():
+    pairs = [stamp(room_photo(s), "ACME REALTY  MLS# 4421907", "center", alpha=0.6, scale=4) for s in range(50, 55)]
+    photos = [p for p, _ in pairs] + [room_photo(60), room_photo(61)]
+    ovs = L.detect(photos)
+    assert all("shared" in ov.source for ov in ovs[:5])
+    assert all("shared" not in ov.source for ov in ovs[5:])
+
+
+def test_how_many_photos_may_lack_the_mark():
+    assert [L.absent_allowed(n) for n in (3, 4, 6, 7, 12)] == [0, 1, 1, 2, 2]
