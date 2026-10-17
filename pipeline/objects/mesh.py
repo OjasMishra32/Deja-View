@@ -89,10 +89,13 @@ def build_object(scene_dir: str | Path, object_id: str, out_dir: str | Path, tri
     centre = np.asarray(obj["center"], np.float64) / studs
     half = np.asarray(obj["size"], np.float64) / studs / 2.0
     splats, scene = obj_scene.load_scene(scene_dir)
-    lo = centre - half - margin
-    hi = centre + half + margin
-    lo[1] = max(0.02, lo[1])
-    crop = crop_splats(splats, lo, hi)
+    # The reconstruction volume is the object itself. The camera crop is wider so the orbit still
+    # sees the whole object, but the TSDF must not absorb the wall and the floor around it.
+    lo = centre - half + np.array([0.01, 0.02, 0.01])
+    hi = centre + half - np.array([0.01, 0.0, 0.01])
+    crop_lo = lo - margin
+    crop_hi = hi + margin
+    crop = crop_splats(splats, crop_lo, crop_hi)
     views = orbit_views(centre, radius=float(max(obj["size"]) / studs) * 1.7 + 0.4, count=count, size=size)
     scene = {**scene, "id": f"{scene.get('id', scene_dir.name)}-{object_id}", "name": object_id}
     room = object_room(crop, scene, scene_dir, lo, hi, centre)
