@@ -113,7 +113,7 @@ def build(scene_dir: str | Path, views_dir: str | Path, masks_dir: str | Path, o
                 continue
             lo, hi = lift.robust_bounds(points[keep])
             candidates.append({
-                "view": view, "mask": mask, "score": float(det["score"]),
+                "view": view, "mask": mask, "depth": depth, "score": float(det["score"]),
                 "centroid": (lo + hi) / 2.0, "bounds": (lo, hi),
             })
         clusters = cluster_candidates(candidates)
@@ -121,7 +121,7 @@ def build(scene_dir: str | Path, views_dir: str | Path, masks_dir: str | Path, o
         for cluster in clusters:
             if len(cluster) < min_views:
                 continue
-            views = [( _camera(c["view"]), c["mask"]) for c in cluster]
+            views = [(_camera(c["view"]), c["mask"], c["depth"]) for c in cluster]
             obj = lift.describe_object(points, colors, label, views, min_views=min_views,
                                        min_points=min_splats, studs_per_meter=studs)
             if obj is None:

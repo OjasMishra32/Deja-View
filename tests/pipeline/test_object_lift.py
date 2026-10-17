@@ -88,3 +88,11 @@ def test_two_views_must_agree():
     assert both is not None
     keep = both["source"]["splats"]
     assert 0 < keep < len(pts)
+
+
+def test_depth_band_keeps_the_surface_and_drops_the_wall_behind_it():
+    cam = _camera()
+    pts = np.array([[0.0, 0.0, -2.0], [0.0, 0.0, -4.0]])
+    depth = np.full((H, W), 2.0)
+    keep = lift.mask_points(pts, cam, np.ones((H, W), bool), depth=depth)
+    assert keep.tolist() == [True, False]
