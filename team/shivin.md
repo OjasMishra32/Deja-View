@@ -8,6 +8,10 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 14 (Sat ~11:50 AM): the public link changed.** Cloudflare dropped the quick tunnel; the new BASE is
+> `https://highlighted-filter-surf-other.trycloudflare.com`. Set the Experience Config `dejaview_base` to it in Creator
+> Hub (live at once, no publish). Config.luau BASE_FALLBACK on `main` is updated too.
+
 > **Update 13 (Sat ~9:15 AM): URGENT, your Roblox account is moderated.** Since about 9 AM every Open Cloud upload
 > with your key answers `User is moderated` (chess room sky faces, the Tilted Towers room). Server-side uploads are now
 > OFF (the live server no longer sends anything to Roblox). What to do now:
@@ -207,7 +211,7 @@ they win: say so in the team chat.
 
 > **Update 4 (Sat ~3:10 AM): the server is public. Your work list, in order.**
 >
-> **The link (live now):** `https://prozac-covered-burke-oklahoma.trycloudflare.com` (it changes if the tunnel
+> **The link (live now):** `https://highlighted-filter-surf-other.trycloudflare.com` (it changes if the tunnel
 > restarts; Ojasva posts the new one; Seb's fixed domain replaces it later). Checked from outside: `/api/scenes`,
 > `/api/roblox/<id>/map`, `/presence` and `/event` all answer. No `dejaview_key` is required yet.
 >

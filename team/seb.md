@@ -347,7 +347,7 @@ and three video memories (`courts-foosball`, `chess-match`, `kitchen-cooking`). 
 
 **Update 3 (Sat ~3 AM): what is next for you (the update box below still stands):**
 
-**The public link is live:** `https://prozac-covered-burke-oklahoma.trycloudflare.com` (it changes if the tunnel restarts; Ojasva reposts). Set it as `dvBase` in your
+**The public link is live:** `https://highlighted-filter-surf-other.trycloudflare.com` (it changes if the tunnel restarts; Ojasva reposts). Set it as `dvBase` in your
 DeepSpace config now and point your gallery and "Add a memory" at it (uploads open once Ojasva switches the server
 from read-only, Saturday morning; reading `/api/scenes` works now). Send your DeepSpace URL and `DS_KEY` privately the
 moment `/api/ingest` and `/api/notes` are deployed, so the live map and notes go end to end.
