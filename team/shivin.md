@@ -8,6 +8,21 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 21 (Sat ~8 PM): all three Update 19 jobs are on `main` (`git pull`). Nothing is waiting on you.**
+> - **Automatic walk zones:** merged as you left them.
+> - **Listing photos to a home:** merged, reviewed and fixed: photos are compared only with photos of the same size
+>   (one portrait hid the mark on all of them), a thin frame on every photo is not a mark, photos are read with
+>   EXIF and alpha like the job, inpainting keeps grey and alpha, a failed clean-up still ships the world, and a
+>   cancel during the walk zone stops the job. First real run on the four old house photos (job 46461966): 96 s,
+>   no clean photo touched, 4.5 m^2 walk zone, collider and spawn. The live old house world stays the generated one.
+> - **One command for a video memory:** merged and fixed against the real chess run. The first `--submit` would have
+>   stopped at frames (4K clip, 2560x1440 camera), then register would have hit the 29-min cap (every 2nd frame is
+>   about 43 min, not 21) and pack its 12-min limit. Now: the cut scales to the camera's size, estimates come from
+>   the chess and kitchen logs (register every 4th frame, 24 min), every step runs in an env with python and ffmpeg,
+>   and the world folder is checked up front. The chess memory itself was finished by hand and is live.
+> - When you're back: headset QA on `https://deja-view.photo` (every world and memory, Quest browser), notes in the
+>   team chat. Still no Roblox and no Devpost.
+
 > **Update 20 (Sat ~4 PM): the site is on its own domain now: `https://deja-view.photo`.** It's permanent. Use it as
 > BASE everywhere, and open it in the Quest browser for headset QA (no more changing links). The old `trycloudflare`
 > link stays up for a while as a backup only.
