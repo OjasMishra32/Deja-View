@@ -12,6 +12,7 @@ local Extras = require(DV.Extras)
 local Chess = require(DV.Chess)
 local Pong = require(DV.Pong)
 local Foosball = require(DV.Foosball)
+local PingPong = require(DV.PingPong)
 local Stats = require(DV.Stats)
 local WorldGames = require(DV.WorldGames)
 
@@ -193,6 +194,7 @@ Chess.start()
 WorldGames.start()
 Pong.start()
 Foosball.start()
+PingPong.start()
 
 -- The judge's avatar (Update 4 item 4): one plain R15 rig for every client to clone and drive locally.
 task.spawn(function()
