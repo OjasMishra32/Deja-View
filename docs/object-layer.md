@@ -143,7 +143,8 @@ top of the scan.
         }
       ],
       "affordance": { "kind": "door", "hinge": "left", "openAngle": 100 },
-      "source": { "splats": 12400, "mesh": "objects/fridge.glb" }
+      "source": { "splats": 12400, "mesh": "objects/fridge.glb" },
+      "assetId": 1234567890
     }
   ]
 }
@@ -156,6 +157,8 @@ Rules:
 - `parts` use the same room frame as the object, so the handle centre is an absolute point in studs.
 - `affordance` is optional and names what the game may animate.
 - `source` is provenance, not required to render.
+- `assetId` is the uploaded Roblox Model for this object. It is written by the approved
+  upload script. Without it the proxy part remains the visible object.
 - A missing file means no object layer. The room still renders.
 
 ## 7. Pipeline stages
@@ -176,7 +179,9 @@ Rules:
 
 Roblox:
 - `ObjectLayer` fetches `/api/roblox/:sceneId/objects` (`GET`), and `Rooms` builds it after the room is ready.
-- It builds parts for `box`, `cylinder`, and `sphere`, and `MeshPart` for `mesh`.
+- It builds proxy parts for `box`, `cylinder`, and `sphere`.
+- When an object has `assetId`, it loads the uploaded Model with `InsertService:LoadAsset`
+  and hides the proxy. The proxy stays as the collision shape.
 - It applies the style palette and hides the proxy if it has no data.
 - The proxy is inflated by 2 to 5 cm so it covers the rough scanned original.
 - Deploy a layer with `BASE=https://... SCENE=kitchen scripts/roblox-objects-upload.sh`.
@@ -263,3 +268,19 @@ object assets.
    or `--deny`. The approval is bound to the file's SHA1.
 5. The upload script refuses without a matching approval file. Any change to the GLB
    invalidates the approval.
+
+## 15. Pushing approved objects
+
+`scripts/roblox-upload-assets.sh` handles the whole approved set for one scene.
+
+```sh
+scripts/roblox-upload-assets.sh --dry-run kitchen   # what would upload
+scripts/roblox-upload-assets.sh kitchen             # upload approved only
+```
+
+- It checks every `objects/<id>/preflight/approval.json` against the current GLB SHA1.
+- Pending, denied, and changed files are skipped.
+- The key comes from `~/.config/dejaview/roblox-assets.key` and needs `assets:write`.
+- Each upload writes its asset id onto that object in `objects.json`.
+- `ObjectLayer` then loads the uploaded Model and keeps the proxy for collision.
+- The batch does not approve anything. Approval stays personal.
