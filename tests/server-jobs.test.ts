@@ -238,6 +238,41 @@ describe('job state machine', () => {
     expect(job.mode).toBe('rentfree');
   });
 
+  test('a rebuild without a walk zone moves the old one to the archive, never deletes it', async () => {
+    const d = fake({ name: 'local' });
+    const h = await harness([d]);
+    await addScene(h.store, 'wz-aaaaa', 'reconstruct');
+    const dir = h.store.sceneDir('wz-aaaaa');
+    const old = { 'collider.glb': 'OLD-COLLIDER', 'walkzone.json': '{"old":true}', 'walkzone-topdown.png': 'OLD-PNG', 'hotspots.json': '[]' };
+    for (const [f, body] of Object.entries(old)) await writeFile(join(dir, f), body);
+    h.runner.enqueue('wz-aaaaa');
+    await h.runner.idle();
+    expect((await h.store.get('wz-aaaaa'))!.status).toBe('ready');
+    const left = await readdir(dir);
+    for (const f of Object.keys(old)) expect(left).not.toContain(f);
+    const archRoot = join(h.root, 'archive', 'scenes', 'wz-aaaaa');
+    const runs = await readdir(archRoot);
+    expect(runs.length).toBe(1);
+    for (const [f, body] of Object.entries(old)) expect(await Bun.file(join(archRoot, runs[0]!, f)).text()).toBe(body);
+    expect(await Bun.file(join(dir, 'log.txt')).text()).toContain('moved what belonged to the previous world');
+  });
+
+  test('a rebuild that brings its own walk zone keeps it in the scene folder', async () => {
+    const result: JobResult = { ...WORLD_RESULT, world: { ...WORLD_RESULT.world!, collider: 'collider.glb' } };
+    const d = fake({ name: 'local', result, files: { 'world.spz': 'SPZ', 'thumb.jpg': 'T', 'collider.glb': 'NEW', 'walkzone.json': '{}' } });
+    const h = await harness([d]);
+    await addScene(h.store, 'wz-bbbbb', 'reconstruct');
+    const dir = h.store.sceneDir('wz-bbbbb');
+    await writeFile(join(dir, 'collider.glb'), 'OLD');
+    await writeFile(join(dir, 'walkzone-topdown.png'), 'OLD-PNG');
+    h.runner.enqueue('wz-bbbbb');
+    await h.runner.idle();
+    expect(await Bun.file(join(dir, 'collider.glb')).text()).toBe('NEW');
+    expect(await Bun.file(join(dir, 'walkzone.json')).text()).toBe('{}');
+    const runs = await readdir(join(h.root, 'archive', 'scenes', 'wz-bbbbb'));
+    expect(await Bun.file(join(h.root, 'archive', 'scenes', 'wz-bbbbb', runs[0]!, 'walkzone-topdown.png')).text()).toBe('OLD-PNG');
+  });
+
   test('bad results are rejected with a precise message', async () => {
     const missing = fake({ name: 'local', files: { 'thumb.jpg': 'T' } });
     const h = await harness([missing]);
