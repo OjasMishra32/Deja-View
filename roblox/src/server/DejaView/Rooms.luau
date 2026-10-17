@@ -520,7 +520,9 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 				end
 			end
 			local e = cache[sceneId]
-			MapBuilder.addGround(e and e.map and groundColour(e.map) or nil)
+			if not Config.SPHERE_ROOMS[sceneId] then -- a photo sphere shows its own floor
+				MapBuilder.addGround(e and e.map and groundColour(e.map) or nil)
+			end
 		end
 		-- Per-world skybox rendered from the splat viewer (Update 10): six asset ids for the clients to show
 		local sky = mi and mi.sky
