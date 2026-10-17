@@ -56,6 +56,7 @@ export const MODEL_SIDECAR = 'roblox-model.json';
  * out the same, an unchanged part) takes its assetId from here instead of becoming one more asset on the account.
  */
 export const UPLOAD_LEDGER = 'roblox-uploads.json';
+export const OBJECTS_FILE = 'objects.json';
 /** Open Cloud's limit for one asset upload ("up to 20 MB"; read as decimal megabytes, the stricter reading). */
 export const MAX_UPLOAD_BYTES = 20_000_000;
 export const ROBLOX_API = 'https://apis.roblox.com';
@@ -682,9 +683,36 @@ export function createRobloxModelRoutes(deps: ModelRouteDeps): Record<string, Mo
     return req.method === 'HEAD' ? new Response(null, { status: res.status, headers: res.headers }) : res;
   };
 
+  const objectsRoute: ModelHandler = async (req, server) => {
+    if (req.method === 'OPTIONS') return preflight();
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'POST') return methodNotAllowed('GET, HEAD, POST, OPTIONS');
+    const denied = keyRejected(req, deps.dvKey, server);
+    if (denied) return denied;
+    const found = await sceneOf(req);
+    if (found instanceof Response) return found;
+    const path = models.filePath(found.id, OBJECTS_FILE);
+    if (req.method === 'POST') {
+      let doc: unknown;
+      try {
+        doc = await req.json();
+      } catch {
+        return fail(400, 'Expected a JSON object layer.');
+      }
+      const d = doc as { units?: unknown; objects?: unknown };
+      if (!d || typeof d !== 'object' || !Array.isArray(d.objects)) return fail(400, 'objects must be an array.');
+      if (d.units !== undefined && d.units !== 'studs') return fail(400, 'units must be "studs".');
+      const tmp = `${path}.tmp`;
+      await writeFile(tmp, JSON.stringify(doc));
+      await rename(tmp, path);
+      return json({ ok: true, objects: (d.objects as unknown[]).length });
+    }
+    return serveFile(req, path, 'application/json', `${found.id}-objects.json`, 'No object layer for this room.');
+  };
+
   return {
     '/api/roblox/:sceneId/model.glb': safe('model glb', glbRoute),
     '/api/roblox/:sceneId/model/:file': safe('model file', fileRoute),
     '/api/roblox/:sceneId/model': safe('model', modelRoute),
+    '/api/roblox/:sceneId/objects': safe('objects', objectsRoute),
   };
 }

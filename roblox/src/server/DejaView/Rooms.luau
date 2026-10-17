@@ -6,13 +6,21 @@ local Players = game:GetService("Players")
 local Config = require(script.Parent.Config)
 local Backend = require(script.Parent.Backend)
 local MapBuilder = require(script.Parent.MapBuilder)
+local ObjectLayer = require(script.Parent.ObjectLayer)
 local World = require(script.Parent.World)
 local Fixtures = require(game:GetService("ReplicatedStorage").Shared.Fixtures)
 
 local Rooms = {}
 
-type Entry = { map: any?, swatches: { string }?, measuring: boolean, failed: boolean, tries: number, nextTry: number,
-	gone: boolean? }
+type Entry = {
+	map: any?,
+	swatches: { string }?,
+	measuring: boolean,
+	failed: boolean,
+	tries: number,
+	nextTry: number,
+	gone: boolean?,
+}
 
 local list: { any } = {} -- last /api/scenes answer
 local cache: { [string]: Entry } = {}
@@ -70,7 +78,8 @@ local function swatches(map: any): { string }
 	local out = {}
 	for i = 1, math.min(4, #keys) do
 		local k = keys[i]
-		local r, g, b = bit32.rshift(k, 10) * 8 + 4, bit32.band(bit32.rshift(k, 5), 31) * 8 + 4, bit32.band(k, 31) * 8 + 4
+		local r, g, b =
+			bit32.rshift(k, 10) * 8 + 4, bit32.band(bit32.rshift(k, 5), 31) * 8 + 4, bit32.band(k, 31) * 8 + 4
 		table.insert(out, Color3.fromRGB(r, g, b):ToHex())
 	end
 	return out
@@ -466,7 +475,9 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 		local sky = mi and mi.sky
 		local room = workspace:FindFirstChild("Room")
 		if room and type(sky) == "table" then
-			for key, attr in { front = "SkyFt", back = "SkyBk", left = "SkyLf", right = "SkyRt", up = "SkyUp", down = "SkyDn" } do
+			for key, attr in
+				{ front = "SkyFt", back = "SkyBk", left = "SkyLf", right = "SkyRt", up = "SkyUp", down = "SkyDn" }
+			do
 				if sky[key] then
 					room:SetAttribute(attr, "rbxassetid://" .. tostring(sky[key]))
 				end
@@ -504,6 +515,10 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 	workspace:SetAttribute("RoomName", info.name)
 	workspace:SetAttribute("HasImagined", (workspace:FindFirstChild("Room") :: any):GetAttribute("HasImagined") == true)
 	workspace:SetAttribute("Phase", "room")
+	local builtRoom = workspace:FindFirstChild("Room")
+	task.spawn(function()
+		ObjectLayer.build(sceneId, builtRoom)
+	end)
 	if moveRoom then
 		World.toRoom(previousRoomPlayers)
 	end
@@ -602,7 +617,9 @@ function Rooms.roomClosed(sceneId: string)
 		end
 		-- a newer switch (a vote, the judge) took over meanwhile: leave it alone
 		local superseded = switching > before + (if okTarget then 1 else 0)
-		local arrived = okTarget and workspace:GetAttribute("SceneId") == target and workspace:GetAttribute("Phase") == "room"
+		local arrived = okTarget
+			and workspace:GetAttribute("SceneId") == target
+			and workspace:GetAttribute("Phase") == "room"
 		if not superseded and not arrived then
 			closeToLobby()
 		end
@@ -681,7 +698,9 @@ end
 function Rooms.onActive(active: any)
 	activeSeenAt = os.clock()
 	-- Where the judge is, even when it is not a Roblox room (the game-night video): the lobby board shows it.
-	local name = if type(active) == "table" then (active.name or (sceneById(active.sceneId or "") or {}).name or "") else ""
+	local name = if type(active) == "table"
+		then (active.name or (sceneById(active.sceneId or "") or {}).name or "")
+		else ""
 	if workspace:GetAttribute("JudgeRoom") ~= name then
 		workspace:SetAttribute("JudgeRoom", name)
 	end

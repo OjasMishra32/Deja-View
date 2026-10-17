@@ -119,11 +119,38 @@ const req = (path: string, init?: RequestInit) => new Request(`http://dv.test${p
 const GLB = '/api/roblox/:sceneId/model.glb';
 const MODEL = '/api/roblox/:sceneId/model';
 const FILE = '/api/roblox/:sceneId/model/:file';
+const OBJECTS = '/api/roblox/:sceneId/objects';
 
 describe('route table', () => {
   test('exports the model paths', async () => {
     const r = await rig();
-    expect(Object.keys(r.routes).sort()).toEqual([MODEL, GLB, FILE].sort());
+    expect(Object.keys(r.routes).sort()).toEqual([MODEL, GLB, FILE, OBJECTS].sort());
+  });
+});
+
+describe('object layer', () => {
+  const doc = { version: 1, sceneId: 'room-a', units: 'studs', objects: [{ id: 'fridge', label: 'fridge', center: [0, 3, -8], size: [3, 6, 4], color: [245, 246, 242] }] };
+
+  test('GET serves the layer and POST writes it', async () => {
+    const r = await rig();
+    expect((await r.routes[OBJECTS]!(req('/api/roblox/room-a/objects'), LOCAL)).status).toBe(404);
+    const post = await r.routes[OBJECTS]!(req('/api/roblox/room-a/objects', { method: 'POST', body: JSON.stringify(doc), headers: { 'content-type': 'application/json' } }), LOCAL);
+    expect(post.status).toBe(200);
+    expect(await post.json()).toMatchObject({ ok: true, objects: 1 });
+    const get = await r.routes[OBJECTS]!(req('/api/roblox/room-a/objects'), LOCAL);
+    expect(get.status).toBe(200);
+    expect((await get.json()).objects[0].id).toBe('fridge');
+    expect(get.headers.get('access-control-allow-origin')).toBe('*');
+  });
+
+  test('POST rejects a non-stud layer and GET is key-gated off localhost', async () => {
+    const r = await rig({ dvKey: 'sekret' });
+    const bad = await r.routes[OBJECTS]!(req('/api/roblox/room-a/objects', { method: 'POST', body: JSON.stringify({ units: 'metres', objects: [] }) }), REMOTE);
+    expect(bad.status).toBe(401);
+    const noKey = await r.routes[OBJECTS]!(req('/api/roblox/room-a/objects', { method: 'POST', body: JSON.stringify(doc) }), REMOTE);
+    expect(noKey.status).toBe(401);
+    const withKey = await r.routes[OBJECTS]!(req('/api/roblox/room-a/objects', { method: 'POST', body: JSON.stringify({ ...doc, units: 'metres' }), headers: { 'x-dejaview-key': 'sekret' } }), REMOTE);
+    expect(withKey.status).toBe(400);
   });
 });
 

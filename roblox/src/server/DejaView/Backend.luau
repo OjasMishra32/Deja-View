@@ -21,6 +21,10 @@ function Backend.model(sceneId: string)
 	return impl().model(sceneId)
 end
 
+function Backend.objects(sceneId: string)
+	return impl().objects(sceneId)
+end
+
 function Backend.hotspots(sceneId: string)
 	return impl().hotspots(sceneId)
 end

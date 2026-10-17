@@ -119,6 +119,11 @@ function Api.model(sceneId: string)
 	return request("GET", "/api/roblox/" .. enc(sceneId) .. "/model")
 end
 
+-- Object layer (docs/object-layer.md): proxy parts in studs for the labels the scan found.
+function Api.objects(sceneId: string)
+	return request("GET", "/api/roblox/" .. enc(sceneId) .. "/objects")
+end
+
 -- Gemini labels (Update 4): {hotspots:[{label, blurb, x, y, z}]} in room metres.
 function Api.hotspots(sceneId: string)
 	return request("GET", "/api/scenes/" .. enc(sceneId) .. "/hotspots")

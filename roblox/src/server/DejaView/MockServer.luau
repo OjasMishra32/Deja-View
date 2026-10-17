@@ -43,10 +43,30 @@ local function scenes()
 		end
 	end
 	if Config.MOCK_STRESS_ROOMS then
-		table.insert(list, { id = "mock-stress-6000", name = "Stress 6k", mode = "photo", status = "ready",
-			stage = "Ready", progress = 1, createdAt = "2026-10-17T09:00:00Z" })
-		table.insert(list, { id = "mock-stress-12000", name = "Stress 12k", mode = "photo", status = "ready",
-			stage = "Ready", progress = 1, createdAt = "2026-10-17T08:00:00Z" })
+		table.insert(
+			list,
+			{
+				id = "mock-stress-6000",
+				name = "Stress 6k",
+				mode = "photo",
+				status = "ready",
+				stage = "Ready",
+				progress = 1,
+				createdAt = "2026-10-17T09:00:00Z",
+			}
+		)
+		table.insert(
+			list,
+			{
+				id = "mock-stress-12000",
+				name = "Stress 12k",
+				mode = "photo",
+				status = "ready",
+				stage = "Ready",
+				progress = 1,
+				createdAt = "2026-10-17T08:00:00Z",
+			}
+		)
 	end
 	-- newest first
 	table.sort(list, function(a, b)
@@ -109,8 +129,21 @@ local function proceduralMap(id: string, count: number)
 			y = sy / 2
 		end
 		local g = rng:NextInteger(90, 230)
-		table.insert(parts, { x, y, z, sx, sy, sz, g, math.floor(g * 0.92), math.floor(g * 0.85),
-			if rng:NextNumber() < 0.3 then 1 else 0 })
+		table.insert(
+			parts,
+			{
+				x,
+				y,
+				z,
+				sx,
+				sy,
+				sz,
+				g,
+				math.floor(g * 0.92),
+				math.floor(g * 0.85),
+				if rng:NextNumber() < 0.3 then 1 else 0,
+			}
+		)
 	end
 	table.sort(parts, function(a, b)
 		return a[2] - a[5] / 2 < b[2] - b[5] / 2
@@ -132,7 +165,13 @@ function MockServer.mockVr(t: number)
 	local yaw = math.atan2(-dx, -dz)
 	local side = Vector3.new(math.cos(yaw), 0, -math.sin(yaw)) * 1.4
 	return {
-		id = "quest-1", name = "Judge", kind = "vr", x = x, y = 0, z = z, yaw = yaw,
+		id = "quest-1",
+		name = "Judge",
+		kind = "vr",
+		x = x,
+		y = 0,
+		z = z,
+		yaw = yaw,
 		head = { x, 5.7 + math.sin(t * 3) * 0.15, z },
 		hands = { { x - side.X, 4.3 + math.sin(t * 5), z - side.Z }, { x + side.X, 4.3, z + side.Z } },
 	}
@@ -187,6 +226,14 @@ function MockServer.model(sceneId: string)
 	return true, { sceneId = sceneId, units = "studs", studsPerMeter = SPM, chunks = {}, assetId = nil }, 200
 end
 
+-- No object layer in mock mode: the real one comes from the scan.
+function MockServer.objects(sceneId: string)
+	if not jitter() then
+		return false, "mock failure", 0
+	end
+	return true, { version = 1, sceneId = sceneId, units = "studs", objects = {} }, 200
+end
+
 -- Fake Gemini labels around the procedural room (metres; the fixture room gets them too).
 local MOCK_HOTSPOTS = {
 	{ label = "Couch", blurb = "Where the losers sat", x = -1.7, y = 0.6, z = -2.2 },
@@ -239,14 +286,26 @@ function MockServer.presence(sceneId: string, body: any)
 	if js == sceneId then
 		table.insert(others, MockServer.mockVr(os.clock()))
 		local a = os.clock() * 0.3
-		table.insert(others, { id = "web-7f3a19c2", name = "Maya", kind = "web",
-			x = -3.57 + math.cos(a) * 2, y = 0, z = 2.86 + math.sin(a) * 2, yaw = -a })
+		table.insert(
+			others,
+			{
+				id = "web-7f3a19c2",
+				name = "Maya",
+				kind = "web",
+				x = -3.57 + math.cos(a) * 2,
+				y = 0,
+				z = 2.86 + math.sin(a) * 2,
+				yaw = -a,
+			}
+		)
 	end
-	return true, {
-		t = now(),
-		others = others,
-		active = if js then { sceneId = js, name = nameOf(js) } else nil,
-	}, 200
+	return true,
+		{
+			t = now(),
+			others = others,
+			active = if js then { sceneId = js, name = nameOf(js) } else nil,
+		},
+		200
 end
 
 function MockServer.event(sceneId: string, body: any)
@@ -264,8 +323,10 @@ function MockServer.people(sceneId: string)
 	local people = {}
 	if judgeScene() == sceneId then
 		local v = MockServer.mockVr(os.clock())
-		table.insert(people, { id = v.id, name = v.name, kind = "vr", x = v.x / SPM, y = 0, z = v.z / SPM,
-			yaw = v.yaw, age = 0.1 })
+		table.insert(
+			people,
+			{ id = v.id, name = v.name, kind = "vr", x = v.x / SPM, y = 0, z = v.z / SPM, yaw = v.yaw, age = 0.1 }
+		)
 	end
 	return true, { t = now(), people = people }, 200
 end

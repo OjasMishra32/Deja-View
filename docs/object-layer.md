@@ -153,7 +153,7 @@ Rules:
 
 - Units are studs in the same room frame as `roblox-model.json`.
 - `shape` is `box`, `cylinder`, `sphere`, or `mesh`.
-- `parts` are children in the object's local frame.
+- `parts` use the same room frame as the object, so the handle centre is an absolute point in studs.
 - `affordance` is optional and names what the game may animate.
 - `source` is provenance, not required to render.
 - A missing file means no object layer. The room still renders.
@@ -175,10 +175,12 @@ Rules:
 ## 8. Consumers
 
 Roblox:
-- `ObjectLayer` fetches `/api/roblox/:sceneId/objects`.
+- `ObjectLayer` fetches `/api/roblox/:sceneId/objects` (`GET`), and `Rooms` builds it after the room is ready.
 - It builds parts for `box`, `cylinder`, and `sphere`, and `MeshPart` for `mesh`.
 - It applies the style palette and hides the proxy if it has no data.
 - The proxy is inflated by 2 to 5 cm so it covers the rough scanned original.
+- Deploy a layer with `BASE=https://... SCENE=kitchen scripts/roblox-objects-upload.sh`.
+  The script POSTs the file; the server validates it and checks the DV key when one is set.
 
 Web:
 - The viewer adds proxy meshes to the same scene as the splats.
