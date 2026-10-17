@@ -10,6 +10,10 @@ up in the headset) and powers the finale (2:00 to 2:25, the judge's own photo be
 
 ---
 
+**Update 4 (Sat ~4:50 AM):** five worlds (`tilted-towers`, `brick-apartment`, `the-courts`, `chess-room`, `kitchen`)
+and three video memories (`courts-foosball`, `chess-match`, `kitchen-cooking`). Your gallery picks them up from
+`GET /api/scenes` with no change. "Join in Roblox" goes on the five worlds, not on the video memories.
+
 **Update 3 (Sat ~3 AM): what is next for you (the update box below still stands):**
 
 **The public link is live:** `https://prozac-covered-burke-oklahoma.trycloudflare.com` (it changes if the tunnel restarts; Ojasva reposts). Set it as `dvBase` in your

@@ -9,6 +9,13 @@ Everything below was checked against the live Gemini docs and SDK on Fri Oct 16,
 checked, it says so and tells you how to check it. If something here turns out to be wrong on the night, tell Ojasva
 right away and use the fallback listed for it.
 
+> **Update 4 (Sat ~4:50 AM):** the worlds you tune are now `the-courts`, `chess-room`, `kitchen`, `tilted-towers`,
+> `brick-apartment`. Labels to aim for: the court (foosball table, ping pong table, chairs, the glass door), chess (the
+> giant king and queen, the board, the wall TV, the UF banner), the kitchen (fridge, the two stoves, the sink, the steel
+> prep table, the bar tables, the plant). "Who won?" matters most for **`courts-foosball`** and **`chess-match`** (our
+> real game night) and "what are they making?" for **`kitchen-cooking`**: answer from the clip's frames (`frames` in
+> `/describe`, Update 3). Answers now show in the headset as iMessage bubbles, so keep them short and texty.
+>
 > **Update 3 (Sat ~3 AM): what is next for you:**
 >
 > **The public link is live:** `https://prozac-covered-burke-oklahoma.trycloudflare.com`. You can open any world at `https://prozac-covered-burke-oklahoma.trycloudflare.com/view?scene=<id>` to see what the guide

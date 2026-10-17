@@ -65,6 +65,15 @@ It gets 15 seconds only if it is ready and good.
 - **Not entered:** Photon (not on the Devpost; dropped), Sperry Tech PlanIT (unrelated), Least Vibe Coded (we used
   AI tools and say so).
 
+## Update (Sat ~4:50 AM): the real game night
+
+Our own footage now carries the demo. The game-night memory is **`courts-foosball`**: the judge stands at the real
+foosball table at the court while the two players play it in full 3D (pause and walk around them), with sound. Then
+Shivin and Brianna, on a phone and a laptop, play foosball or ping pong in Roblox on that same table while the judge
+watches from VR. `chess-match` and `kitchen-cooking` are the extra memories to show if there is time; `tilted-towers`
+stays the "even a game becomes a place" beat. The beats below keep their timing; read "the game-night clip" as the
+foosball clip.
+
 ## The demo: a staged skit, then "Now do it"
 
 The skit uses worlds we built in advance and triggers them on cue, so it never waits. Everything shown is real

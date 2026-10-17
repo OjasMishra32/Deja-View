@@ -8,6 +8,18 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 8 (Sat ~4:50 AM):**
+> - **New world:** `kitchen` (a real office kitchen: fridge, stoves, sink, steel prep table, bar tables and stools). It
+>   is a Photo world, so it gets a textured model and goes in your picker like the others.
+> - **The best demo moment is the court:** the judge stands at the real foosball table in VR while you two play foosball
+>   or ping pong on the same table in Roblox. Make sure `the-courts` loads first in your picker and the games start
+>   there with one button.
+> - **Uploads:** the server only uploads models from the one live server now (an accident earlier put 4 duplicate
+>   models on your account: 120627213500145, 137210308273579, 113019081409529, 75220212245793; archive them in the
+>   Creator Dashboard if you like, nothing uses them).
+> - The headset now uses a light Apple look; matching your HUD to it (white panels, blue accent) is a nice touch if you
+>   have time.
+
 > **Update 7 (Sat ~4:10 AM): the real textured rooms are live. Drop the blocks as the look.**
 > The block rooms only resemble the place; the textured model IS the place. Now:
 > - `GET BASE/api/roblox/<id>/model` is live on the public link: `assetId`, `units: "studs"`, `studsPerMeter: 3.57`,
