@@ -11,6 +11,7 @@ local Ui = require(Modules.Ui)
 local Board = require(Modules.Board)
 local Ghosts = require(Modules.Ghosts)
 local Effects = require(Modules.Effects)
+local PongBall = require(Modules.PongBall)
 local Theme = require(ReplicatedStorage:WaitForChild("Shared").Theme)
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -19,6 +20,7 @@ local Moment = Remotes:WaitForChild("Moment") :: RemoteEvent
 local Vote = Remotes:WaitForChild("Vote") :: RemoteEvent
 local HostAction = Remotes:WaitForChild("HostAction") :: RemoteEvent
 local LeaveNote = Remotes:WaitForChild("LeaveNote") :: RemoteEvent
+local PongHit = Remotes:WaitForChild("PongHit") :: RemoteEvent
 
 local player = Players.LocalPlayer
 local ui = Ui.build()
@@ -168,6 +170,7 @@ local function refresh()
 	ui.mockBtn.Text = "MOCK JUDGE: " .. (if W("MockJudge") then "ON" else "OFF")
 	ui.realityBtn.Visible = W("HasImagined") == true and inRoom
 	ui.noteBtn.Visible = inRoom and phase == "room"
+	ui.hitBtn.Visible = inRoom and W("PongActive") == true
 	ui.huntBtn.Text = if round == "hunt" then "END HUNT" else "START HUNT"
 	ui.bigBtn.Text = "BIG SCREEN: " .. (if bigScreen then "ON" else "OFF")
 
@@ -212,6 +215,13 @@ local chessMarks: { BasePart } = {}
 -- Remote moments
 Moment.OnClientEvent:Connect(function(m)
 	if type(m) ~= "table" then
+		return
+	end
+	if string.sub(tostring(m.type), 1, 4) == "pong" then
+		PongBall.onMoment(m)
+		if m.type == "pongServe" then
+			Ui.toast(ui, string.upper(tostring(m.name)) .. " TO SERVE")
+		end
 		return
 	end
 	if m.type == "toast" then
@@ -337,6 +347,12 @@ end)
 ui.endBtn.Activated:Connect(function()
 	host("end_round")
 end)
+ui.pongBtn.Activated:Connect(function()
+	host("pingpong", workspace.CurrentCamera.CFrame.LookVector)
+end)
+ui.hitBtn.Activated:Connect(function()
+	PongHit:FireServer()
+end)
 ui.chessBtn.Activated:Connect(function()
 	host("chess", workspace.CurrentCamera.CFrame.LookVector)
 end)
@@ -394,6 +410,9 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then
 		return
 	end
+	if (input.KeyCode == Enum.KeyCode.E or input.KeyCode == Enum.KeyCode.ButtonR2) and W("PongActive") then
+		PongHit:FireServer()
+	end
 	if input.KeyCode == Enum.KeyCode.ButtonX and isHost() then
 		hostOpen = not hostOpen
 		refresh()
@@ -406,7 +425,7 @@ end)
 
 -- Attribute wiring
 for _, name in { "Phase", "RoomName", "LoadProgress", "LoadStage", "Banner", "JudgeHere", "JudgeName", "RoundState",
-	"AutoJoin", "Follow", "MockJudge", "HasImagined", "JudgeRoom", "LabelCount" } do
+	"AutoJoin", "Follow", "MockJudge", "HasImagined", "JudgeRoom", "LabelCount", "PongActive" } do
 	workspace:GetAttributeChangedSignal(name):Connect(refresh)
 end
 workspace:GetAttributeChangedSignal("RoomsJson"):Connect(renderCards)
@@ -437,6 +456,7 @@ end
 local lastSubjectCheck = 0
 RunService.RenderStepped:Connect(function(dt)
 	Ghosts.update(dt)
+	PongBall.update()
 	local round = W("RoundState")
 	if round == "playing" then
 		local left = math.max(0, (W("RoundEndsAt") or 0) - workspace:GetServerTimeNow())

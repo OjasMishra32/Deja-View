@@ -48,7 +48,8 @@
         "Moment": { "$className": "RemoteEvent" },
         "Vote": { "$className": "RemoteEvent" },
         "HostAction": { "$className": "RemoteEvent" },
-        "LeaveNote": { "$className": "RemoteEvent" }
+        "LeaveNote": { "$className": "RemoteEvent" },
+        "PongHit": { "$className": "RemoteEvent" }
       }
     }
   }

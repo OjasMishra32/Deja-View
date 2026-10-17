@@ -106,6 +106,7 @@ function Ui.build()
 	hostBtn("mockBtn", "MOCK JUDGE: OFF", 6)
 	hostBtn("huntBtn", "START HUNT", 5)
 	hostBtn("chessBtn", "CHESS BOARD", 7)
+	hostBtn("pongBtn", "PING PONG", 7)
 	hostBtn("bigBtn", "BIG SCREEN: OFF", 7)
 	hostBtn("lobbyAllBtn", "ALL TO LOBBY", 8)
 
@@ -163,6 +164,13 @@ function Ui.build()
 	ui.winSub = label({ Text = "", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0.58),
 		Size = UDim2.fromScale(0.8, 0.07), TextColor3 = Theme.Muted, TextXAlignment = Enum.TextXAlignment.Center,
 		MaxText = 36, ZIndex = 46, Parent = winner })
+
+	-- HIT for ping pong (right side, above the jump button)
+	ui.hitBtn = button({ Text = "HIT", AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -28, 1, -150),
+		Size = UDim2.fromOffset(110, 110), BackgroundColor3 = Theme.Accent, TextColor3 = Theme.Bg, MaxText = 34,
+		Visible = false, Parent = gui })
+	ui.hitBtn:FindFirstChildOfClass("UICorner").CornerRadius = UDim.new(1, 0)
+	table.insert(ui.scales, make("UIScale", { Scale = 1, Parent = ui.hitBtn }))
 
 	-- Note composer (centre, above the JOIN area)
 	local composer = make("Frame", { Name = "NoteComposer", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 120),
