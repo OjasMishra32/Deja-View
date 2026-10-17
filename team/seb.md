@@ -80,6 +80,12 @@ catch everything Roblox moderation flags in an image, and mark each hit as block
 
 **Task E: the games on the real furniture (needs A).** Your ping pong and foosball are on `main`; pool once the game-room
 pool table is filmed and rebuilt. Chess: `features.chessBoard` comes in `/model` and `/map` for `chess-room`.
+- Bug from Shivin's handover (`roblox/HANDOVER-NOTES.md`): `PingPong.luau` around line 528 calls
+  `launch(other(side), p0, flight, aim)`, but `flight` and `aim` only exist inside the branches above it. A hit that
+  is neither camera-aimed nor a VR swing errors there.
+- Shivin saw the chess-room textured model sit about 1 m off the board. That came from the server pairing an older
+  model's asset id with a newer model's bounds. `/model` now gives one file's id and bounds together, and your
+  re-upload makes them yours anyway. Check the board against the model once your chess-room upload lands.
 
 **Update 7 (Sat ~9:20 AM): your object layer is merged; one repo rule, and Roblox uploads are paused.**
 - Merged on `main` (b5d7939, a108ef1): objects found in the splats, described, and planned as Roblox parts. Tests pass.
