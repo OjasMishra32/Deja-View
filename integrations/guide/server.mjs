@@ -55,23 +55,23 @@ function withTiming(name, handler) {
 const routes = {
   '/describe': withTiming('describe', async ({ image }) => {
     try { return await describe(image); }
-    catch { return { caption: describeFallback(), degraded: true }; }
+    catch (error) { console.warn(`describe Gemini fallback: ${error.message}`); return { caption: describeFallback(), degraded: true }; }
   }),
   '/hotspots': withTiming('hotspots', async ({ image }) => {
     try { return await hotspots(image); }
-    catch { return { hotspots: [], degraded: true }; }
+    catch (error) { console.warn(`hotspots Gemini fallback: ${error.message}`); return { hotspots: [], degraded: true }; }
   }),
   '/narrate': withTiming('narrate', async ({ image, scene = {} }) => {
     if (scene.id && narrateCache.has(scene.id)) return { ...narrateCache.get(scene.id), cached: true };
     let result;
     try { result = await narrate(image, scene); }
-    catch { result = { answer: narrationFallback(scene), speech: null, degraded: true }; }
+    catch (error) { console.warn(`narrate Gemini fallback: ${error.message}`); result = { answer: narrationFallback(scene), speech: null, degraded: true }; }
     if (scene.id) narrateCache.set(scene.id, result);
     return result;
   }),
   '/ask': withTiming('ask', async ({ image, question = '', scene = {} }) => {
     try { return await ask(image, question, scene); }
-    catch { const fallback = answerFallback(question, scene); return { question, ...fallback, speech: null, degraded: true }; }
+    catch (error) { console.warn(`ask Gemini fallback: ${error.message}`); const fallback = answerFallback(question, scene); return { question, ...fallback, speech: null, degraded: true }; }
   }),
 };
 
