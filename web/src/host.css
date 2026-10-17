@@ -357,6 +357,7 @@ img {
 .h-btn {
   --h: 44px;
   display: inline-flex;
+  text-decoration: none;
   align-items: center;
   justify-content: center;
   gap: 6px;
@@ -825,6 +826,45 @@ img {
   background: var(--surface);
 }
 
+/* Videos and Worlds: one row each, swiped sideways, a card at a time. */
+.h-worlds.h-rail {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: min(82%, 340px);
+  gap: 12px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 2px;
+  padding: 2px 2px 8px;
+  scrollbar-width: none;
+}
+
+.h-worlds.h-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.h-rail .h-world {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  scroll-snap-align: start;
+}
+
+.h-rail .h-world .h-thumb {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+}
+
+.h-rail .h-world-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.h-rail .h-world-actions .h-open {
+  grid-column: 1 / -1;
+}
+
 .h-world.enter {
   animation: in 0.4s var(--ease) both;
 }
@@ -1157,6 +1197,11 @@ img {
 
   .h-worlds {
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  }
+
+  .h-worlds.h-rail {
+    grid-template-columns: none;
+    grid-auto-columns: 300px;
   }
 
   .h-world {

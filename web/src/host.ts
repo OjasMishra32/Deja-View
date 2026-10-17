@@ -339,6 +339,7 @@ function worldHtml(s: HostScene): string {
   } else {
     actions =
       `<div class="h-world-actions">${openButton(s)}` +
+      `<a class="h-btn" href="/view?scene=${encodeURIComponent(s.id)}" target="_blank" rel="noopener">${s.mode === 'video' ? 'Watch here' : 'Walk here'}</a>` +
       `<button class="h-btn" type="button" data-pin="${esc(s.id)}" aria-expanded="${picking === s.id}">${slot >= 0 ? 'Move' : 'Pin'}</button></div>`;
     if (picking === s.id) {
       actions +=
@@ -354,9 +355,10 @@ function worldHtml(s: HostScene): string {
 function renderWorlds() {
   if (!loaded) {
     // nothing from the server yet: say why instead of loading forever
-    const box = $('#worlds');
-    if (box && statusError) {
-      box.innerHTML = `<div class="h-empty">${statusError.status === 401 ? 'The worlds show up once the key is saved.' : 'The worlds show up when the server answers.'}</div>`;
+    for (const box of [$('#videos'), $('#worlds')]) {
+      if (box && statusError) {
+        box.innerHTML = `<div class="h-empty">${statusError.status === 401 ? 'The worlds show up once the key is saved.' : 'The worlds show up when the server answers.'}</div>`;
+      }
     }
     return;
   }
@@ -369,16 +371,20 @@ function renderWorlds() {
   const liveBox = $('#live-worlds');
   if (liveBox) renderList(liveBox, live);
 
-  const list = worldList();
-  const count = $('#worlds-count');
-  if (count) count.textContent = `${list.filter((s) => s.status === 'ready').length} ready`;
-  const box = $('#worlds');
-  if (!box) return;
-  if (!list.length) {
-    box.innerHTML = '<div class="h-empty">No worlds yet. Make one on the capture page.</div>';
-    return;
+  // two rows to swipe through: video memories, then worlds
+  const all = worldList();
+  const rows: [string, string, HostScene[], string][] = [
+    ['#videos', '#videos-count', all.filter((s) => s.mode === 'video'), 'No videos yet. Add a clip on the capture page.'],
+    ['#worlds', '#worlds-count', all.filter((s) => s.mode !== 'video'), 'No worlds yet. Make one on the capture page.'],
+  ];
+  for (const [boxSel, countSel, list, empty] of rows) {
+    const count = $(countSel);
+    if (count) count.textContent = `${list.filter((s) => s.status === 'ready').length} ready`;
+    const box = $(boxSel);
+    if (!box) continue;
+    if (!list.length) box.innerHTML = `<div class="h-empty">${empty}</div>`;
+    else renderList(box, list);
   }
-  renderList(box, list);
 }
 
 /** Keyed render: cards keep their element (and its loaded thumbnail) while their text changes. */
