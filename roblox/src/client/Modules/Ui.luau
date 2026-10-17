@@ -80,12 +80,14 @@ function Ui.build()
 	ui.roomsBtn = button({ Text = "ROOMS (R)", Size = UDim2.new(0, 120, 1, 0), LayoutOrder = 1, Parent = row })
 	ui.hopBtn = button({ Text = "LOBBY", Size = UDim2.new(0, 100, 1, 0), LayoutOrder = 2, Parent = row })
 	ui.hostToggle = button({ Text = "HOST", Size = UDim2.new(0, 80, 1, 0), LayoutOrder = 4, Visible = false, Parent = row })
+	ui.noteBtn = button({ Text = "NOTE", Size = UDim2.new(0, 80, 1, 0), LayoutOrder = 5, Visible = false, Parent = row })
 	ui.realityBtn = button({ Text = "REALITY CHECK", Size = UDim2.new(0, 150, 1, 0), LayoutOrder = 3, Visible = false,
 		Parent = row })
 
 	-- Host bar (left middle)
 	local host = make("Frame", { Name = "HostBar", BackgroundColor3 = Theme.Bg, BackgroundTransparency = 0.05,
-		Position = UDim2.new(0, 16, 0, 184), Size = UDim2.new(0, 170, 0, 300), Visible = false, Parent = gui },
+		Position = UDim2.new(0, 16, 0, 184), Size = UDim2.new(0, 170, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+		Visible = false, Parent = gui },
 		{ Theme.corner(14), Theme.stroke(), make("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10),
 			PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10) }),
 		  make("UIListLayout", { Name = "List", Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }) })
@@ -101,8 +103,10 @@ function Ui.build()
 	hostBtn("followBtn", "FOLLOW: ON", 2)
 	hostBtn("startBtn", "START ROUND", 3)
 	hostBtn("endBtn", "END ROUND", 4)
-	hostBtn("mockBtn", "MOCK JUDGE: OFF", 5)
-	hostBtn("lobbyAllBtn", "ALL TO LOBBY", 6)
+	hostBtn("mockBtn", "MOCK JUDGE: OFF", 6)
+	hostBtn("huntBtn", "START HUNT", 5)
+	hostBtn("bigBtn", "BIG SCREEN: OFF", 7)
+	hostBtn("lobbyAllBtn", "ALL TO LOBBY", 8)
 
 	-- Big JOIN (bottom centre, clear of the thumbstick and jump corners)
 	ui.joinBtn = button({ Text = "JOIN", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -28),
@@ -159,6 +163,40 @@ function Ui.build()
 		Size = UDim2.fromScale(0.8, 0.07), TextColor3 = Theme.Muted, TextXAlignment = Enum.TextXAlignment.Center,
 		MaxText = 36, ZIndex = 46, Parent = winner })
 
+	-- Note composer (centre, above the JOIN area)
+	local composer = make("Frame", { Name = "NoteComposer", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 120),
+		Size = UDim2.new(0, 420, 0, 150), BackgroundColor3 = Theme.Bg, BackgroundTransparency = 0.05, Visible = false,
+		ZIndex = 25, Parent = gui }, { Theme.corner(16), Theme.stroke(Theme.Accent),
+		make("UIPadding", { PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14), PaddingTop = UDim.new(0, 12),
+			PaddingBottom = UDim.new(0, 12) }) })
+	ui.composer = composer
+	label({ Text = "LEAVE A NOTE HERE", FontFace = Theme.Heading, TextColor3 = Theme.Accent, Size = UDim2.new(1, 0, 0, 22),
+		MaxText = 18, ZIndex = 26, Parent = composer })
+	ui.noteBox = make("TextBox", { Text = "", PlaceholderText = "the headset and the map will see it", ClearTextOnFocus = false,
+		FontFace = Theme.Body, TextSize = 18, TextColor3 = Theme.Text, PlaceholderColor3 = Theme.Muted,
+		TextXAlignment = Enum.TextXAlignment.Left, BackgroundColor3 = Theme.Surface, Position = UDim2.new(0, 0, 0, 30),
+		Size = UDim2.new(1, 0, 0, 44), ZIndex = 26, Parent = composer }, { Theme.corner(10), Theme.stroke(),
+		make("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }) })
+	ui.noteSend = button({ Text = "POST", Position = UDim2.new(1, -120, 1, -44), Size = UDim2.new(0, 120, 0, 44),
+		BackgroundColor3 = Theme.Accent, TextColor3 = Theme.Bg, ZIndex = 26, Parent = composer })
+	ui.noteCancel = button({ Text = "CANCEL", Position = UDim2.new(1, -250, 1, -44), Size = UDim2.new(0, 120, 0, 44),
+		ZIndex = 26, Parent = composer })
+
+	-- "New room unlocked" banner with a JOIN prompt (the finale)
+	local unlocked = make("Frame", { Name = "Unlocked", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 110),
+		Size = UDim2.new(0, 460, 0, 120), BackgroundColor3 = Theme.Bg, BackgroundTransparency = 0.05, Visible = false,
+		ZIndex = 24, Parent = gui }, { Theme.corner(18), Theme.stroke(Theme.Accent, 2),
+		make("UIPadding", { PaddingLeft = UDim.new(0, 16), PaddingRight = UDim.new(0, 16), PaddingTop = UDim.new(0, 12),
+			PaddingBottom = UDim.new(0, 12) }) })
+	ui.unlocked = unlocked
+	label({ Text = "NEW ROOM UNLOCKED", FontFace = Theme.Heading, TextColor3 = Theme.Accent, Size = UDim2.new(1, 0, 0, 22),
+		MaxText = 18, ZIndex = 25, Parent = unlocked })
+	ui.unlockedName = label({ Text = "", FontFace = Theme.Heading, Size = UDim2.new(1, -150, 0, 44), Position = UDim2.new(0, 0, 0, 30),
+		MaxText = 34, ZIndex = 25, Parent = unlocked })
+	ui.unlockedJoin = button({ Text = "JOIN", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 30),
+		Size = UDim2.new(0, 130, 0, 52), BackgroundColor3 = Theme.Accent, TextColor3 = Theme.Bg, MaxText = 26, ZIndex = 25,
+		Parent = unlocked })
+
 	-- Rooms panel
 	local panel = make("Frame", { Name = "RoomsPanel", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.52),
 		Size = UDim2.fromScale(0.86, 0.74), BackgroundColor3 = Theme.Bg, BackgroundTransparency = 0.05, Visible = false,
@@ -176,7 +214,7 @@ function Ui.build()
 		{ make("UIGridLayout", { CellSize = UDim2.new(0.31, 0, 0, 150), CellPadding = UDim2.new(0.02, 0, 0, 12),
 			SortOrder = Enum.SortOrder.LayoutOrder }) })
 
-	for _, piece in { hud, host, ui.joinBtn, ui.banner, ui.toasts, score } do
+	for _, piece in { hud, host, ui.joinBtn, ui.banner, ui.toasts, score, composer, unlocked } do
 		table.insert(ui.scales, make("UIScale", { Scale = 1, Parent = piece }))
 	end
 	return ui
@@ -186,14 +224,14 @@ end
 function Ui.setCompact(ui, compact: boolean)
 	local list = ui.host:FindFirstChild("List")
 	if compact then
-		ui.host.Size = UDim2.new(0, 340, 0, 156)
+		ui.host.Size = UDim2.new(0, 340, 0, 0)
 		if list then
 			list.Parent = nil
 			ui.hostList = list
 		end
 		ui.hostGrid.Parent = ui.host
 	else
-		ui.host.Size = UDim2.new(0, 170, 0, 300)
+		ui.host.Size = UDim2.new(0, 170, 0, 0)
 		ui.hostGrid.Parent = nil
 		if ui.hostList then
 			ui.hostList.Parent = ui.host

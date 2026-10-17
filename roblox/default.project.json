@@ -43,7 +43,8 @@
         "GhostState": { "$className": "UnreliableRemoteEvent" },
         "Moment": { "$className": "RemoteEvent" },
         "Vote": { "$className": "RemoteEvent" },
-        "HostAction": { "$className": "RemoteEvent" }
+        "HostAction": { "$className": "RemoteEvent" },
+        "LeaveNote": { "$className": "RemoteEvent" }
       }
     }
   }

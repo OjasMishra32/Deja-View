@@ -18,6 +18,7 @@ local GhostState = Remotes:WaitForChild("GhostState") :: UnreliableRemoteEvent
 local Moment = Remotes:WaitForChild("Moment") :: RemoteEvent
 local Vote = Remotes:WaitForChild("Vote") :: RemoteEvent
 local HostAction = Remotes:WaitForChild("HostAction") :: RemoteEvent
+local LeaveNote = Remotes:WaitForChild("LeaveNote") :: RemoteEvent
 
 local player = Players.LocalPlayer
 local ui = Ui.build()
@@ -95,6 +96,9 @@ local function anyoneInLobby(): boolean
 	return false
 end
 
+-- Big-screen camera (table laptop / projector): follows the judge smoothly. Local to this client.
+local bigScreen = false
+
 -- Phones start with the host panel folded away so it doesn't cover the joystick.
 local hostOpen = not UserInputService.TouchEnabled or UserInputService.KeyboardEnabled
 local bootDone = false
@@ -163,13 +167,16 @@ local function refresh()
 	ui.followBtn.Text = "FOLLOW: " .. (if W("Follow") then "ON" else "OFF")
 	ui.mockBtn.Text = "MOCK JUDGE: " .. (if W("MockJudge") then "ON" else "OFF")
 	ui.realityBtn.Visible = W("HasImagined") == true and inRoom
+	ui.noteBtn.Visible = inRoom and phase == "room"
+	ui.huntBtn.Text = if round == "hunt" then "END HUNT" else "START HUNT"
+	ui.bigBtn.Text = "BIG SCREEN: " .. (if bigScreen then "ON" else "OFF")
 
 	-- banner
 	local banner = W("Banner") or ""
 	ui.banner.Visible = banner ~= ""
 	ui.banner.Text = banner
 
-	ui.score.Visible = round == "playing" or round == "countdown" or round == "ended"
+	ui.score.Visible = round == "playing" or round == "countdown" or round == "ended" or round == "hunt"
 end
 
 local function renderScores()
@@ -177,6 +184,17 @@ local function renderScores()
 		if c:IsA("Frame") then
 			c:Destroy()
 		end
+	end
+	if W("RoundState") == "hunt" then
+		local okH, h = pcall(HttpService.JSONDecode, HttpService, W("HuntJson") or "")
+		if okH and type(h) == "table" then
+			Ui.scoreRow(ui.scoreRows, "HUNT", tostring(h.total or 0) .. " LABELS", Theme.Accent, 0)
+			for i, r in h.rows or {} do
+				local done = r.found >= (h.total or 0)
+				Ui.scoreRow(ui.scoreRows, r.name, r.found .. " / " .. tostring(h.total or 0), if done then Theme.Accent else Theme.Text, i)
+			end
+		end
+		return
 	end
 	local ok, s = pcall(HttpService.JSONDecode, HttpService, W("ScoresJson") or "")
 	if not ok or type(s) ~= "table" then
@@ -217,6 +235,33 @@ Moment.OnClientEvent:Connect(function(m)
 		end)
 	elseif m.type == "roundStart" then
 		Ui.big(ui, "GO!", "The judge is it · " .. tostring(m.duration) .. " s", Theme.Accent, 1.2)
+	elseif m.type == "found" then
+		if m.userId == player.UserId then
+			Ui.big(ui, "FOUND " .. string.upper(m.label), m.found .. " / " .. m.total, Theme.Accent, 1.2)
+			Effects.sound("tick")
+			-- tick the label off, just for this player
+			local labels = workspace:FindFirstChild("Room") and workspace.Room:FindFirstChild("Labels")
+			local part = labels and labels:FindFirstChild("Label" .. tostring(m.index))
+			local title = part and part:FindFirstChild("Title", true)
+			if title and title:IsA("TextLabel") then
+				title.Text = "✓ " .. string.upper(m.label)
+				title.TextColor3 = Theme.Muted
+			end
+		else
+			Ui.toast(ui, string.upper(m.name) .. " FOUND " .. string.upper(m.label) .. " · " .. m.found .. "/" .. m.total)
+		end
+	elseif m.type == "unlocked" then
+		ui.unlockedName.Text = string.upper(m.name or "")
+		ui.unlockedId = m.id
+		ui.unlocked.Visible = true
+		Effects.sound("win")
+		local stamp = os.clock()
+		ui.unlockedStamp = stamp
+		task.delay(12, function()
+			if ui.unlockedStamp == stamp then
+				ui.unlocked.Visible = false
+			end
+		end)
 	elseif m.type == "winner" then
 		ui.winTitle.Text = m.title
 		ui.winSub.Text = m.mvp or ""
@@ -266,6 +311,46 @@ end)
 ui.endBtn.Activated:Connect(function()
 	host("end_round")
 end)
+ui.huntBtn.Activated:Connect(function()
+	host(if W("RoundState") == "hunt" then "end_hunt" else "start_hunt")
+end)
+ui.bigBtn.Activated:Connect(function()
+	bigScreen = not bigScreen
+	if not bigScreen then
+		workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+	end
+	refresh()
+end)
+ui.noteBtn.Activated:Connect(function()
+	ui.composer.Visible = not ui.composer.Visible
+	if ui.composer.Visible then
+		ui.noteBox:CaptureFocus()
+	end
+end)
+local function sendNote()
+	local text = ui.noteBox.Text
+	if text:match("%S") then
+		LeaveNote:FireServer(text)
+	end
+	ui.noteBox.Text = ""
+	ui.composer.Visible = false
+end
+ui.noteSend.Activated:Connect(sendNote)
+ui.noteBox.FocusLost:Connect(function(enter)
+	if enter then
+		sendNote()
+	end
+end)
+ui.noteCancel.Activated:Connect(function()
+	ui.noteBox.Text = ""
+	ui.composer.Visible = false
+end)
+ui.unlockedJoin.Activated:Connect(function()
+	if ui.unlockedId then
+		Vote:FireServer(ui.unlockedId)
+	end
+	ui.unlocked.Visible = false
+end)
 ui.lobbyAllBtn.Activated:Connect(function()
 	host("lobby_all")
 end)
@@ -292,11 +377,13 @@ end)
 
 -- Attribute wiring
 for _, name in { "Phase", "RoomName", "LoadProgress", "LoadStage", "Banner", "JudgeHere", "JudgeName", "RoundState",
-	"AutoJoin", "Follow", "MockJudge", "HasImagined", "JudgeRoom" } do
+	"AutoJoin", "Follow", "MockJudge", "HasImagined", "JudgeRoom", "LabelCount" } do
 	workspace:GetAttributeChangedSignal(name):Connect(refresh)
 end
 workspace:GetAttributeChangedSignal("RoomsJson"):Connect(renderCards)
 workspace:GetAttributeChangedSignal("ScoresJson"):Connect(renderScores)
+workspace:GetAttributeChangedSignal("HuntJson"):Connect(renderScores)
+workspace:GetAttributeChangedSignal("RoundState"):Connect(renderScores)
 workspace:GetAttributeChangedSignal("SceneId"):Connect(function()
 	Ghosts.clear()
 	reality = false
@@ -326,10 +413,38 @@ RunService.RenderStepped:Connect(function(dt)
 		local left = math.max(0, (W("RoundEndsAt") or 0) - workspace:GetServerTimeNow())
 		ui.timer.Text = string.format("%d:%02d", left // 60, math.floor(left % 60))
 		ui.timer.TextColor3 = if left < 10 then Theme.Danger else Theme.Text
+	elseif round == "hunt" then
+		local left = math.max(0, (W("RoundEndsAt") or 0) - workspace:GetServerTimeNow())
+		ui.timer.Text = string.format("%d:%02d", left // 60, math.floor(left % 60))
+		ui.timer.TextColor3 = Theme.Accent
 	elseif round == "countdown" then
 		ui.timer.Text = "READY"
 	elseif round == "ended" then
 		ui.timer.Text = "DONE"
+	end
+	if bigScreen then
+		-- Smooth follow: behind and above the judge (or orbit the room when nobody is in the headset).
+		local cam = workspace.CurrentCamera
+		cam.CameraType = Enum.CameraType.Scriptable
+		local head = Ghosts.judgeHead()
+		local target, want
+		if head then
+			local look = head.CFrame.LookVector
+			local flat = Vector3.new(look.X, 0, look.Z)
+			flat = if flat.Magnitude > 0.01 then flat.Unit else Vector3.new(0, 0, -1)
+			target = head.Position
+			want = target - flat * 16 + Vector3.new(0, 9, 0)
+		else
+			local room = workspace:FindFirstChild("Room")
+			local mn, mx = room and room:GetAttribute("BoundsMin"), room and room:GetAttribute("BoundsMax")
+			local centre = if typeof(mn) == "Vector3" and typeof(mx) == "Vector3" then (mn + mx) / 2 else Vector3.zero
+			local a = os.clock() * 0.1
+			target = centre
+			want = centre + Vector3.new(math.cos(a) * 30, 22, math.sin(a) * 30)
+		end
+		local k = math.min(1, dt * 2.5)
+		local pos = cam.CFrame.Position:Lerp(want, k)
+		cam.CFrame = CFrame.lookAt(pos, target)
 	end
 	if os.clock() - lastSubjectCheck > 0.5 then
 		lastSubjectCheck = os.clock()

@@ -8,6 +8,7 @@ local World = require(DV.World)
 local Rooms = require(DV.Rooms)
 local Presence = require(DV.Presence)
 local TagGame = require(DV.TagGame)
+local Extras = require(DV.Extras)
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local Vote = Remotes:WaitForChild("Vote") :: RemoteEvent
@@ -15,7 +16,7 @@ local HostAction = Remotes:WaitForChild("HostAction") :: RemoteEvent
 
 for name, value in {
 	Phase = "lobby", SceneId = "", RoomName = "", LoadProgress = 0, LoadStage = "", Banner = "",
-	Offline = false, JudgeHere = false, JudgeName = "", JudgeRoom = "", RoundState = "idle", RoundEndsAt = 0,
+	Offline = false, JudgeHere = false, JudgeName = "", JudgeRoom = "", LabelCount = 0, HuntJson = "", RoundState = "idle", RoundEndsAt = 0,
 	CountdownEndsAt = 0, RoundIt = "", ScoresJson = "", RoomsJson = "[]", AutoJoin = Config.AUTO_JOIN_DEFAULT,
 	Follow = true, MockJudge = false, HasImagined = false, UsingMock = Config.useMock(),
 } do
@@ -62,10 +63,25 @@ local actions: { [string]: (Player, any) -> () } = {
 		end)
 	end,
 	start_round = function(p)
+		if Extras.huntActive() then
+			World.toast("Finish the hunt first", p)
+			return
+		end
 		TagGame.start(p)
 	end,
 	end_round = function()
 		TagGame.finish()
+		Extras.endHunt(nil)
+	end,
+	start_hunt = function(p)
+		if TagGame.isPlaying() then
+			World.toast("Finish the tag round first", p)
+			return
+		end
+		Extras.startHunt(p)
+	end,
+	end_hunt = function()
+		Extras.endHunt(nil)
 	end,
 	auto_join = function(_, v)
 		workspace:SetAttribute("AutoJoin", v == true)
@@ -105,6 +121,7 @@ HostAction.OnServerEvent:Connect(function(player, action, value)
 end)
 
 TagGame.start10Hz()
+Extras.start()
 -- First requests wait for the live config so they go to dejaview_base, not the built-in fallback.
 -- (Unpublished places take ~30 s to fail; 10 s is the cap.)
 Config.waitLoaded(10)
