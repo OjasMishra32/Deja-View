@@ -8,6 +8,25 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 5 (Sat ~3:30 AM): items 1-4, 6 and 7 are merged, great work. Next: make the real places real games.**
+>
+> The worlds are rebuilt from our own footage, so the actual objects are there. Turn them into games people play:
+> 1. **Ping pong at the court** (`the-courts`): a playable table-tennis game on the real table, 1v1, phone and Quest
+>    controls (tap or swing to hit), the score on a floating board, rally-length record. Physics simple and fun beats
+>    realistic.
+> 2. **Foosball at the court:** a 2-player foosball game on the real foosball table (rods on keys / touch sliders),
+>    goals counted on a board.
+> 3. **Giant chess** (`chess-room`): a real chess game on the giant board where the players in our video played: walk
+>    up to a piece and move it, legal moves only, turn indicator, checkmate banner. Two Roblox players, or a Roblox player
+>    against the person in the headset.
+> 4. **Where the objects are:** `GET BASE/api/roblox/<id>/model` will include `features` in studs, the same frame as
+>    the map: `pingPongTable` (4 top corners + height), `foosballTable` (4 top corners), `chessBoard` (4 corners, which
+>    corner is a1). Build against a config table you can tune by hand now; switch to `features` when the worlds land
+>    (the court first, Saturday morning).
+> 5. **Scores:** send each finished game as `POST /event {type:"game", game:"pingpong"|"foosball"|"chess", winner,
+>    score}`. The headset shows it, and it lands in the replay.
+> 6. **Still open from Update 4:** item 5 (Roblox on the Quest, with Ojasva Saturday afternoon), 8 (phones), 9 (clips).
+
 > **Update 4 (Sat ~3:10 AM): the server is public. Your work list, in order.**
 >
 > **The link (live now):** `https://prozac-covered-burke-oklahoma.trycloudflare.com` (it changes if the tunnel
@@ -159,8 +178,8 @@ These came out of checking the Roblox docs. Do not re-litigate them on Saturday.
 3. **One map response by default, chunks only if needed.** Roblox does not document a maximum response size. 6,000
    parts is about 270 KB of JSON, so tonight's transport test (9.3) also fetches a 300 KB file to prove it works. If it
    does not, ask for `maxParts=3000`, or use the optional `chunk=N` query (chunks of at most 2,500 parts, about
-   120 KB, each repeating the header fields plus `chunk` and `chunks`). Chunks are a P2 for Ojasva: confirm with him
-   before you rely on them.
+   120 KB, each repeating the header fields plus `chunk` and `chunks`). Chunks work: `chunk` is **1-based** (loop
+   `for c = 1, chunks`; `chunk=0` is a 400).
 4. **HTTP runs only on the Roblox game server.** LocalScripts cannot use HttpService. One server Script owns the network
    and tells clients what to show through attributes and RemoteEvents.
 5. **Presence is polled at 4 Hz.** HttpService can stream (SSE or WebSockets) only in Studio, so a published game cannot
@@ -344,8 +363,9 @@ Common rules:
 - `spawn` is a free floor point: `y` is the floor height, so add 3 studs for the root part. It sits away from the
   headset spawn at the origin, so nobody spawns inside the judge.
 - Optional query `maxParts` (default 6000, cap 12000): the server coarsens the voxels until the room fits.
-- Optional query `chunk=N` (P2 on Ojasva's side): chunks of at most 2,500 parts, each repeating the header fields plus
-  `chunk` and `chunks`. Without `chunk`, all parts come in one response.
+- Optional query `chunk=N`: chunks of at most 2,500 parts, each repeating the header fields plus `chunk` and
+  `chunks`. **1-based:** request `chunk=1` first, then up to `chunks` (`chunk=0` is a 400). Without `chunk`, all parts
+  come in one response.
 - Optional extra fields: `ceilingY` (studs, for the invisible lid), `bounds` (studs), and a **10th value** per part
   (`1` = the AI imagined this block, `0` = the camera captured it) for the reality-check tint (7.8). Read `p[10]` only
   if it is not nil. When `ceilingY` or `bounds` is missing, compute them from the parts (the highest part top, and the
