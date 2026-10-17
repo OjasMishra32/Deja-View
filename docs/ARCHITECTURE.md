@@ -155,6 +155,41 @@ $HPG_ROOT = /blue/phz3152/sbernalorta/thirdwheel
   ```
 - Video playback needs a user gesture: start it from Enter VR or a play button. Audio comes from the video element.
 
+## Inputs per mode
+
+- `rentfree` accepts one or more photos **or a video** (game clips, phone clips). With several photos the job uses the
+  best one; with a video it picks the sharpest, steadiest frame (variance of the Laplacian, penalise motion) and
+  generates from that. A prompt alone (no files) is also valid: FlashWorld supports text-to-world.
+- `thirdwheel` accepts one video (best from a still camera). An optional prompt describes the room.
+- `reconstruct` accepts 8 or more photos or a video (frames are sampled).
+
+### FlashWorld runner CLI (pipeline/flashworld_run.py)
+
+```
+python pipeline/flashworld_run.py (--image IMG | --prompt TEXT) [--prompt TEXT] --out OUTDIR [--progress progress.json]
+```
+Writes `OUTDIR/world.spz`, `OUTDIR/thumb.jpg` and `OUTDIR/scene.json` (a JobResult with `world`). It also writes
+`OUTDIR/input_camera.json` (`{width, height, fx, fy, cx, cy, position, quaternion}` for the input view in the
+viewer frame) and `OUTDIR/input_depth.npy` (float32 depth of the world rendered at that camera, in viewer units)
+so the Third Wheel pipeline can align the video's depth with the room. It is importable too:
+`generate(image=None, prompt=None, out_dir=..., progress=None) -> dict` keeps the model loaded between calls, for the worker.
+`python pipeline/anysplat_run.py --images DIR --out OUTDIR` follows the same output convention (`world.ply`).
+
+## Controls (also in the user-facing guide)
+
+Desktop: click to look (pointer lock), WASD walk, Shift run, Space play/pause the video, R back to spawn, F fly mode
+(Q/E down/up), M mute, H help, and an Enter VR button. Phones: left-half drag to move, right-half drag to look.
+
+Quest 3S (WebXR, `local-floor`): left stick walks relative to the head direction, right stick left/right snaps 30 degrees,
+right stick forward aims a teleport arc and releasing teleports onto a valid floor, A play/pause, B back to spawn,
+trigger selects UI. Use a short comfort vignette while moving. `?xremu=1` installs the `iwer` WebXR emulator (Quest 3
+profile) so XR code paths can be tested in desktop Chrome.
+
+## Ports during development
+
+Main server 8787 (`bun run dev`). Throwaway test harnesses: viewer 8790, Third Wheel layer 8791. Kill only processes
+you started.
+
 ## Quality bar
 
 - It must **look great**: correct orientation, floor at 0, spawn inside the room facing the content, no black
