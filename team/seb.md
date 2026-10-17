@@ -10,6 +10,31 @@ up in the headset) and powers the finale (2:00 to 2:25, the judge's own photo be
 
 ---
 
+**Update 6 (Sat ~7 AM): the real table comes from the server.** Your ping pong is merged on `main` (67de0b3),
+great work.
+
+1. **`features` in `/model` and `/map`** (`contracts.md` 6.6), live once Ojasva restarts the server (he posts it).
+   Studs, the map's frame (metres × 3.57, floor y = 0, no flips). The Game Lawn (`the-courts`):
+
+   ```json
+   "pingPongTable": { "corners": [[0.01, 2.713, -22.161], [7.349, 2.713, -15.694], [3.75, 2.713, -11.609],
+                                  [-3.589, 2.713, -18.076]],
+                      "height": 2.713, "centre": [1.88, 2.713, -16.885], "length": 9.782, "width": 5.444,
+                      "yaw": -2.2931, "net": [[3.68, 2.713, -18.927], [0.08, 2.713, -14.843]] }
+   ```
+
+   Measured from the splats and checked on the real photos; the net's own splats sit 0.3 mm off the `net` line.
+2. **Nothing to change to read it:** `placeForScene` in `PingPong.luau` already takes `features.pingPongTable.corners`
+   through `Sim.fromCorners` before the Config table, and gets your `LEN` × `WID` (9.78 × 5.44). `centre`, `length`,
+   `width` and `yaw` are exactly what `fromCorners` returns, so use them or ignore them. No mismatch found.
+3. **Drop the hand-tuned table** once a Play test shows `features` arriving: the temporary visible table in
+   `maybePlace`, and any tuning on `Config.PINGPONG_TABLES["the-courts"]` (y 3.0, yaw 0.781). The real top is 0.29
+   studs lower and 3.9° turned from it, so check the bounce and the ball at rest on the real top once more. The Config
+   entry is Shivin's; it now only matters when `features` is missing (mock).
+4. **Test:** `Rooms.modelInfo` caches `/model` once per Roblox server, so stop and start the test after the restart.
+5. **The rooms are real now:** the Game Lawn's photo-textured v2 room (asset `91874647541773`, with six sky faces in
+   `sky`) and the Brick House apartment (asset `96179943812932`) are uploaded and served by `/model`.
+
 **Update 5 (Sat ~6 AM): Roblox games.** From now to the freeze you turn our worlds into real Roblox games, on top
 of Shivin's game in `roblox/` (Luau + Rojo): **real-physics ping pong** on the real table at the Infinity Hall Game
 Lawn now, then **pool** on the game-room table we film today. This block is your build guide (A to F). Read

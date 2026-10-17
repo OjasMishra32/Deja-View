@@ -420,6 +420,25 @@ Points are `[x, y, z]` arrays. Example (a table tennis table and an 8 ft pool ta
 - Already read by the game, in the same frame: `foosballTable` (`corners` as for `pingPongTable`) and `chessBoard`
   (`corners` plus `a1`, the 1-based index of the a1 corner).
 - The game reads `/model` once per Roblox server: features added later reach the servers started after them.
+- Where they come from: `data/scenes/<id>/features.json` (metres, world.spz's own frame, measured from the splats),
+  taken to the map frame the way `pipeline/roblox_map.py` takes the splats (world.transform, the floor to y = 0, then
+  × `studsPerMeter`). Today: `the-courts` (`pingPongTable`, `foosballTable`) and `chess-room` (`chessBoard`). A world
+  without the file, or with a broken one, sends no `features`.
+- `GET BASE/api/roblox/:sceneId/map` carries the same `features` (after `walkBounds`, in every chunk too); its ETag
+  changes with them. `chess-room` has no `/model` yet (404), so its board is in `/map` only.
+- Extra fields, all studs in the same frame (the game may ignore them):
+  - `pingPongTable` and `foosballTable`: `centre`, `length`, `width` and `yaw`, exactly what PingPongSim
+    `fromCorners` works out from `corners` (long axis = the longer of corners 1-2 and 2-3,
+    `yaw = atan2(-long.x, -long.z)`, so `CFrame.new(centre) * CFrame.Angles(0, yaw, 0)` has its -Z along the long axis).
+  - `pingPongTable.net`: the net line's two ends `[[x, y, z], [x, y, z]]` on the top (the midpoints of the long sides).
+  - `foosballTable`: `corners` are the playing field box (the inside of the four walls) on the field the ball rolls
+    on, so `y`, `height` and `fieldHeight` are the field (0.74 m, 2.64 studs at the court) and the table frame's y = 0
+    is the pitch, as Foosball.luau plays it; `rimHeight` is the cabinet top (0.88 m, 3.13 studs); `rods` is the unit
+    vector along the rods (across the table: the table frame's +X); `rodHeight`; `rodOffsets`: each rod's position
+    along the long axis (corner 1 towards corner 2, the table frame's -Z, so local z = -offset) from `centre`.
+    Players stand on the long sides (corners 1-2 and 3-4).
+  - `chessBoard`: `cornerSquares` (the square at each corner, e.g. `["a8", "h8", "h1", "a1"]`), `centre`, `size`
+    (one side), `square`, and the unit vectors `files` (a towards h) and `whiteForward` (rank 1 towards 8).
 
 ---
 

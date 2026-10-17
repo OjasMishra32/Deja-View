@@ -8,12 +8,13 @@
 //                                            or a sky face (sky-front.png, ...), for a Studio import; nothing else.
 //   GET  /api/roblox/:sceneId/model          the sidecar (data/scenes/<id>/roblox-model.json) plus `glbUrl`, `parts`
 //                                            ([{file, url, assetId?, bounds?}]), `bounds`, `walkBounds` and
-//                                            `floorY: 0` (studs, map frame: model-frame.ts), `assetId` (the first
-//                                            part's, only once EVERY part is uploaded, so a game never loads half a
-//                                            room), `sky` ({front, back, left, right, up, down} asset ids once all
-//                                            six are uploaded, else null), `skyFiles` and `upload` (where the uploads
-//                                            stand). With an uploader, a model that was never uploaded starts
-//                                            uploading.
+//                                            `floorY: 0` (studs, map frame: model-frame.ts), `features` (its tables
+//                                            from features.json in studs, contracts 6.6: features.ts) when it has
+//                                            them, `assetId` (the first part's, only once EVERY part is uploaded, so
+//                                            a game never loads half a room), `sky` ({front, back, left, right, up,
+//                                            down} asset ids once all six are uploaded, else null), `skyFiles` and
+//                                            `upload` (where the uploads stand). With an uploader, a model that was
+//                                            never uploaded starts uploading.
 //   POST /api/roblox/:sceneId/model          start (or retry) the uploads now; 202 with the upload state.
 //
 // A v1 sidecar describes one file (roblox.glb, `sha1`); a v2 sidecar lists `parts` [{file, sha1, ...}] (each under
@@ -30,8 +31,13 @@
 // <id> until it is done. Creator Hub (Open Cloud, "Usage guide for assets"): Decal/Image takes .png up to 8000 px,
 // and the operation's `assetId` is what goes after rbxassetid:// in a texture property. Every assetId is stored in
 // the sidecar next to the sha1 of the file it belongs to, so a rebuilt file is uploaded again instead of pointing at
-// the old one. LoadAssetAsync only loads assets the experience's creator owns, so the creator here must own the
-// experience.
+// the old one, and in the scene's ledger (roblox-uploads.json, by sha1), so a rebuild's fresh sidecar reuses the asset
+// of any file that came out byte for byte the same instead of uploading it again. LoadAssetAsync only loads assets the
+// experience's creator owns, so the creator here must own the experience.
+//
+// Sky faces go up as Decals (Open Cloud has no separate image upload for PNGs): the ids in `sky` are Decal asset ids.
+// Studio's Properties panel swaps a pasted Decal id for the Image it wraps; a script setting Sky.SkyboxFt does not, so
+// the game resolves each id to its Image once (InsertService:LoadAsset(id) -> the Decal's Texture) before using it.
 
 import { createHash } from 'node:crypto';
 import { readFile, rename, stat, writeFile } from 'node:fs/promises';
@@ -39,10 +45,17 @@ import { join } from 'node:path';
 import type { Scene } from '../../shared/types.ts';
 import { isVideoScene } from '../copy.ts';
 import { fail, json, keyRejected, methodNotAllowed, pathSegment, preflight, SCENE_ID_RE, SOCIAL_CORS, type RequestIpSource } from './http.ts';
+import { FEATURES_FILE, sceneFeatures } from './features.ts';
 import { modelFrame } from './model-frame.ts';
 
 export const MODEL_FILE = 'roblox.glb';
 export const MODEL_SIDECAR = 'roblox-model.json';
+/**
+ * Every upload this server made for a scene, by the sha1 of the file: {"<sha1>": {assetId, assetType, file, ...}}.
+ * A rebuild writes a fresh sidecar without upload records; a file in it that went up before (a sky face that came
+ * out the same, an unchanged part) takes its assetId from here instead of becoming one more asset on the account.
+ */
+export const UPLOAD_LEDGER = 'roblox-uploads.json';
 /** Open Cloud's limit for one asset upload ("up to 20 MB"; read as decimal megabytes, the stricter reading). */
 export const MAX_UPLOAD_BYTES = 20_000_000;
 export const ROBLOX_API = 'https://apis.roblox.com';
@@ -205,6 +218,17 @@ export interface UploadStatus {
 export interface UploadRecord {
   assetId?: string;
   sha1?: string;
+  operationId?: string;
+  at?: number;
+  /** Set when the assetId came from the ledger (an earlier upload of the same file), not a new upload. */
+  reused?: boolean;
+}
+
+/** One ledger entry (UPLOAD_LEDGER). */
+export interface LedgerEntry {
+  assetId: string;
+  assetType: 'Model' | 'Decal';
+  file?: string;
   operationId?: string;
   at?: number;
 }
@@ -393,10 +417,35 @@ export class RobloxModelService {
       const name = String(first.name ?? sceneId);
       const nParts = modelItems(first).length;
       const t0 = Date.now();
+      // the ledger learns every upload the sidecar records (older servers kept them only there) before this job
+      // replaces anything
+      const ledger = await this.ledger(sceneId);
+      let learned = false;
+      for (const it of uploadItems(first)) {
+        const id = currentId(it);
+        if (id && !ledger[it.sha1]) {
+          ledger[it.sha1] = { assetId: id, assetType: it.kind === 'sky' ? 'Decal' : 'Model', file: it.file, operationId: it.record?.operationId, at: it.record?.at };
+          learned = true;
+        }
+      }
+      if (learned) await this.writeLedger(sceneId, ledger);
+      let uploaded = 0;
       for (const it of todo) {
         const bytes = new Uint8Array(await readFile(this.filePath(sceneId, it.file)));
         const sha1 = createHash('sha1').update(bytes).digest('hex');
         if (it.sha1 && it.sha1 !== sha1) throw new Error(`${it.file} on disk is not the file the sidecar describes; rebuild the model.`);
+        const assetType = it.kind === 'sky' ? 'Decal' : 'Model';
+        const known = ledger[sha1];
+        if (known && known.assetType === assetType) {
+          // this very file went up before: point at that asset instead of making another one
+          const s = await this.sidecar(sceneId);
+          if (!s) return;
+          const rec: UploadRecord = { assetId: known.assetId, sha1, operationId: known.operationId, at: known.at, reused: true };
+          if (!this.record(s, it, sha1, rec)) return;
+          await this.writeSidecar(sceneId, s);
+          this.log(`[roblox-model] ${sceneId}: ${it.file} is unchanged since it went up as asset ${known.assetId}; reused`);
+          continue;
+        }
         const label =
           it.kind === 'sky'
             ? `Déjà View: ${name} sky ${it.face}`
@@ -421,10 +470,13 @@ export class RobloxModelService {
           return;
         }
         await this.writeSidecar(sceneId, s);
+        ledger[sha1] = { assetId: r.assetId, assetType, file: it.file, operationId: r.operationId, at: rec.at };
+        await this.writeLedger(sceneId, ledger);
+        uploaded++;
         this.log(`[roblox-model] ${sceneId}: uploaded ${it.file} as asset ${r.assetId}`);
       }
       this.failures.delete(sceneId);
-      if (todo.length) this.log(`[roblox-model] ${sceneId}: ${todo.length} file(s) uploaded in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+      if (uploaded) this.log(`[roblox-model] ${sceneId}: ${uploaded} file(s) uploaded in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
     } catch (e) {
       const error = (e as Error).message || 'The upload failed.';
       this.failures.set(sceneId, { sig, at: Date.now(), error });
@@ -459,6 +511,31 @@ export class RobloxModelService {
       if (s.sha1 === sha1) s.upload = rec;
     }
     return true;
+  }
+
+  /** The scene's ledger (UPLOAD_LEDGER): sha1 -> the asset that file became; {} when there is none yet. */
+  async ledger(sceneId: string): Promise<Record<string, LedgerEntry>> {
+    try {
+      const raw = JSON.parse(await readFile(join(this.opts.sceneDir(sceneId), UPLOAD_LEDGER), 'utf8')) as unknown;
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+      const out: Record<string, LedgerEntry> = {};
+      for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+        const e = v as Partial<LedgerEntry> | null;
+        if (/^[0-9a-f]{40}$/.test(k) && e && typeof e.assetId === 'string' && /^\d{1,20}$/.test(e.assetId) && (e.assetType === 'Model' || e.assetType === 'Decal')) {
+          out[k] = e as LedgerEntry;
+        }
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  }
+
+  private async writeLedger(sceneId: string, ledger: Record<string, LedgerEntry>): Promise<void> {
+    const path = join(this.opts.sceneDir(sceneId), UPLOAD_LEDGER);
+    const tmp = `${path}.${process.pid}.${Date.now()}.tmp`;
+    await writeFile(tmp, JSON.stringify(ledger, null, 1));
+    await rename(tmp, path);
   }
 
   private async writeSidecar(sceneId: string, s: Sidecar): Promise<void> {
@@ -585,6 +662,9 @@ export function createRobloxModelRoutes(deps: ModelRouteDeps): Record<string, Mo
     frame.partBounds.forEach((b, i) => {
       if (b) parts[i]!.bounds = b;
     });
+    // the tables, through the same floor and stud scale as the model (contracts 6.6)
+    const { sceneFloorY, studsPerMeter } = frame.fields as { sceneFloorY?: number; studsPerMeter: number };
+    const features = await sceneFeatures(models.filePath(found.id, FEATURES_FILE), found.scene, sceneFloorY ?? null, studsPerMeter, log);
     const faces = skyItems(s);
     const body: Record<string, unknown> = {
       ...rest,
@@ -595,6 +675,7 @@ export function createRobloxModelRoutes(deps: ModelRouteDeps): Record<string, Mo
       skyFiles: faces.length ? Object.fromEntries(faces.map((it) => [it.face!, `${base}/${it.file}`])) : null,
       upload,
     };
+    if (features) body.features = features;
     const assetId = RobloxModelService.currentAssetId(s);
     if (assetId) body.assetId = assetId;
     const res = json(body);

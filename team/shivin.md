@@ -8,6 +8,54 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 12 (Sat ~7 AM): the real tables come from the server, two real rooms are uploaded. Fix chess and foosball.**
+> **New server field** (`contracts.md` 6.6), live once Ojasva restarts the server (he posts it): `features` in `/model`
+> and in `/map` (after `walkBounds`, every chunk too). Studs, the map's frame (metres × 3.57, floor y = 0, no flips).
+> `Rooms.modelInfo` caches `/model` once per Roblox server, so stop and start a test after the restart.
+> `the-courts`, in `/model` and `/map`:
+>
+> ```json
+> "pingPongTable": { "corners": [[0.01, 2.713, -22.161], [7.349, 2.713, -15.694], [3.75, 2.713, -11.609],
+>                                [-3.589, 2.713, -18.076]],
+>                    "height": 2.713, "centre": [1.88, 2.713, -16.885], "length": 9.782, "width": 5.444,
+>                    "yaw": -2.2931, "net": [[3.68, 2.713, -18.927], [0.08, 2.713, -14.843]] },
+> "foosballTable": { "corners": [[0.21, 2.642, -9.202], [1.151, 2.642, -5.077], [-1.296, 2.642, -4.519],
+>                                [-2.237, 2.642, -8.644]],
+>                    "height": 2.642, "centre": [-0.543, 2.642, -6.86], "length": 4.231, "width": 2.51,
+>                    "yaw": -2.9173, "rods": [-0.975, 0, 0.2224], "fieldHeight": 2.642, "rimHeight": 3.131,
+>                    "rodHeight": 2.97, "rodOffsets": [-1.839, -1.321, -0.793, -0.261, 0.261, 0.796, 1.296, 1.831] }
+> ```
+>
+> `chess-room`, in `/map` only (its `/model` is 404, no textured model yet):
+>
+> ```json
+> "chessBoard": { "corners": [[-2.789, 0, -17.965], [6.019, 0, -11.837], [-0.109, 0, -3.03], [-8.917, 0, -9.158]],
+>                 "a1": 4, "cornerSquares": ["a8", "h8", "h1", "a1"], "centre": [-1.449, 0, -10.497], "size": 10.73,
+>                 "square": 1.341, "files": [0.8209, 0, 0.5711], "whiteForward": [0.5711, 0, -0.8209] }
+> ```
+>
+> All three were measured from the splats and checked on the real photos. What reads them, and what to fix:
+> - **Ping pong** (`Pong.luau` `placeFromFeature`, and Seb's `PingPong.luau`): reads `corners`, no change needed.
+>   `Config.PINGPONG_TABLES["the-courts"]` is now only the fallback when `features` is missing.
+> - **Chess never gets the board:** `Main` passes only `Rooms.modelInfo(...).features`, and `chess-room`'s `/model` is
+>   404, so `Chess.placeForRoom` falls back to the empty `Config.CHESS_BOARDS`. Pass the map's `features` when the
+>   model has none.
+> - **Chess is turned 90°:** `Chess.luau:359` `CFrame.Angles(0, -math.pi / 4, 0)` should be `+math.pi / 4` (the
+>   comment on 358 has the direction backwards), or use `fb.whiteForward` directly. Today the game's a1 (dark) lands
+>   on the real a8 square.
+> - **Foosball stops on the real table** (4.23 × 2.51 studs, not 16 × 9): the rod range on `Foosball.luau:288` is
+>   2.51 / 2 − 2.9 − 0.55 = −2.2, so `math.clamp` on line 148 errors every frame (min above max, per the Luau docs; not
+>   run in Studio) and the ball never moves. The men at ±2.4 / ±2.6 stand outside the walls (±1.255), `GOAL_HALF` 1.8
+>   is wider than the table, the rods float 1.6 studs up (real: 0.33), and the real table has 8 rods. Scale the layout
+>   to `LEN` / `WID`, or use `rodOffsets` (local z = −offset), `rodHeight` and `rods`. `corners` and `height` are the
+>   field, so the table frame's y = 0 is the pitch, as you play it; `rimHeight` is the cabinet top. Players stand on
+>   the long sides (corners 1-2 and 3-4), not at the ends.
+>
+> **Rooms, uploaded and served by `/model` now:** the Game Lawn's photo-textured v2 room (`the-courts`, asset
+> `91874647541773`, which replaced `140213715469147` at ~7:20 with the ceiling closed; six sky faces in `sky`) and the
+> Brick House apartment (`brick-apartment`, asset `96179943812932`). Delete `ServerStorage.Rooms.the-courts` and
+> `ServerStorage.Rooms.brick-apartment` (a Studio import always wins), play-test both, then File → Publish to Roblox.
+
 > **Update 11 (Sat ~5:30 AM): a real floor, and the model lines itself up. Pull, sync, test the court, publish.**
 > **Changed in the game code on `main`** (MapBuilder, Rooms, Presence, Config, one line in Main; no new files). It has
 > not been compiled or run in Studio yet (no Luau toolchain on Ojasva's Mac), so you are the first: post any Output
