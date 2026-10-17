@@ -243,3 +243,16 @@ describe('unlisted scenes', () => {
     expect((await app.handle(new Request('http://x/api/scenes/home-test1')))!.status).toBe(200);
   });
 });
+
+describe('unlisted id prefixes', () => {
+  test('a scene whose id starts with a configured prefix reads as unlisted, even when its scene.json says nothing', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'tw-prefix-'));
+    roots.push(root);
+    const store = new SceneStore(join(root, 'scenes'), ['oh-cand-']);
+    const at = new Date().toISOString();
+    await store.save({ id: 'oh-cand-refit', name: 'Home', mode: 'rentfree', status: 'ready', createdAt: at, updatedAt: at });
+    await store.save({ id: 'old-house', name: 'Home', mode: 'rentfree', status: 'ready', createdAt: at, updatedAt: at });
+    expect((await store.get('oh-cand-refit'))!.unlisted).toBe(true);
+    expect((await store.get('old-house'))!.unlisted).toBeUndefined();
+  });
+});

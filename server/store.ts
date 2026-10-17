@@ -53,7 +53,14 @@ export class SceneStore {
   private cache = new Map<string, { mtimeMs: number; scene: Scene }>();
   private locks = new Map<string, Promise<unknown>>();
 
-  constructor(readonly dir: string) {}
+  /**
+   * unlistedPrefixes: scene ids starting with one of these are test builds (THIRDWHEEL_UNLISTED, comma separated): they
+   * read as `unlisted`, so no list of worlds shows them, whatever their scene.json says.
+   */
+  constructor(
+    readonly dir: string,
+    readonly unlistedPrefixes: readonly string[] = [],
+  ) {}
 
   sceneDir(id: string): string {
     if (!isValidId(id)) throw new Error(`invalid scene id: ${id}`);
@@ -86,17 +93,22 @@ export class SceneStore {
       return null;
     }
     const hit = this.cache.get(id);
-    if (hit && hit.mtimeMs === st.mtimeMs) return structuredClone(hit.scene);
+    if (hit && hit.mtimeMs === st.mtimeMs) return this.tagged(structuredClone(hit.scene));
     try {
       const scene = (await Bun.file(path).json()) as Scene;
       if (!scene || typeof scene !== 'object' || typeof scene.id !== 'string') return null;
       scene.id = id;
       this.cache.set(id, { mtimeMs: st.mtimeMs, scene });
-      return structuredClone(scene);
+      return this.tagged(structuredClone(scene));
     } catch (e) {
       console.warn(`[store] unreadable ${path}: ${(e as Error).message}`);
       return null;
     }
+  }
+
+  private tagged(scene: Scene): Scene {
+    if (this.unlistedPrefixes.some((p) => scene.id.startsWith(p))) scene.unlisted = true;
+    return scene;
   }
 
   /** All scenes, newest first. Directories without a readable scene.json are skipped. */

@@ -154,7 +154,8 @@ async function createCore(): Promise<Core> {
     console.warn(`\nRead-only: pid ${e.holder.pid} owns ${DATA_DIR}; this server shows scenes and runs no jobs.\n`);
   }
   if (lock) process.on('exit', () => lock.release());
-  const store = new SceneStore(SCENES_DIR);
+  const unlisted = (process.env.THIRDWHEEL_UNLISTED ?? '').split(',').map((p) => p.trim()).filter(Boolean);
+  const store = new SceneStore(SCENES_DIR, unlisted);
   const local = localDriver({ python: LOCAL_PYTHON, script: RUN_JOB_PY, cwd: ROOT });
   const space = spaceDriver({
     status: () => health.space.get(),
