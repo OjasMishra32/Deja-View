@@ -26,7 +26,8 @@ Today a world's walkable area is drawn by hand. This finds it from how good the 
 Writes `<scene>/walkzone/`: `walkzone.json` (fence loops, every spot and its scores, the spawn, the thresholds, and
 the comparison with the hand-made collider when there is one), `collider.glb` and `topdown.png`. `--install` also
 copies the collider to `<scene>/collider.glb` (the old one archived under `data/archive/colliders/`, as
-collider-clear-path does) and sets `world.collider` and `world.spawn` in scene.json. GPU renders through gsplat; the
+collider-clear-path does) and sets `world.collider` and `world.spawn` in scene.json, the two fields the shared
+WorldAsset contract has for this; walkzone.json stays a file next to the world. GPU renders through gsplat; the
 CPU point renderer works for small tests.
 """
 from __future__ import annotations
@@ -624,13 +625,16 @@ def pick_spawn(spots: list[Spot], zone: np.ndarray, zone_o) -> Spot | None:
     return max(ok, key=lambda s: s.score + 0.25 * min(1.0, clearance(s)))
 
 
-def best_yaw(spot: Spot, render: RenderFn, refs, t: Thresholds, steps: int = 16) -> tuple[float, dict]:
-    """The best of `steps` facings at the spawn (a deep, complete, sharp view; for a one-sided capture that is
-    naturally one of the captured directions)."""
+def best_yaw(spot: Spot, render: RenderFn, refs, t: Thresholds, steps: int = 16,
+             allowed: list[bool] | None = None) -> tuple[float, dict]:
+    """The best of `steps` facings at the spawn: a deep, complete, sharp view. `allowed` (one flag per facing)
+    limits it, e.g. to the directions the photos looked along."""
     fx, fy, cx, cy = intrinsics(t)
     ref = nearest_ref(refs, spot.x, spot.z)
     best = (0.0, {"value": -1})
     for k in range(steps):
+        if allowed is not None and any(allowed) and not allowed[k]:
+            continue
         yaw = 2 * math.pi * k / steps
         rgb, alpha, depth = render(view_c2w(spot.x, spot.z, yaw, EYE, t.pitch_deg), fx, fy, cx, cy, t.width, t.height)
         sc = score_view(rgb, alpha, depth, ref, t)
@@ -709,8 +713,10 @@ def bounds_box_mask(world: dict, lo, hi) -> tuple[np.ndarray, tuple[float, float
 
 
 def build(splats, world: dict, cameras: list[dict], out: Path, t: Thresholds | None = None,
-          render: RenderFn | None = None, hand_collider: Path | None = None, hand_spawn=None, log=print) -> dict:
-    """Everything after loading: spots, scores, zone, fence, collider, spawn. `splats` in the room frame."""
+          render: RenderFn | None = None, hand_collider: Path | None = None, hand_spawn=None, log=print,
+          spawn_facing: str = "any") -> dict:
+    """Everything after loading: spots, scores, zone, fence, collider, spawn. `splats` in the room frame.
+    `spawn_facing="captured"` turns the spawn toward what the photos saw (listing worlds)."""
     t = t or Thresholds()
     t0 = time.time()
     out.mkdir(parents=True, exist_ok=True)
@@ -741,7 +747,11 @@ def build(splats, world: dict, cameras: list[dict], out: Path, t: Thresholds | N
     seed = max(passed, key=lambda s: s.score)
     zone, zone_o = zone_mask(spots, seed, lo, hi, t)
     spawn_spot = pick_spawn([s for s in spots if s.passed], zone, zone_o)
-    yaw, yaw_view = best_yaw(spawn_spot, render, refs, t)
+    allowed = None
+    if spawn_facing == "captured" and cameras:
+        allowed = captured_directions(cameras, Thresholds(**{**asdict(t), "directions": 16,
+                                                              "capture_slack_deg": 22.5}))
+    yaw, yaw_view = best_yaw(spawn_spot, render, refs, t, allowed=allowed)
     loops = [simplify(l, t.simplify) for l in trace_loops(zone, zone_o)]
     loops = [l for l in loops if abs(polygon_area(l)) > 0.01]
     V, F, cinfo = collider_mesh(loops, solid, origin, zone, zone_o, (spawn_spot.x, spawn_spot.z))
@@ -841,7 +851,6 @@ def install(scene_dir: Path, out: Path, doc: dict) -> dict:
     shutil.copyfile(out / "collider.glb", old)
     world["collider"] = "collider.glb"
     world["spawn"] = {"position": doc["spawn"]["position"], "yaw": doc["spawn"]["yaw"]}
-    world["walkZone"] = {"file": f"{OUT_DIR}/walkzone.json", "areaM2": doc["areaM2"], "auto": True}
     sj.write_text(json.dumps(scene, indent=2))
     return {"collider": str(old), "archived": str(archived) if archived else None}
 

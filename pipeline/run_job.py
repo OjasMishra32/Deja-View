@@ -33,7 +33,10 @@ Job params (all optional)
   rentfree     localFallback (true: build a plate-depth room locally instead of failing without a GPU),
                seed (default: the attempt number, so a retry gives a new world), trajectory, cameraHeight,
                maxSplats, shDegree
-  reconstruct  maxFrames (frames sampled from a video, default 48)
+  reconstruct  maxFrames (frames sampled from a video, default 48),
+               listing (true: the photos are a real-estate listing's: their watermarks and logos are cropped or
+               inpainted before the rebuild, and the world gets an automatic walk zone, collider and a spawn facing
+               what the photos saw; pipeline/listing.py)
 """
 from __future__ import annotations
 
@@ -346,18 +349,21 @@ def run_reconstruct(job: Job) -> dict:
     if img_dir.exists():
         shutil.rmtree(img_dir)
     img_dir.mkdir(parents=True)
+    listing = bool(job.params.get("listing")) and bool(images)
     job.stage("Preparing the photos", 0.01)
     if images:
         for i, p in enumerate(images):
             _normalise_image(p, img_dir / f"{i:03d}.jpg", max_long=1920)
+        if listing:
+            _clean_listing(job, img_dir)
     else:
         n = _sample_video_frames(videos[0], img_dir, int(job.params.get("maxFrames", 48)))
         job.log(f"sampled {n} frames from {videos[0].name}")
     count = len(list(img_dir.glob("*.jpg")))
-    if count < 8:
+    if count < 8 and not listing:  # a listing has the photos it has; asking for more would be no help
         job.notice(f"Only {count} views to work from; 8 or more give a cleaner result.", f"only {count} images; quality needs 8 or more")
-    run_runner(job, "anysplat", ["--images", str(img_dir), "--out", str(job.out_dir)], 0.05, 0.98, "Reconstructing",
-               progress_file=job.work_dir / "anysplat-progress.json")
+    run_runner(job, "anysplat", ["--images", str(img_dir), "--out", str(job.out_dir)], 0.05, 0.9 if listing else 0.98,
+               "Reconstructing", progress_file=job.work_dir / "anysplat-progress.json")
     res = read_json(job.out_dir / "scene.json")
     if not isinstance(res, dict) or "world" not in res:
         raise JobError(RUNNER_FAILURE["anysplat"], "anysplat did not write a world into scene.json")
@@ -367,8 +373,38 @@ def run_reconstruct(job: Job) -> dict:
         first = sorted(img_dir.glob("*.jpg"))[0]
         save_jpg(job.out_dir / "thumb.jpg", resize_long(load_image(first), 640), quality=88)
     res.setdefault("thumb", "thumb.jpg")
+    if listing:
+        job.stage("Finding where you can walk", 0.92)
+        from listing import add_walk_zone
+
+        wz = add_walk_zone(job.out_dir, res, job.work_dir, log=job.log)
+        if wz["ok"]:
+            job.log(f"walk zone {wz['areaM2']} m2, spawn {wz['spawn']}")
+        else:
+            job.notice("We couldn't map a clear area to walk, so you start where the first photo was taken.",
+                       f"walk zone failed: {wz['reason']}")
+        res["caption"] = with_notices(f"Rebuilt from {count} listing photos.", job)
+        return res
     res["caption"] = with_notices(f"Reconstructed from {count} {'photos' if images else 'views of your video'}.", job)
     return res
+
+
+def _clean_listing(job: Job, img_dir: Path) -> None:
+    """Crops or inpaints the listing's watermarks and logos in place (pipeline/listing.py). The originals stay in
+    work/listing-raw, the decisions in work/listing.json and the mask previews in work/listing-masks."""
+    from listing import clean_photos
+
+    job.stage("Removing watermarks", 0.03)
+    raw = job.work_dir / "listing-raw"
+    if raw.exists():
+        shutil.rmtree(raw)
+    shutil.move(str(img_dir), str(raw))
+    rep = clean_photos(sorted(raw.glob("*.jpg")), img_dir, job.work_dir / "listing-masks",
+                       report_path=job.work_dir / "listing.json")
+    for e in rep["photos"]:
+        if e["action"] != "none":
+            job.log(f"listing: {e['file']}: {e['action']} ({', '.join(e['found'])})")
+    job.log(f"listing: {rep['cleaned']} of {len(rep['photos'])} photos had a watermark or logo removed")
 
 
 def _sample_video_frames(video: Path, dst: Path, max_frames: int) -> int:
