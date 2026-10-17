@@ -21,7 +21,7 @@ end)
 for name, value in {
 	Phase = "lobby", SceneId = "", RoomName = "", LoadProgress = 0, LoadStage = "", Banner = "",
 	Offline = false, JudgeHere = false, JudgeName = "", RoundState = "idle", RoundEndsAt = 0,
-	CountdownEndsAt = 0, RoundIt = "", ScoresJson = "", RoomsJson = "[]", AutoJoin = true,
+	CountdownEndsAt = 0, RoundIt = "", ScoresJson = "", RoomsJson = "[]", AutoJoin = Config.AUTO_JOIN_DEFAULT,
 	Follow = true, MockJudge = false, HasImagined = false, UsingMock = Config.useMock(),
 } do
 	workspace:SetAttribute(name, value)
@@ -129,7 +129,7 @@ task.spawn(function()
 	Rooms.waitForList(15)
 	local target = launchScene or Rooms.newestReady()
 	if target then
-		Rooms.switchTo(target, { joinLobby = false })
+		Rooms.switchTo(target)
 	else
 		warn("[DejaView] no ready rooms yet; waiting in the lobby")
 	end

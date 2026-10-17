@@ -29,6 +29,8 @@ local Config = {
 
 	-- Scene the server builds on boot if it is ready (falls back to the newest ready room).
 	DEFAULT_SCENE = "",
+	-- Auto-join on boot. Set false for the skit (everyone waits in the lobby until JOIN).
+	AUTO_JOIN_DEFAULT = true,
 	-- Extra Roblox user ids that get host controls (the owner always does).
 	HOST_USER_IDS = {} :: { number },
 
