@@ -64,6 +64,7 @@ def test_render_writes_views_and_pngs(tmp_path):
     assert len(doc["views"]) == 4 + 4
     assert (out / "views.json").exists()
     assert (out / "view_00.png").exists()
+    assert (out / "view_00_depth.npy").exists()
     saved = json.loads((out / "views.json").read_text())
     assert saved["sceneId"] == "tiny"
     assert len(saved["views"]) == 8

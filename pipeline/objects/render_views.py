@@ -51,9 +51,12 @@ def render_scene(
         # PNG for lossless masks later; the JPEG is the quick look
         from PIL import Image
         Image.fromarray(np.asarray(r.rgb, np.uint8)).save(out_dir / name)
+        depth_name = name.replace(".png", "_depth.npy")
+        np.save(out_dir / depth_name, np.asarray(r.depth, np.float32))
         views.append({
             "file": name,
             "jpg": name.replace(".png", ".jpg"),
+            "depth": depth_name,
             "position": cam["position"],
             "target": cam["target"],
             "c2w": cam["c2w"],
