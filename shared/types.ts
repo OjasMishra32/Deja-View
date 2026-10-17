@@ -164,6 +164,8 @@ export interface Scene {
    * world model's text prompt and survives the job's own result caption.
    */
   captionSource?: 'guide';
+  /** true: a test build kept out of GET /api/scenes (every list of worlds); it still opens by its id. */
+  unlisted?: boolean;
 }
 
 export interface HealthInfo {

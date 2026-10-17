@@ -227,3 +227,19 @@ describe('read-only server', () => {
     expect((await res.json()).error).toBe(MESSAGES.readOnly);
   });
 });
+
+describe('unlisted scenes', () => {
+  test('a test build is left out of the list of worlds but still opens by its id', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'tw-unlisted-'));
+    roots.push(root);
+    const store = new SceneStore(join(root, 'scenes'));
+    const at = new Date().toISOString();
+    await store.save({ id: 'home-aaaaa', name: 'Home', mode: 'rentfree', status: 'ready', createdAt: at, updatedAt: at });
+    await store.save({ id: 'home-test1', name: 'Home', mode: 'rentfree', status: 'ready', createdAt: at, updatedAt: at, unlisted: true });
+    const runner = new JobRunner({ store, jobsDir: join(root, 'jobs'), drivers: [], emit: () => {} });
+    const app = createApp({ store, runner, health: { info: async () => ({}) as any }, publish: () => {}, maxUploadBytes: 1024, readOnly: true });
+    const list = (await (await app.handle(new Request('http://x/api/scenes')))!.json()) as { id: string }[];
+    expect(list.map((s) => s.id)).toEqual(['home-aaaaa']);
+    expect((await app.handle(new Request('http://x/api/scenes/home-test1')))!.status).toBe(200);
+  });
+});

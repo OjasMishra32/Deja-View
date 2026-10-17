@@ -273,7 +273,7 @@ export function createApp(deps: AppDeps) {
     }
 
     if (path === '/api/scenes' || path === '/api/scenes/') {
-      if (method === 'GET' || method === 'HEAD') return json((await store.list()).map(publicScene));
+      if (method === 'GET' || method === 'HEAD') return json((await store.list()).filter((s) => !s.unlisted).map(publicScene));
       if (method === 'POST') return createScene(req);
       return privateError(405, MESSAGES.methodNotAllowed);
     }
