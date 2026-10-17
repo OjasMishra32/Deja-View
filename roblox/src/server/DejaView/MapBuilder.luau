@@ -9,6 +9,7 @@ export type RoomInfo = {
 	sceneId: string,
 	name: string,
 	spawn: Vector3,
+	spawnYaw: number?,
 	boundsMin: Vector3,
 	boundsMax: Vector3,
 	ceilingY: number,
@@ -106,6 +107,7 @@ function MapBuilder.infoFromMap(map: any): RoomInfo
 		sceneId = map.sceneId or "?",
 		name = map.name or map.sceneId or "Room",
 		spawn = Vector3.new(s[1] or s.x or 0, s[2] or s.y or 0, s[3] or s.z or 0),
+		spawnYaw = tonumber(map.spawnYaw),
 		boundsMin = mn,
 		boundsMax = mx,
 		ceilingY = ceilingY,
@@ -291,9 +293,10 @@ function MapBuilder.place(character: Model, index: number)
 			floorY = hit.Position.Y
 		end
 	end
+	-- Face the way the server says (spawnYaw: into the part of the world the camera saw), else the room centre.
 	local centre = (info.boundsMin + info.boundsMax) / 2
 	local dx, dz = centre.X - x, centre.Z - z
-	local yaw = if math.abs(dx) + math.abs(dz) > 0.01 then math.atan2(-dx, -dz) else 0
+	local yaw = info.spawnYaw or (if math.abs(dx) + math.abs(dz) > 0.01 then math.atan2(-dx, -dz) else 0)
 	character:PivotTo(CFrame.new(x, floorY + 3, z) * CFrame.Angles(0, yaw, 0))
 end
 

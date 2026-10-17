@@ -5,8 +5,9 @@ end)
 
 local Config = {
 	-- Flip to false once the public BASE is live (or create a boolean config "use_mock").
-	USE_MOCK = true,
-	BASE_FALLBACK = "http://localhost:8788",
+	USE_MOCK = false,
+	-- Ojasva's public link (Update 4). A dejaview_base Experience Config overrides it.
+	BASE_FALLBACK = "https://prozac-covered-burke-oklahoma.trycloudflare.com",
 	SECRET_NAME = "dejaview_key",
 
 	ROUND_SECONDS = 90,
@@ -28,7 +29,7 @@ local Config = {
 	FALL_Y = -30,
 
 	-- Scene the server builds on boot if it is ready (falls back to the newest ready room).
-	DEFAULT_SCENE = "",
+	DEFAULT_SCENE = "fortnite-tilted-night", -- Update 4: the test world to join until the real four arrive
 	-- Auto-join on boot. Set false for the skit (everyone waits in the lobby until JOIN).
 	AUTO_JOIN_DEFAULT = true,
 	-- Extra Roblox user ids that get host controls (the owner always does).
