@@ -3,6 +3,9 @@
 -- The server owns the ball; clients use the same step to predict and to smooth the render.
 local Sim = {}
 
+-- Roblox provides Vector3 as a global; the Lune test harness injects it through _G.
+local Vector3 = (rawget(_G, "Vector3")) or Vector3
+
 Sim.LEN = 9.78 -- 2.74 m table top
 Sim.WID = 5.44 -- 1.525 m
 Sim.TOP_Y = 0
@@ -88,7 +91,8 @@ function Sim.step(st: any, dt: number, len: number, wid: number): any
 	p = p + v * dt
 
 	-- Table top: the ball's bottom crosses y = 0 while moving down, inside the top rectangle.
-	if v.Y < 0 and p.Y - Sim.BALL_R <= Sim.TOP_Y and p0.Y - Sim.BALL_R > Sim.TOP_Y then
+	-- a small tolerance: a fast, flat shot can skim the surface for several steps before its centre drops below R
+	if v.Y < 0 and p.Y - Sim.BALL_R <= Sim.TOP_Y + 0.06 and p0.Y - Sim.BALL_R > Sim.TOP_Y - 0.06 then
 		local a = (p0.Y - Sim.BALL_R - Sim.TOP_Y) / math.max(1e-6, (p0.Y - Sim.BALL_R) - (p.Y - Sim.BALL_R))
 		local hit = p0:Lerp(p, math.clamp(a, 0, 1))
 		if Sim.overTable(hit, len, wid) then
@@ -159,6 +163,40 @@ function Sim.assistReturn(p0: Vector3, side: string, aim: number, flight: number
 	local need = Sim.NET_H + Sim.BALL_R + 0.3
 	if yAtNet < need then
 		v = v + Vector3.new(0, (need - yAtNet) / math.max(0.2, tCross), 0)
+	end
+	if v.Magnitude > Sim.MAX_SPEED then
+		v = v.Unit * Sim.MAX_SPEED
+	end
+	return v
+end
+
+-- Power to distance, in the table frame. Reach runs from 0.80 to 1.22 table lengths: the minimum crosses the net
+-- and lands in the far half, half power lands mid-court, and full power goes out from the table edge. Flight time
+-- falls from 0.55 s to 0.22 s, so power is speed too. No post-hoc lift: it used to push every strong shot long.
+function Sim.aimedVelocity(p0: Vector3, dirLocal: Vector3, charge: number, len: number): Vector3
+	local reach = len * (0.80 + charge * 0.33)
+	local flight = math.clamp(0.55 - charge * 0.33, 0.22, 0.55)
+	local target = p0 + dirLocal * reach
+	local surface = Sim.TOP_Y + Sim.BALL_R
+	if target.Y < surface or dirLocal.Y <= 0.25 then
+		-- a level or downward aim lands on the table; only a deliberate lob may sail long
+		target = Vector3.new(target.X, surface, target.Z)
+	end
+	-- keep the landing point but lengthen the flight until the ball clears the net: a flat smash from far back
+	-- would otherwise hit the tape. Power still shortens the flight, so it stays fast.
+	local dz = math.abs(target.Z - p0.Z)
+	local need = Sim.NET_H + Sim.BALL_R + 0.15
+	local v = Sim.assistVelocity(p0, target, flight)
+	if dz > 0.01 then
+		for t = flight, 0.9, 0.02 do
+			local candidate = Sim.assistVelocity(p0, target, t)
+			local tc = t * math.abs(p0.Z) / dz
+			local yAtNet = p0.Y + candidate.Y * tc - 0.5 * Sim.GRAVITY * tc * tc
+			if yAtNet >= need then
+				v = candidate
+				break
+			end
+		end
 	end
 	if v.Magnitude > Sim.MAX_SPEED then
 		v = v.Unit * Sim.MAX_SPEED
