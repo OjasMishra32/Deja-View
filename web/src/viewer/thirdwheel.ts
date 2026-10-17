@@ -29,12 +29,19 @@
 //               person are hidden and splats in front of them still blend over.
 //   fringe pass (transparent queue, after splats): the soft edge, 0 < alpha < cut, blended.
 // While fading (setOpacity < 1 or the view-angle fade) everything goes through the blended pass.
+//
+// Handheld clips (video.cameraTrack, see tw-track.ts): every frame has its own camera pose. The object then sits at
+// the room origin and the vertex shaders place each frame with the pose of the frame number the picture itself
+// carries (read by a one-texel pass when the frame is uploaded), so the relief never mixes one frame's picture with
+// another frame's pose. Everything else (pre-passes, tear tests, back sheet) works in the video camera's frame
+// exactly as for a still camera.
 
 import * as THREE from 'three';
 import type { Vec3, VideoLayer } from '../../../shared/types.ts';
+import { frameAt, makeTrackTexture, parseCameraTrackDoc, trackMatrix, type CameraTrack, type TrackedVideoLayer } from './tw-track.ts';
 
 export interface VideoLayerHandle {
-  object: THREE.Object3D; // add to the scene; already placed at video.cameraPose
+  object: THREE.Object3D; // add to the scene; already placed at video.cameraPose (with a camera track: at the origin)
   video: HTMLVideoElement; // the source element (owns audio)
   ready: Promise<void>;
   play(): Promise<void>;
@@ -273,6 +280,16 @@ export const TW_TUNING = {
   fadeStartDeg: 80,
   fadeEndDeg: 155,
   fadeMin: 0.3,
+  /**
+   * Handheld clips (camera track): the fade is per fragment instead, by the angle round the vertical at that point
+   * between this eye and the recording camera of the frame on screen (looking down on someone from closer than the
+   * camera was is fine; walking round their side is what a relief cannot show). The camera walks around the people,
+   * so the relief of one frame is often met from far round its side; it dissolves there (to trackFadeMin) rather
+   * than showing its torn back.
+   */
+  trackFadeStartDeg: 45,
+  trackFadeEndDeg: 110,
+  trackFadeMin: 0.1,
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -312,6 +329,27 @@ float procInv(vec4 t) {
   float u = (floor(t.r * 255.0 + 0.5) * 256.0 + floor(t.g * 255.0 + 0.5)) / 65535.0;
   return uInvDepth.x + u * uInvDepth.y;
 }
+`;
+
+// Handheld clips: the camera-to-room pose of the frame on screen (tw-track.ts).
+const TRACK = /* glsl */ `
+#ifdef TW_TRACK
+uniform sampler2D uTrack;      // per frame, three texels: the rows of [R | t] (camera -> room)
+uniform sampler2D uFrameCode;  // one texel: the frame number read from the picture (hi, lo, valid)
+uniform vec2 uTrackInfo;       // frames, texture width
+uniform float uFrameFallback;  // the frame the CPU picked from the media time, when the code is unreadable
+
+void trackRows(out vec4 r0, out vec4 r1, out vec4 r2) {
+  vec4 c = texelFetch(uFrameCode, ivec2(0), 0);
+  float f = c.b > 0.5 ? floor(c.r * 255.0 + 0.5) * 256.0 + floor(c.g * 255.0 + 0.5) : uFrameFallback;
+  int k = int(clamp(f, 0.0, uTrackInfo.x - 1.0));
+  int w = int(uTrackInfo.y);
+  ivec2 b = ivec2(k - (k / w) * w, (k / w) * 3);
+  r0 = texelFetch(uTrack, b, 0);
+  r1 = texelFetch(uTrack, b + ivec2(0, 1), 0);
+  r2 = texelFetch(uTrack, b + ivec2(0, 2), 0);
+}
+#endif
 `;
 
 const PREPASS_VERT = /* glsl */ `
@@ -456,8 +494,34 @@ void main() {
 }
 `;
 
+// Frame-code pass (handheld clips): one fragment reads the frame number from the last rows of the depth band.
+// Output: r, g = frame number (high, low byte), b = 1 when the checks pass (else all 0). Mirrors decodeFrameCode.
+const CODE_FRAG = /* glsl */ `
+${COMMON}
+uniform vec4 uCode;   // blocks, code height as a fraction of the band, threshold (0..1), bits
+
+float codeBit(float i) {
+  vec2 p = vec2(mix(uDepthRect.x, uDepthRect.z, (i + 0.5) / uCode.x), uDepthRect.w - 0.5 * uCode.y * (uDepthRect.w - uDepthRect.y));
+  return step(uCode.z, lumaOf(texture2D(uTex, p / uTexSize).rgb));
+}
+
+void main() {
+  float k = 0.0, parity = 0.0, w = 1.0;
+  for (int i = 1; i <= 16; i++) {
+    if (float(i) > uCode.w) break;
+    float b = codeBit(float(i));
+    k += b * w;
+    parity += b;
+    w *= 2.0;
+  }
+  bool ok = codeBit(0.0) > 0.5 && codeBit(uCode.x - 1.0) < 0.5 && abs(mod(parity, 2.0) - codeBit(uCode.w + 1.0)) < 0.5;
+  gl_FragColor = ok ? vec4(floor(k / 256.0) / 255.0, mod(k, 256.0) / 255.0, 1.0, 1.0) : vec4(0.0);
+}
+`;
+
 const VERT = /* glsl */ `
 ${COMMON}
+${TRACK}
 uniform sampler2D uProc;
 uniform mat4 uWorldToLocal;
 uniform float uEdgeFloor;
@@ -468,6 +532,10 @@ varying vec2 vRgbUv;
 varying vec2 vMaskUv;
 varying vec3 vToEye;   // from this point to the eye, in the video camera frame
 varying float vEdge;
+#ifdef TW_TRACK
+varying vec3 vCamP;    // this point in the video camera frame
+varying vec3 vUp;      // the room's up in the video camera frame
+#endif
 
 float procAt(ivec2 ij) {
   ivec2 lim = ivec2(uGrid);
@@ -486,11 +554,23 @@ void main() {
   vEdge = max(0.0, j / max(inv, 1e-4) - uEdgeFloor) / uSplit;
 
   vec3 p = unproject(st, inv);
-  vToEye = (uWorldToLocal * vec4(cameraPosition, 1.0)).xyz - p;
+  vec3 eye = (uWorldToLocal * vec4(cameraPosition, 1.0)).xyz;
+#ifdef TW_TRACK
+  // the object sits at the room origin: this frame's pose takes p (and the eye, back) between camera and room
+  vec4 r0, r1, r2;
+  trackRows(r0, r1, r2);
+  eye = mat3(r0.xyz, r1.xyz, r2.xyz) * (eye - vec3(r0.w, r1.w, r2.w));  // R^T (eye - t)
+  vec3 q = vec3(dot(r0.xyz, p) + r0.w, dot(r1.xyz, p) + r1.w, dot(r2.xyz, p) + r2.w);
+  vCamP = p;
+  vUp = r1.xyz;  // R^T (0, 1, 0)
+#else
+  vec3 q = p;
+#endif
+  vToEye = eye - p;
   vSt = st;
   vRgbUv = bandUv(uRgbRect, st);
   vMaskUv = bandUv(uMaskRect, st);
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(q, 1.0);
 }
 `;
 
@@ -505,6 +585,21 @@ uniform vec2 uTearCone;
 uniform vec2 uSil;
 uniform vec2 uAny;
 uniform float uCut;
+#ifdef TW_TRACK
+uniform vec3 uTrackFade;  // cos(start), cos(end), opacity at the end
+varying vec3 vCamP;
+varying vec3 vUp;
+
+// Opacity for a point seen along toEye that the recording camera saw along toCam: by the angle between the two
+// round the vertical (their horizontal parts).
+float trackFade(vec3 toEye, vec3 toCam, vec3 up) {
+  vec3 e = toEye - dot(toEye, up) * up;
+  vec3 c = toCam - dot(toCam, up) * up;
+  float le = length(e), lc = length(c);
+  if (le < 1e-4 || lc < 1e-4) return 1.0;
+  return mix(uTrackFade.z, 1.0, smoothstep(uTrackFade.y, uTrackFade.x, dot(e, c) / (le * lc)));
+}
+#endif
 
 varying vec2 vSt;
 varying vec2 vRgbUv;
@@ -519,6 +614,10 @@ vec3 srgbToLinear(vec3 c) {
 void main() {
   float m = maskAt(vSt);
   float a = smoothstep(uMaskRamp.x, uMaskRamp.y, m) * uOpacity;
+#ifdef TW_TRACK
+  // seen from far round the recording camera's side: fade (per fragment, so each person by their own angle)
+  a *= trackFade(vToEye, -vCamP, normalize(vUp));
+#endif
 #ifndef TW_DEBUG
   if (a < 0.004) discard;
 #else
@@ -601,6 +700,7 @@ void main() {
 // Back sheet: the person hidden behind occluders, at the depth and colour the fill pre-pass found.
 const BACK_VERT = /* glsl */ `
 ${COMMON}
+${TRACK}
 uniform sampler2D uFill;
 uniform float uBackStep;
 uniform mat4 uWorldToLocal;
@@ -610,6 +710,9 @@ varying float vHas;   // 1 where this vertex has something hidden behind it
 varying float vEdge;  // 1 where the back sheet jumps in depth to a neighbour
 varying vec3 vP;      // position in the video camera frame
 varying vec3 vToEye;  // from this point to the eye, in the video camera frame
+#ifdef TW_TRACK
+varying vec3 vUp;
+#endif
 
 void main() {
   vec2 st = position.xy;
@@ -642,13 +745,27 @@ void main() {
   vEdge = step(uBackStep, j);
   vec3 p = unproject(st, inv);
   vP = p;
-  vToEye = (uWorldToLocal * vec4(cameraPosition, 1.0)).xyz - p;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+  vec3 eye = (uWorldToLocal * vec4(cameraPosition, 1.0)).xyz;
+#ifdef TW_TRACK
+  vec4 r0, r1, r2;
+  trackRows(r0, r1, r2);
+  eye = mat3(r0.xyz, r1.xyz, r2.xyz) * (eye - vec3(r0.w, r1.w, r2.w));
+  vec3 q = vec3(dot(r0.xyz, p) + r0.w, dot(r1.xyz, p) + r1.w, dot(r2.xyz, p) + r2.w);
+  vUp = r1.xyz;
+#else
+  vec3 q = p;
+#endif
+  vToEye = eye - p;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(q, 1.0);
 }
 `;
 
 const BACK_FRAG = /* glsl */ `
 uniform vec2 uBackStretch;
+#ifdef TW_TRACK
+uniform vec3 uTrackFade;
+varying vec3 vUp;
+#endif
 
 varying vec3 vRgb;
 varying float vHas;
@@ -663,6 +780,13 @@ vec3 srgbToLinear(vec3 c) {
 void main() {
   // only whole triangles of the sheet, and none that bridge a step in it
   if (vHas < 0.999 || vEdge > 0.001) discard;
+#ifdef TW_TRACK
+  // opaque, so it dissolves (dithered) with the relief's own fade
+  vec3 up = normalize(vUp);
+  vec3 e = vToEye - dot(vToEye, up) * up, c = -vP - dot(-vP, up) * up;
+  float tf = length(e) * length(c) > 1e-8 ? mix(uTrackFade.z, 1.0, smoothstep(uTrackFade.y, uTrackFade.x, dot(e, c) / (length(e) * length(c)))) : 1.0;
+  if (tf < fract(sin(dot(gl_FragCoord.xy, vec2(41.31, 17.73))) * 24634.63)) discard;
+#endif
   // a guessed surface: never show it much more face-on than the video camera saw that spot
   vec3 n = cross(dFdx(vP), dFdy(vP));
   float nl = length(n);
@@ -747,6 +871,9 @@ const MEDIA_ERRORS: Record<number, string> = {
 export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: THREE.WebGLRenderer): VideoLayerHandle {
   const url = resolveSceneFile(baseUrl, layer.file);
   const T = TW_TUNING;
+  // a handheld clip: one camera pose per frame (tw-track.ts)
+  const trackFile = (layer as TrackedVideoLayer).cameraTrack;
+  const tracked = typeof trackFile === 'string' && trackFile.length > 0;
 
   const video = document.createElement('video');
   video.crossOrigin = 'anonymous';
@@ -836,6 +963,42 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
     depthTest: false,
     depthWrite: false,
   });
+  // Handheld clips: the frame number read from each uploaded frame (one texel) and the per-frame poses.
+  const codeRt = new THREE.WebGLRenderTarget(1, 1, {
+    format: THREE.RGBAFormat,
+    type: THREE.UnsignedByteType,
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+    generateMipmaps: false,
+    depthBuffer: false,
+    stencilBuffer: false,
+  });
+  codeRt.texture.colorSpace = THREE.NoColorSpace;
+  const codeUniforms = { ...shared, uCode: { value: new THREE.Vector4(16, 0, 0.5, 13) } };
+  const codeMat = new THREE.ShaderMaterial({
+    name: 'ThirdWheelFrameCode',
+    uniforms: codeUniforms,
+    vertexShader: PREPASS_VERT,
+    fragmentShader: CODE_FRAG,
+    depthTest: false,
+    depthWrite: false,
+  });
+  // identity until camera-track.json arrives (the object stays hidden until then)
+  const identityTrack = new THREE.DataTexture(new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]), 1, 3, THREE.RGBAFormat, THREE.FloatType);
+  identityTrack.needsUpdate = true;
+  const deg = Math.PI / 180;
+  const trackUniforms = {
+    uTrack: { value: identityTrack as THREE.Texture },
+    uFrameCode: { value: codeRt.texture as THREE.Texture },
+    uTrackInfo: { value: new THREE.Vector2(1, 1) },
+    uFrameFallback: { value: 0 },
+    uTrackFade: { value: new THREE.Vector3(Math.cos(T.trackFadeStartDeg * deg), Math.cos(T.trackFadeEndDeg * deg), T.trackFadeMin) },
+  };
+  const trackDefines: Record<string, number> = tracked ? { TW_TRACK: 1 } : {};
+  let track: CameraTrack | null = null;
+  let trackFrame = 0; // the CPU's frame (media time): fallback for the shaders, pose for fades
+  let useCode = false;
+
   const prepassScene = new THREE.Scene();
   const prepassQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), prepassMat);
   prepassQuad.frustumCulled = false;
@@ -854,6 +1017,7 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
     uSil: { value: new THREE.Vector2(T.silLow, T.silHigh) },
     uAny: { value: new THREE.Vector2(T.anyLow, T.anyHigh) },
     uCut: { value: T.coreCut },
+    ...(tracked ? trackUniforms : {}),
   };
   // The fringe pass has its own cut so the core and fringe partition alpha cleanly.
   const fringeUniforms = { ...uniforms, uCut: { value: T.coreCut } };
@@ -867,7 +1031,7 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
     uniforms,
     vertexShader: VERT,
     fragmentShader: FRAG,
-    defines: { TW_CORE: 1, ...debugDefines },
+    defines: { TW_CORE: 1, ...debugDefines, ...trackDefines },
     side: THREE.DoubleSide,
     transparent: false,
     depthWrite: true,
@@ -878,7 +1042,7 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
     uniforms: fringeUniforms,
     vertexShader: VERT,
     fragmentShader: FRAG,
-    defines: debugDefines,
+    defines: { ...debugDefines, ...trackDefines },
     side: THREE.DoubleSide,
     transparent: true,
     depthWrite: false,
@@ -904,10 +1068,11 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
       uBackStep: { value: T.backStep },
       uBackStretch: { value: new THREE.Vector2(T.backStretchLow, T.backStretchHigh) },
       uWorldToLocal: uniforms.uWorldToLocal,
+      ...(tracked ? trackUniforms : {}),
     },
     vertexShader: BACK_VERT,
     fragmentShader: BACK_FRAG,
-    defines: debug ? { TW_DEBUG: 1 } : {},
+    defines: { ...(debug ? { TW_DEBUG: 1 } : {}), ...trackDefines },
     side: THREE.DoubleSide,
     transparent: false,
     depthWrite: true,
@@ -921,16 +1086,35 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
   const object = new THREE.Group();
   object.name = 'ThirdWheelVideo';
   object.add(back, core, fringe);
-  const [px, py, pz] = layer.cameraPose.position;
-  const [qx, qy, qz, qw] = layer.cameraPose.quaternion;
-  object.position.set(px, py, pz);
-  object.quaternion.set(qx, qy, qz, qw).normalize();
-  object.visible = false; // until the first frame is decoded and processed
+  if (!tracked) {
+    const [px, py, pz] = layer.cameraPose.position;
+    const [qx, qy, qz, qw] = layer.cameraPose.quaternion;
+    object.position.set(px, py, pz);
+    object.quaternion.set(qx, qy, qz, qw).normalize();
+  }
+  object.visible = false; // until the first frame is decoded and processed (and a handheld clip's track is loaded)
 
   // Where the person is, in the video camera frame. Refined from the mask a few times a second.
   const subject = new THREE.Vector3(0, 0, -2);
   let subjectKnown = false;
-  object.userData.thirdWheel = { subject, uniforms, fringeUniforms, tuning: T, url, grid: [cols, rows], targets: { proc, fill: fillRt } };
+  object.userData.thirdWheel = {
+    subject,
+    uniforms,
+    fringeUniforms,
+    tuning: T,
+    url,
+    grid: [cols, rows],
+    targets: { proc, fill: fillRt, code: codeRt },
+    // handheld clips: the loaded track, the CPU's frame, and the frame number the GPU read from the picture
+    track: () => track,
+    trackFrame: () => trackFrame,
+    readFrameCode: (): number | null => {
+      if (!tracked || !useCode) return null;
+      const px = new Uint8Array(4);
+      renderer.readRenderTargetPixels(codeRt, 0, 0, 1, 1, px);
+      return px[2] > 127 ? px[0] * 256 + px[1] : null;
+    },
+  };
 
   let userOpacity = 1;
   let viewFade = 1;
@@ -945,7 +1129,7 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
 
   function applyOpacity() {
     const o = userOpacity * viewFade;
-    object.visible = o > 0.003 && ready_ && processed;
+    object.visible = o > 0.003 && ready_ && processed && (!tracked || track !== null);
     const fading = o < 0.995;
     uniforms.uOpacity.value = o;
     core.visible = !fading;
@@ -985,6 +1169,11 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
     renderer.setRenderTarget(fillRt);
     prepassQuad.material = fillMat;
     renderer.render(prepassScene, prepassCam);
+    if (useCode) {
+      renderer.setRenderTarget(codeRt);
+      prepassQuad.material = codeMat;
+      renderer.render(prepassScene, prepassCam);
+    }
     prepassQuad.material = prepassMat;
     renderer.setRenderTarget(prevTarget);
     renderer.autoClear = prevAutoClear;
@@ -1042,10 +1231,12 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
   }
 
   const hasRvfc = typeof video.requestVideoFrameCallback === 'function';
+  let rvfcMediaTime = -1;
   function onVideoFrame(_now: number, meta: VideoFrameCallbackMetadata) {
     if (disposed) return;
     lastFrameAt = performance.now();
     lastMediaTime = meta.mediaTime;
+    rvfcMediaTime = meta.mediaTime;
     if (lastFrameAt - lastProbeAt > 400) {
       lastProbeAt = lastFrameAt;
       probeSubject();
@@ -1054,7 +1245,36 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
   }
   if (hasRvfc) rvfcId = video.requestVideoFrameCallback(onVideoFrame);
 
-  const ready = new Promise<void>((resolve, reject) => {
+  // camera-track.json of a handheld clip; without it the people are not placed (the room still works)
+  const trackReady: Promise<void> = !tracked
+    ? Promise.resolve()
+    : fetch(resolveSceneFile(baseUrl, trackFile!))
+        .then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.json();
+        })
+        .then((doc) => {
+          if (disposed) return;
+          const t = parseCameraTrackDoc(doc, layer);
+          if (!t) throw new Error('no usable frames');
+          const tex = makeTrackTexture(t, Math.min(2048, renderer.capabilities.maxTextureSize));
+          trackUniforms.uTrack.value = tex;
+          trackUniforms.uTrackInfo.value.set(t.times.length, tex.image.width);
+          if (t.frameCode) {
+            const c = t.frameCode;
+            codeUniforms.uCode.value.set(c.blocks, c.rows / t.bandRows, (c.lo + c.hi) / 2 / 255, c.bits);
+            useCode = true;
+          }
+          identityTrack.dispose();
+          track = t;
+          applyOpacity();
+        })
+        .catch((err) => {
+          console.warn(`[thirdwheel] camera track ${trackFile}:`, err);
+          throw new Error('The room still works, but the camera path of this video did not load, so the people are not shown.');
+        });
+
+  const videoReady = new Promise<void>((resolve, reject) => {
     const onData = () => {
       if (ready_) return;
       ready_ = true;
@@ -1078,6 +1298,9 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
       { once: true },
     );
   });
+  const ready = Promise.all([videoReady, trackReady]).then(() => undefined);
+  videoReady.catch(() => {});
+  trackReady.catch(() => {});
   ready.catch(() => {});
 
   // A paused seek presents a new frame; make sure it is uploaded even without rVFC.
@@ -1094,6 +1317,9 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
   const tmpView = new THREE.Vector3();
   const tmpToCam = new THREE.Vector3();
   const worldToLocal = uniforms.uWorldToLocal.value;
+  // the video camera's frame for the fades: the object's own frame, or (handheld) this frame's camera in it
+  const worldToCam = new THREE.Matrix4();
+  const tmpPose = new THREE.Matrix4();
 
   const handle: VideoLayerHandle = {
     object,
@@ -1143,15 +1369,25 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
 
       object.updateWorldMatrix(true, false);
       worldToLocal.copy(object.matrixWorld).invert();
+      if (track) {
+        // rVFC's mediaTime is the frame's own timestamp; currentTime runs between frames
+        const fresh = hasRvfc && rvfcMediaTime >= 0 && now - lastFrameAt < 120;
+        trackFrame = fresh ? frameAt(track.times, rvfcMediaTime, true) : frameAt(track.times, video.currentTime);
+        trackUniforms.uFrameFallback.value = trackFrame;
+        worldToCam.multiplyMatrices(object.matrixWorld, trackMatrix(track, trackFrame, tmpPose)).invert();
+      } else {
+        worldToCam.copy(worldToLocal);
+      }
 
       // Fade when the viewer walks far around the side or behind the person (the relief has no
       // back), and when they step into the person.
       camera.getWorldPosition(tmpView);
-      tmpView.applyMatrix4(worldToLocal).sub(subject);
+      tmpView.applyMatrix4(worldToCam).sub(subject);
       tmpToCam.copy(subject).negate();
       const dist = tmpView.length();
       const angle = dist > 1e-6 && tmpToCam.lengthSq() > 1e-9 ? THREE.MathUtils.radToDeg(tmpView.angleTo(tmpToCam)) : 0;
-      const around = 1 - (1 - T.fadeMin) * smoothstep(T.fadeStartDeg, T.fadeEndDeg, angle);
+      // (a handheld clip fades per fragment in the shaders instead)
+      const around = track ? 1 : 1 - (1 - T.fadeMin) * smoothstep(T.fadeStartDeg, T.fadeEndDeg, angle);
       const near = smoothstep(0.15, 0.5, dist);
       const target = around * near;
       const k = dt > 0 ? 1 - Math.exp(-dt * 10) : 1;
@@ -1175,6 +1411,10 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
       texture.dispose();
       proc.dispose();
       fillRt.dispose();
+      codeRt.dispose();
+      codeMat.dispose();
+      identityTrack.dispose();
+      (trackUniforms.uTrack.value as THREE.Texture).dispose();
       geometry.dispose();
       prepassQuad.geometry.dispose();
       prepassMat.dispose();

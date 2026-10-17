@@ -303,6 +303,7 @@ class Viewer {
     this.flip.add(mesh);
     this.fx.attach(mesh);
     this.fx.setReveal(0.01);
+    void import('./backdrop.ts').then((m) => m.attachBackdrop(this)); // real surfaces behind the splats' holes
     debug.info.splats = splatCount(mesh);
     debug.info.lod = !!mesh.packedSplats?.lodSplats;
     if (this.cameraRoom) {

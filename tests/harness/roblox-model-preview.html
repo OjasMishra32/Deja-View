@@ -312,13 +312,16 @@
         }
         return m;
       };
+      // colourDiffAll: the same difference over EVERY pixel the splat covers, against what the column shows there (a
+      // hole in the mesh counts as the background it shows, or as the v2 sky behind it)
       const compare = (a, meshOnly, shown) => {
-        let sa = 0, both = 0, diff = 0;
+        let sa = 0, both = 0, diff = 0, diffAll = 0;
         const ga = gradMag(a), gb = gradMag(shown);
         let n = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
         for (let i = 0, j = 0; i < a.length; i += 4, j++) {
           if (!covered(a, i)) continue;
           sa++;
+          diffAll += (Math.abs(a[i] - shown[i]) + Math.abs(a[i + 1] - shown[i + 1]) + Math.abs(a[i + 2] - shown[i + 2])) / 3;
           if (!covered(meshOnly, i)) continue;
           both++;
           diff += (Math.abs(a[i] - shown[i]) + Math.abs(a[i + 1] - shown[i + 1]) + Math.abs(a[i + 2] - shown[i + 2])) / 3;
@@ -327,7 +330,8 @@
         }
         const cov = sxy / n - (sx / n) * (sy / n);
         const corr = cov / Math.sqrt(Math.max(1e-9, (sxx / n - (sx / n) ** 2) * (syy / n - (sy / n) ** 2)));
-        return { covers: +(both / Math.max(1, sa)).toFixed(3), colourDiff: +(diff / Math.max(1, both)).toFixed(1), edgeCorr: +(n ? corr : 0).toFixed(3) };
+        return { covers: +(both / Math.max(1, sa)).toFixed(3), colourDiff: +(diff / Math.max(1, both)).toFixed(1),
+          colourDiffAll: +(diffAll / Math.max(1, sa)).toFixed(1), edgeCorr: +(n ? corr : 0).toFixed(3) };
       };
       const info = [];
       for (let k = 0; k < views.length; k++) {
@@ -367,7 +371,7 @@
         for (const [ci, key] of [[1, 'v1'], [2, 'v2']]) {
           if (!row[key]) continue;
           const r = row[key];
-          label(`covers ${(r.covers * 100).toFixed(0)}%  colour diff ${r.colourDiff}  edge corr ${r.edgeCorr}`, (ci + 1) * PAD + ci * VW + 8, y + TOP + VH - 8, '#ffffff');
+          label(`covers ${(r.covers * 100).toFixed(0)}%  colour diff ${r.colourDiff} (all ${r.colourDiffAll})  edge corr ${r.edgeCorr}`, (ci + 1) * PAD + ci * VW + 8, y + TOP + VH - 8, '#ffffff');
         }
         info.push(row);
       }

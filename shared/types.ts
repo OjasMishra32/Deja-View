@@ -60,6 +60,21 @@ export interface WorldAsset {
   collider?: string;
   source: 'flashworld' | 'anysplat' | 'marble-sample' | 'plate-depth' | 'other';
   splatCount?: number;
+  /**
+   * Drawn behind the splats where they leave holes (pipeline/backdrop.py, web/src/viewer/backdrop.ts). Without it the
+   * viewer looks for backdrop.json next to the world, which holds the same fields.
+   */
+  backdrop?: BackdropAsset;
+}
+
+/** A world's backdrop: its photo-textured room as a mesh and its sky. Files are relative to the scene directory. */
+export interface BackdropAsset {
+  /** GLB in the room frame: the viewer frame's axes, metres, floor at y = 0. */
+  file: string;
+  /** Equirect sky image (three.js convention, the viewer frame's axes), when there is one. */
+  sky?: string | null;
+  /** Height of the room frame's y = 0 in the viewer frame (the floor the room frame subtracted). Default 0. */
+  floorY?: number;
 }
 
 /**

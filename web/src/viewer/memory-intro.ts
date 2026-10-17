@@ -289,7 +289,7 @@ void main() {
   #include <colorspace_fragment>
 }`;
 
-const DARK_SKY: SkyPalette = { top: [0.02, 0.02, 0.024], horizon: [0.034, 0.034, 0.039], bottom: [0.012, 0.012, 0.014] };
+export const DARK_SKY: SkyPalette = { top: [0.02, 0.02, 0.024], horizon: [0.034, 0.034, 0.039], bottom: [0.012, 0.012, 0.014] };
 const mixSky = (a: SkyPalette, b: SkyPalette, t: number): SkyPalette => ({ top: mixRgb(a.top, b.top, t), horizon: mixRgb(a.horizon, b.horizon, t), bottom: mixRgb(a.bottom, b.bottom, t) });
 
 const STYLE_ID = 'dv-memory-style';

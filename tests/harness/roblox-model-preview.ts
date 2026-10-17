@@ -17,7 +17,8 @@
 //   bun tests/harness/roblox-model-preview.ts <sceneId> --v1 DIR --v2 DIR [--out data/evidence/roblox-v2] [--tag T]
 //
 // DIR = a repo-relative folder with roblox-model.json and its files. Output: <out>/<sceneId>[-T].png, one strip per
-// row, and the metrics (mesh coverage of the splat, colour difference, edge correlation) as <sceneId>[-T].json.
+// row, and the metrics (mesh coverage of the splat, colour difference where both show something, colourDiffAll over
+// every pixel the splat covers (holes count as what the column shows there), edge correlation) as <sceneId>[-T].json.
 import { mkdirSync } from 'node:fs';
 import { join, normalize, relative, resolve } from 'node:path';
 import { chromium } from 'playwright-core';
