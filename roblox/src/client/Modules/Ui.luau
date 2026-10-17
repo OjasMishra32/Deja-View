@@ -105,6 +105,7 @@ function Ui.build()
 	hostBtn("endBtn", "END ROUND", 4)
 	hostBtn("mockBtn", "MOCK JUDGE: OFF", 6)
 	hostBtn("huntBtn", "START HUNT", 5)
+	hostBtn("chessBtn", "CHESS BOARD", 7)
 	hostBtn("bigBtn", "BIG SCREEN: OFF", 7)
 	hostBtn("lobbyAllBtn", "ALL TO LOBBY", 8)
 

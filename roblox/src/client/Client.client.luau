@@ -207,6 +207,8 @@ local function renderScores()
 	end
 end
 
+local chessMarks: { BasePart } = {}
+
 -- Remote moments
 Moment.OnClientEvent:Connect(function(m)
 	if type(m) ~= "table" then
@@ -249,6 +251,30 @@ Moment.OnClientEvent:Connect(function(m)
 			end
 		else
 			Ui.toast(ui, string.upper(m.name) .. " FOUND " .. string.upper(m.label) .. " · " .. m.found .. "/" .. m.total)
+		end
+	elseif m.type == "chessTargets" then
+		-- light up the squares the held piece can move to (only on this player's screen)
+		for _, h in chessMarks do
+			h:Destroy()
+		end
+		table.clear(chessMarks)
+		local board = workspace:FindFirstChild("Room") and workspace.Room:FindFirstChild("Chess")
+		for _, sq in m.squares or {} do
+			local part = board and board:FindFirstChild("Sq" .. tostring(sq))
+			if part and part:IsA("BasePart") then
+				local mark = Instance.new("Part")
+				mark.Anchored, mark.CanCollide, mark.CanQuery, mark.CanTouch = true, false, false, false
+				mark.Material = Enum.Material.Neon
+				mark.Color = Theme.Accent
+				mark.Transparency = 0.45
+				mark.Size = Vector3.new(part.Size.X * 0.8, 0.12, part.Size.Z * 0.8)
+				mark.CFrame = part.CFrame * CFrame.new(0, part.Size.Y / 2 + 0.06, 0)
+				mark.Parent = workspace
+				table.insert(chessMarks, mark)
+			end
+		end
+		if #(m.squares or {}) > 0 then
+			Effects.sound("tick")
 		end
 	elseif m.type == "unlocked" then
 		ui.unlockedName.Text = string.upper(m.name or "")
@@ -310,6 +336,9 @@ ui.startBtn.Activated:Connect(function()
 end)
 ui.endBtn.Activated:Connect(function()
 	host("end_round")
+end)
+ui.chessBtn.Activated:Connect(function()
+	host("chess", workspace.CurrentCamera.CFrame.LookVector)
 end)
 ui.huntBtn.Activated:Connect(function()
 	host(if W("RoundState") == "hunt" then "end_hunt" else "start_hunt")
