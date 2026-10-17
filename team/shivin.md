@@ -8,6 +8,10 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 15 (Sat ~1 PM): commit rule.** No `Co-Authored-By` lines (or any tool attribution) in commit messages
+> from now on, and no timestamps in messages. If your git tool adds a trailer, delete it before you commit. Ojasva will
+> decide what happens to the earlier commits that have one; please don't rewrite or force-push anything yourself.
+
 > **Update 14 (Sat ~11:50 AM): the public link changed.** Cloudflare dropped the quick tunnel; the new BASE is
 > `https://highlighted-filter-surf-other.trycloudflare.com`. Set the Experience Config `dejaview_base` to it in Creator
 > Hub (live at once, no publish). Config.luau BASE_FALLBACK on `main` is updated too.
