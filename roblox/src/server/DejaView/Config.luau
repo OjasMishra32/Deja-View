@@ -7,7 +7,7 @@ local Config = {
 	-- Flip to false once the public BASE is live (or create a boolean config "use_mock").
 	USE_MOCK = false,
 	-- Ojasva's public link (Update 4). A dejaview_base Experience Config overrides it.
-	BASE_FALLBACK = "https://highlighted-filter-surf-other.trycloudflare.com",
+	BASE_FALLBACK = "https://deja-view.photo",
 	SECRET_NAME = "dejaview_key",
 
 	ROUND_SECONDS = 90,

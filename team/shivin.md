@@ -8,11 +8,14 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 20 (Sat ~4 PM): the site is on its own domain now: `https://deja-view.photo`.** It's permanent. Use it as
+> BASE everywhere, and open it in the Quest browser for headset QA (no more changing links). The old `trycloudflare`
+> link stays up for a while as a backup only.
+
 > **Update 19 (Sat ~3:45 PM): product work only. No Roblox (no Studio), no Devpost.** This replaces Updates 17 and 18:
 > drop the video, the Devpost page, the rehearsal, cooking rush and the censor review. Three build jobs, in order.
 > Each can go to an agent as written. Work on a branch `shivin/<task>`, with no attribution or timestamps in commits
-> (`git config core.hooksPath .githooks`). Never paste keys. BASE is the live link (`https://deja-view.photo` once its
-> DNS switches). World files download from `BASE/data/scenes/<id>/world.spz` and `cameras.json`.
+> (`git config core.hooksPath .githooks`). Never paste keys. BASE is `https://deja-view.photo`. World files download from `BASE/data/scenes/<id>/world.spz` and `cameras.json`.
 >
 > **1. Automatic walk zones from view quality (the biggest one).** Today each world's walkable area is hand-made.
 > The kitchen was boxed into 0.85 m^2 until Ojasva opened it to 11.9 m^2 by hand, and the old house kitchen got a
@@ -55,7 +58,7 @@ they win: say so in the team chat.
 > Problems go into `team/qa-quest.md` on `shivin/qa`.
 
 > **Update 17 (Sat ~1:30 PM): your new jobs, in this order.** All three need you, not Studio. The live link (BASE) is
-> `https://highlighted-filter-surf-other.trycloudflare.com` (Ojasva posts a new one if the tunnel restarts).
+> `https://deja-view.photo` (Ojasva posts a new one if the tunnel restarts).
 >
 > **1. The Devpost video (you own it). Hard limit: under 2:00, due before 8 AM Sunday.** Lead with our own captures,
 > never Fortnite footage (Vobile, the overall sponsor, protects content). A beat sheet that fits in about 1:50:
@@ -107,7 +110,7 @@ they win: say so in the team chat.
 > `git config core.hooksPath .githooks` once in your clone: its commit-msg hook strips those lines for you.
 
 > **Update 14 (Sat ~11:50 AM): the public link changed.** Cloudflare dropped the quick tunnel; the new BASE is
-> `https://highlighted-filter-surf-other.trycloudflare.com`. Set the Experience Config `dejaview_base` to it in Creator
+> `https://deja-view.photo`. Set the Experience Config `dejaview_base` to it in Creator
 > Hub (live at once, no publish). Config.luau BASE_FALLBACK on `main` is updated too.
 
 > **Update 13 (Sat ~9:15 AM): URGENT, your Roblox account is moderated.** Since about 9 AM every Open Cloud upload
@@ -309,7 +312,7 @@ they win: say so in the team chat.
 
 > **Update 4 (Sat ~3:10 AM): the server is public. Your work list, in order.**
 >
-> **The link (live now):** `https://highlighted-filter-surf-other.trycloudflare.com` (it changes if the tunnel
+> **The link (live now):** `https://deja-view.photo` (it changes if the tunnel
 > restarts; Ojasva posts the new one; Seb's fixed domain replaces it later). Checked from outside: `/api/scenes`,
 > `/api/roblox/<id>/map`, `/presence` and `/event` all answer. No `dejaview_key` is required yet.
 >

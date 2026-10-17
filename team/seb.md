@@ -10,12 +10,19 @@ up in the headset) and powers the finale (2:00 to 2:25, the judge's own photo be
 
 ---
 
+**Update 12 (Sat ~4 PM): the site is on its own domain now: `https://deja-view.photo`.** It's permanent, so it never
+changes on a restart again. Three settings, once:
+1. DeepSpace `/admin` → `baseUrl` = `https://deja-view.photo` (the gallery lists the worlds again).
+2. Roblox Experience Config `dejaview_base` = `https://deja-view.photo` (Creator Hub, live at once).
+3. `git pull`: `BASE_FALLBACK` in `roblox/src/server/DejaView/Config.luau` is `https://deja-view.photo` on `main`.
+Every `BASE` in this file now means `https://deja-view.photo`. The old `trycloudflare` link keeps working for a while
+as a backup; don't use it for anything new.
+
 **Update 11 (Sat ~3:30 PM): tonight in order, so Roblox is real at the expo.**
 1. **Task A first (Update 8): your experience, live.** Without it there is no Roblox at the table. Publish from the
    repo (`roblox/default.project.json` + `roblox/DejaView-pingpong-v4.rbxlx`, or your v19 place) on your account,
    set `dejaview_base` to BASE, and post the place id. The baked v19 court stays the fallback.
-2. **DeepSpace gallery:** set `/admin` → `baseUrl` to BASE now. When Ojasva posts that `https://deja-view.photo` is
-   live (its DNS is switching now), move `baseUrl` and `dejaview_base` to it once.
+2. **DeepSpace gallery:** set `/admin` → `baseUrl` to `https://deja-view.photo` (Update 12).
 3. **Censor pass and gate (Update 8, Tasks C and D):** then upload the Game Lawn room and its sky from your account.
    A teammate who isn't you (Brianna, or Ojasva) looks at the contact sheets and runs `review.py`; Shivin is on product work. Giant chess is next.
 4. **Cooking rush on the real kitchen:** put the STOVE on a `features.surfaces` stove and the ingredients on the
@@ -44,7 +51,7 @@ room (like the Game Lawn's) is building on HiPerGator now; until it lands, `/mod
 - Scenes are never in git (`data/` is ignored). `the-courts` is complete on Ojasva's Mac, which runs the live server.
   Your local server only has the kitchen you copied, so it answers 404 for the court. Don't recover or rebuild
   anything; read the court from BASE.
-- BASE today is `https://highlighted-filter-surf-other.trycloudflare.com`. `GET BASE/api/roblox/the-courts/model` is 200,
+- BASE today is `https://deja-view.photo`. `GET BASE/api/roblox/the-courts/model` is 200,
   and so is `.../model/roblox.glb` (18.7 MB), `.../map` and `BASE/data/scenes/the-courts/world.spz` (16.1 MB).
   `.../objects` is 404 because the object layer only exists for the kitchen.
 - If you want a local copy for the asset maker, download those four files into `data/scenes/the-courts/`.
@@ -74,7 +81,7 @@ Data: never delete anything under data/; move it to data/archive/ instead.
 Roblox: nothing is uploaded unless pipeline/objects/preflight.py passed AND a human approved that exact file with
 pipeline/objects/review.py (the approval is bound to the file's SHA1). One upload at a time, never in bulk.
 Fortnite-derived worlds (tilted-towers, brick-apartment and any fortnite-*) never go to Roblox: Epic's art.
-BASE (the live server) = the link Ojasva posts in the team chat; today https://highlighted-filter-surf-other.trycloudflare.com
+BASE (the live server) = the link Ojasva posts in the team chat; today https://deja-view.photo
 It changes whenever the tunnel restarts.
 ```
 
@@ -470,7 +477,7 @@ and three video memories (`courts-foosball`, `chess-match`, `kitchen-cooking`). 
 
 **Update 3 (Sat ~3 AM): what is next for you (the update box below still stands):**
 
-**The public link is live:** `https://highlighted-filter-surf-other.trycloudflare.com` (it changes if the tunnel restarts; Ojasva reposts). Set it as `dvBase` in your
+**The public link is live:** `https://deja-view.photo` (it changes if the tunnel restarts; Ojasva reposts). Set it as `dvBase` in your
 DeepSpace config now and point your gallery and "Add a memory" at it (uploads open once Ojasva switches the server
 from read-only, Saturday morning; reading `/api/scenes` works now). Send your DeepSpace URL and `DS_KEY` privately the
 moment `/api/ingest` and `/api/notes` are deployed, so the live map and notes go end to end.

@@ -9,6 +9,10 @@ Everything below was checked against the live Gemini docs and SDK on Fri Oct 16,
 checked, it says so and tells you how to check it. If something here turns out to be wrong on the night, tell Ojasva
 right away and use the fallback listed for it.
 
+> **Update 8 (Sat ~4 PM): the site is on its own domain now: `https://deja-view.photo`.** It's permanent. Use it for
+> testing labels in every world. The guide (Update 7 item 1) is still the top job: once it runs on port 8795 on the
+> demo Mac, Ojasva restarts the server with `GUIDE_URL` and it's live on the domain at once.
+
 > **Update 7 (Sat ~3:30 PM): the guide is still off, and it's the Gemini prize. Please do 1 first, today.**
 > 1. **Turn the guide on.** Every world still says "The guide is off", and there's no Gemini key on the demo Mac
 >    (Ojasva's). Two ways, both quick:
@@ -32,8 +36,7 @@ right away and use the fallback listed for it.
 >    and where a judge sees each, for `docs/DEVPOST.md`. Shivin is drafting the Devpost page (shivin.md Update 18).
 > 5. **Still open from Update 6**: PACE login (item 2) and the Tiger Cloud and Auth0 sign-ups (item 4), values to
 >    Ojasva privately.
-> The site moves to `https://deja-view.photo` once its DNS switches (Ojasva posts when). Until then use the current
-> link.
+> The site is at `https://deja-view.photo` (Update 8).
 
 > **Update 6 (Sat ~11 AM): five things only you can do, most important first.**
 > 1. **Make the guide live (biggest gap; the site says "The guide is off").** On the demo Mac: `git pull`, then in
@@ -111,7 +114,7 @@ right away and use the fallback listed for it.
 >
 > **Update 3 (Sat ~3 AM): what is next for you:**
 >
-> **The public link is live:** `https://highlighted-filter-surf-other.trycloudflare.com`. You can open any world at `https://highlighted-filter-surf-other.trycloudflare.com/view?scene=<id>` to see what the guide
+> **The public link is live:** `https://deja-view.photo`. You can open any world at `https://deja-view.photo/view?scene=<id>` to see what the guide
 > will be looking at. For the demo your service runs on Ojasva's Mac (`GUIDE_URL=http://127.0.0.1:8795`); bring it over
 > Saturday morning (the `GEMINI_API_KEY` goes in its `.env` privately).
 > 1. **The worlds are changing:** the four rebuilt worlds (real footage, every angle; walking limited to where the camera went): **`tilted-towers`**

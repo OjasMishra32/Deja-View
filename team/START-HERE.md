@@ -8,6 +8,23 @@ same world is a Roblox place** friends play on the Quest Roblox app or a phone) 
 a room with the real footage standing in it in 3D; headset and browser only, not Roblox). Walk around in a Meta Quest 3S
 or a browser.
 
+**Now (Sat ~4 PM): the site is `https://deja-view.photo`, our own domain, permanent.** Use it everywhere: browser,
+Quest browser, DeepSpace `baseUrl`, Roblox `dejaview_base`. The old `trycloudflare` link is only a backup.
+
+Live on it:
+- Worlds: Infinity Hall Game Lawn (`the-courts`), Giant chess (`chess-room`), the kitchen (`kitchen`, walkable
+  along its whole strip), Tilted Towers, the Brick House apartment, and the old Pennsylvania house kitchen
+  (`old-house-kitchen`, rebuilt from four listing photos).
+- Video memories, with the people in full 3D: Foosball at the Game Lawn (`courts-foosball`) and Sebastian cooking
+  (`kitchen-cooking`: fridge doors and the milk jug included). The chess match (`chess-match`) is next.
+
+Who does what now, each in their own file's newest update:
+- Seb: Roblox on his account, censor pass and gate, cooking rush (seb.md Updates 11 and 12).
+- Shivin: product work only: automatic walk zones, listing photos to a home, one-command video memories, headset QA
+  (shivin.md Updates 19 and 20).
+- Brianna: turn the Gemini guide on first (brianna.md Updates 7 and 8).
+- Ojasva: worlds, memories, the site and the server.
+
 **Update 5 (Sat ~5:30 AM):** on the link now: `the-courts` (shown as Infinity Hall Game Lawn) and `brick-apartment`.
 Still being built: `chess-room`, `kitchen`, `tilted-towers`, the three video memories, and the version 2 Roblox models
 (the court first). New on `main`: the Roblox game stands you on a real floor at y = 0, lines the textured model up on
