@@ -12,6 +12,8 @@ local Board = require(Modules.Board)
 local Ghosts = require(Modules.Ghosts)
 local Effects = require(Modules.Effects)
 local PongBall = require(Modules.PongBall)
+local RoomLook = require(Modules.RoomLook)
+local Arrival = require(Modules.Arrival)
 local Theme = require(ReplicatedStorage:WaitForChild("Shared").Theme)
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -112,6 +114,8 @@ local function refresh()
 	local judge = W("JudgeHere") == true
 	local round = W("RoundState") or "idle"
 
+	RoomLook.update(inRoom and phase == "room")
+
 	-- loading screen
 	local showLoading = (not bootDone) or (phase == "loading" and inRoom)
 	if showLoading then
@@ -181,13 +185,23 @@ local function refresh()
 	ui.banner.Visible = banner ~= ""
 	ui.banner.Text = banner
 
-	ui.score.Visible = round == "playing" or round == "countdown" or round == "ended" or round == "hunt"
+	ui.score.Visible = round == "playing" or round == "countdown" or round == "ended" or round == "hunt" or round == "game"
 end
 
 local function renderScores()
 	for _, c in ui.scoreRows:GetChildren() do
 		if c:IsA("Frame") then
 			c:Destroy()
+		end
+	end
+	if W("RoundState") == "game" or (W("RoundState") == "ended" and (W("GameJson") or "") ~= "") then
+		local okG, gdata = pcall(HttpService.JSONDecode, HttpService, W("GameJson") or "")
+		if okG and type(gdata) == "table" and W("RoundState") == "game" then
+			Ui.scoreRow(ui.scoreRows, tostring(gdata.title), "", Theme.Accent, 0)
+			for i, r in gdata.rows or {} do
+				Ui.scoreRow(ui.scoreRows, r.name, r.right, if r.hi then Theme.Text else Theme.Muted, i)
+			end
+			return
 		end
 	end
 	if W("RoundState") == "hunt" then
@@ -288,6 +302,9 @@ Moment.OnClientEvent:Connect(function(m)
 		if #(m.squares or {}) > 0 then
 			Effects.sound("tick")
 		end
+	elseif m.type == "blind" then
+		ui.blind.Visible = m.on == true
+		ui.blindText.Text = tostring(m.text or "")
 	elseif m.type == "intro" then
 		ui.intro.Visible = true
 		task.delay(10, function()
@@ -414,6 +431,15 @@ end)
 ui.hitBtn.Activated:Connect(function()
 	PongHit:FireServer()
 end)
+ui.hideBtn.Activated:Connect(function()
+	host("hideseek")
+end)
+ui.lavaBtn.Activated:Connect(function()
+	host("lava")
+end)
+ui.cookBtn.Activated:Connect(function()
+	host("cooking")
+end)
 ui.chessBtn.Activated:Connect(function()
 	host("chess", workspace.CurrentCamera.CFrame.LookVector)
 end)
@@ -495,7 +521,16 @@ end
 workspace:GetAttributeChangedSignal("RoomsJson"):Connect(renderCards)
 workspace:GetAttributeChangedSignal("ScoresJson"):Connect(renderScores)
 workspace:GetAttributeChangedSignal("HuntJson"):Connect(renderScores)
+workspace:GetAttributeChangedSignal("GameJson"):Connect(renderScores)
 workspace:GetAttributeChangedSignal("RoundState"):Connect(renderScores)
+-- the room's model (and its sky) can arrive a moment after the room itself
+workspace.ChildAdded:Connect(function(c)
+	if c.Name == "Room" then
+		c:GetAttributeChangedSignal("HasModel"):Connect(refresh)
+		c:GetAttributeChangedSignal("SkyFt"):Connect(refresh)
+		task.defer(refresh)
+	end
+end)
 workspace:GetAttributeChangedSignal("SceneId"):Connect(function()
 	Ghosts.clear()
 	reality = false
@@ -526,7 +561,7 @@ RunService.RenderStepped:Connect(function(dt)
 		local left = math.max(0, (W("RoundEndsAt") or 0) - workspace:GetServerTimeNow())
 		ui.timer.Text = string.format("%d:%02d", left // 60, math.floor(left % 60))
 		ui.timer.TextColor3 = if left < 10 then Theme.Danger else Theme.Text
-	elseif round == "hunt" then
+	elseif round == "hunt" or round == "game" then
 		local left = math.max(0, (W("RoundEndsAt") or 0) - workspace:GetServerTimeNow())
 		ui.timer.Text = string.format("%d:%02d", left // 60, math.floor(left % 60))
 		ui.timer.TextColor3 = Theme.Accent
@@ -578,7 +613,7 @@ local function layoutForScreen()
 	-- 1 on a laptop, down to 0.6 on a phone in landscape.
 	-- Laptops 1, tablets ~0.9, phones 0.75 (keeps tap targets around 33 pt or more).
 	local scale = math.clamp(math.min(size.X / 1100, size.Y / 620), 0.75, 1)
-	Ui.setCompact(ui, size.Y < 560)
+	Ui.setCompact(ui, size.Y < 900) -- 15 host buttons: two columns unless the screen is tall
 	Ui.setScale(ui, scale)
 	ui.host.Position = UDim2.new(0, 16, 0, 64 + 120 * scale) -- right under the (scaled) HUD row
 	local small = size.X < 900
@@ -596,6 +631,8 @@ task.spawn(function()
 		renderCards()
 	end
 end)
+
+Arrival.start()
 
 -- Boot: the dark loading screen fades into the lobby
 task.delay(1.2, function()

@@ -304,7 +304,7 @@ local function prepareModel(model: Instance, meshCollision: boolean)
 			d.CanTouch = false
 			d.CanCollide = meshCollision
 			d.CanQuery = meshCollision
-			-- unlit look (Update 10): the texture colours as they are
+			-- Baked textures already hold the photo's light: no extra shading on top (Update 10)
 			d.Material = Enum.Material.SmoothPlastic
 			d.Reflectance = 0
 			d.CastShadow = false

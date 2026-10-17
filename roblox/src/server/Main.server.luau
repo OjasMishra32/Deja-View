@@ -13,6 +13,7 @@ local Chess = require(DV.Chess)
 local Pong = require(DV.Pong)
 local Foosball = require(DV.Foosball)
 local Stats = require(DV.Stats)
+local WorldGames = require(DV.WorldGames)
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local Vote = Remotes:WaitForChild("Vote") :: RemoteEvent
@@ -20,7 +21,7 @@ local HostAction = Remotes:WaitForChild("HostAction") :: RemoteEvent
 
 for name, value in {
 	Phase = "lobby", SceneId = "", RoomName = "", LoadProgress = 0, LoadStage = "", Banner = "",
-	Offline = false, JudgeHere = false, JudgeName = "", JudgeRoom = "", LabelCount = 0, HuntJson = "", RoundState = "idle", RoundEndsAt = 0,
+	Offline = false, JudgeHere = false, JudgeName = "", JudgeRoom = "", LabelCount = 0, HuntJson = "", GameJson = "", RoundState = "idle", RoundEndsAt = 0,
 	CountdownEndsAt = 0, RoundIt = "", ScoresJson = "", RoomsJson = "[]", AutoJoin = Config.AUTO_JOIN_DEFAULT,
 	Follow = true, MockJudge = false, HasImagined = false, UsingMock = Config.useMock(),
 } do
@@ -68,6 +69,10 @@ local actions: { [string]: (Player, any) -> () } = {
 		end)
 	end,
 	start_round = function(p)
+		if WorldGames.active() then
+			World.toast("Finish the current game first", p)
+			return
+		end
 		if Extras.huntActive() then
 			World.toast("Finish the hunt first", p)
 			return
@@ -77,8 +82,34 @@ local actions: { [string]: (Player, any) -> () } = {
 	end_round = function()
 		TagGame.finish()
 		Extras.endHunt(nil)
+		WorldGames.stop()
+	end,
+	hideseek = function(p)
+		if TagGame.isPlaying() or Extras.huntActive() then
+			World.toast("Finish the current round first", p)
+			return
+		end
+		WorldGames.hideAndSeek(p)
+	end,
+	lava = function(p)
+		if TagGame.isPlaying() or Extras.huntActive() then
+			World.toast("Finish the current round first", p)
+			return
+		end
+		WorldGames.lava(p)
+	end,
+	cooking = function(p)
+		if TagGame.isPlaying() or Extras.huntActive() then
+			World.toast("Finish the current round first", p)
+			return
+		end
+		WorldGames.cooking(p)
 	end,
 	start_hunt = function(p)
+		if WorldGames.active() then
+			World.toast("Finish the current game first", p)
+			return
+		end
 		if TagGame.isPlaying() then
 			World.toast("Finish the tag round first", p)
 			return
@@ -159,6 +190,7 @@ end
 TagGame.start10Hz()
 Extras.start()
 Chess.start()
+WorldGames.start()
 Pong.start()
 Foosball.start()
 
@@ -234,6 +266,43 @@ Players.PlayerAdded:Connect(function(p)
 		Rooms.waitForList(10)
 		Rooms.switchTo(data.LaunchData, { joinLobby = false })
 	end
+end)
+
+-- Script audit: list every script in the place that isn't ours, so a backdoor from a free model (Toolbox) shows up
+-- in the Output. Read-only; it changes nothing.
+task.spawn(function()
+	local ours = {
+		game:GetService("ServerScriptService"):FindFirstChild("Main"),
+		game:GetService("ServerScriptService"):FindFirstChild("DejaView"),
+		game:GetService("ReplicatedStorage"):FindFirstChild("Shared"),
+		game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts"),
+	}
+	local function isOurs(inst: Instance): boolean
+		-- Roblox's own player scripts and the Animate script inside our judge rig are expected
+		local path = inst:GetFullName()
+		if string.find(path, "^StarterPlayer%.PlayerModule") or string.find(path, "^StarterPlayer%.StarterCharacterScripts")
+			or string.find(path, "JudgeRig") then
+			return true
+		end
+		for _, root in ours do
+			if root and (inst == root or inst:IsDescendantOf(root)) then
+				return true
+			end
+		end
+		return false
+	end
+	local found = 0
+	for _, svc in { workspace, game:GetService("ServerStorage"), game:GetService("ServerScriptService"),
+		game:GetService("ReplicatedStorage"), game:GetService("ReplicatedFirst"), game:GetService("StarterGui"),
+		game:GetService("StarterPack"), game:GetService("StarterPlayer"), game:GetService("Lighting") } do
+		for _, d in svc:GetDescendants() do
+			if d:IsA("LuaSourceContainer") and not isOurs(d) then
+				found += 1
+				warn("[DejaView][audit] script not from our code:", d.ClassName, d:GetFullName())
+			end
+		end
+	end
+	print("[DejaView][audit] done,", found, "foreign scripts")
 end)
 
 print("[DejaView] server up; mock =", Config.useMock(), "base =", Config.base())
