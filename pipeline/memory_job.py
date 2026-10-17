@@ -554,9 +554,27 @@ def write_job(plan: Plan) -> dict:
     return imports
 
 
+def resume_plan(plan: Plan, from_step: str, probe_fn=probe) -> tuple[Plan, list[str]]:
+    """The part of `plan` from `from_step` on (that step and every step after it in the plan), for a chain that
+    stopped part way. Steps it waits for that came before it are not run again, so their outputs must be there:
+    each one's own check runs now (only the steps it reads from directly: a finished step's own inputs may be gone,
+    and are not needed). Returns (the plan to submit, problems). Dependencies on steps already done drop out; the
+    rest keep their afterok order."""
+    names = [s.name for s in plan.steps]
+    if from_step not in names:
+        raise SystemExit(f"--from {from_step}: not a step of this plan ({', '.join(names)})")
+    chosen = plan.steps[names.index(from_step):]
+    keep = {s.name for s in chosen}
+    needed = sorted({a for s in chosen for a in s.after if a not in keep}, key=names.index)
+    problems = [f"{n}: {p}" for n in needed for p in check(plan, n, probe_fn)]
+    steps = [Step(**{**asdict(s), "after": [a for a in s.after if a in keep]}) for s in chosen]
+    rest = {k: v for k, v in asdict(plan).items() if k != "steps"}
+    return Plan(**rest, steps=steps), problems
+
+
 def submit(plan: Plan, sbatch: str = "sbatch", account: str | None = None, qos: str | None = None,
            gpu_partition: str | None = None, cpu_qos: str | None = None, cpu_partition: str | None = None,
-           runner=subprocess.run) -> dict:
+           runner=subprocess.run, record: str = "submitted.json") -> dict:
     """Submits every step with afterok dependencies on the steps it needs. Returns {step: job id}."""
     import os
 
@@ -577,7 +595,7 @@ def submit(plan: Plan, sbatch: str = "sbatch", account: str | None = None, qos: 
         cmd.append(str(root / "steps" / f"{s.name}.sbatch"))
         out = runner(cmd, capture_output=True, text=True, check=True).stdout.strip()
         ids[s.name] = out.split(";")[0]
-    (root / "submitted.json").write_text(json.dumps({"jobs": ids, "at": time.strftime("%Y-%m-%d %H:%M:%S")}, indent=1))
+    (root / record).write_text(json.dumps({"jobs": ids, "at": time.strftime("%Y-%m-%d %H:%M:%S")}, indent=1))
     return ids
 
 
@@ -723,6 +741,8 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(do_install(plan), indent=1))
         return 0
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    if "--from" in argv:
+        return resume_main(argv)
     ap.add_argument("--clip", required=True, type=Path)
     ap.add_argument("--start", required=True, type=float)
     ap.add_argument("--end", required=True, type=float)
@@ -774,6 +794,37 @@ def main(argv: list[str] | None = None) -> int:
     imports = write_job(plan)
     ids = submit(plan)
     print(describe(plan, imports))
+    print("\nsubmitted: " + ", ".join(f"{k} {v}" for k, v in ids.items()))
+    return 0
+
+
+def resume_main(argv: list[str], probe_fn=probe, runner=subprocess.run) -> int:
+    """`--from <step> --root <job folder> [--dry-run | --submit]`: picks up a chain from its job folder (plan.json,
+    the code snapshot and the step scripts the first --submit wrote) at that step, after checking the outputs of
+    the steps before it that it needs."""
+    ap = argparse.ArgumentParser(prog="memory_job.py --from")
+    ap.add_argument("--from", dest="from_step", required=True)
+    ap.add_argument("--root", required=True, type=Path, help="the job folder of the earlier --submit")
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--submit", action="store_true")
+    a, _ = ap.parse_known_args(argv)
+    pj = a.root / "plan.json"
+    if not pj.exists():
+        raise SystemExit(f"{pj} not found: --from picks up a chain an earlier --submit wrote")
+    plan = Plan.from_json(json.loads(pj.read_text()))
+    part, problems = resume_plan(plan, a.from_step, probe_fn)
+    if problems:
+        raise SystemExit(f"cannot start at {a.from_step}; the steps before it are not done:\n  " + "\n  ".join(problems))
+    print(f"resuming {plan.id} at {a.from_step}: {', '.join(s.name for s in part.steps)}\n")
+    print(describe(part))
+    if not a.submit or a.dry_run:
+        if not a.dry_run:
+            print("\n(nothing submitted: add --submit)")
+        return 0
+    missing = [s.name for s in part.steps if not (a.root / "steps" / f"{s.name}.sbatch").exists()]
+    if missing:
+        raise SystemExit(f"step scripts missing in {a.root / 'steps'}: {', '.join(missing)}")
+    ids = submit(part, runner=runner, record=f"submitted-from-{a.from_step}-{time.strftime('%Y%m%d-%H%M%S')}.json")
     print("\nsubmitted: " + ", ".join(f"{k} {v}" for k, v in ids.items()))
     return 0
 
