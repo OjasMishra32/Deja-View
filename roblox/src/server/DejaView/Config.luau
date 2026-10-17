@@ -38,6 +38,8 @@ local Config = {
 	-- Hand-tuned ping pong tables until features.pingPongTable (studs; centre = table top centre; yaw: long axis):
 	-- ["the-courts"] = { centre = { x, y, z }, yaw = 0, length = 14, width = 8, visible = false }
 	PINGPONG_TABLES = {} :: { [string]: any },
+	-- Hand-tuned foosball tables until features.foosballTable (same shape as PINGPONG_TABLES; length 16, width 9)
+	FOOSBALL_TABLES = {} :: { [string]: any },
 	-- Extra Roblox user ids that get host controls (the owner always does).
 	HOST_USER_IDS = {} :: { number },
 

@@ -107,6 +107,7 @@ function Ui.build()
 	hostBtn("huntBtn", "START HUNT", 5)
 	hostBtn("chessBtn", "CHESS BOARD", 7)
 	hostBtn("pongBtn", "PING PONG", 7)
+	hostBtn("foosBtn", "FOOSBALL", 7)
 	hostBtn("bigBtn", "BIG SCREEN: OFF", 7)
 	hostBtn("lobbyAllBtn", "ALL TO LOBBY", 8)
 
@@ -171,6 +172,18 @@ function Ui.build()
 		Visible = false, Parent = gui })
 	ui.hitBtn:FindFirstChildOfClass("UICorner").CornerRadius = UDim.new(1, 0)
 	table.insert(ui.scales, make("UIScale", { Scale = 1, Parent = ui.hitBtn }))
+
+	-- Foosball controls (bottom centre: the corners belong to the thumbstick and jump)
+	local foos = make("Frame", { Name = "Foos", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -110),
+		Size = UDim2.fromOffset(360, 90), BackgroundTransparency = 1, Visible = false, Parent = gui },
+		{ make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 12),
+			HorizontalAlignment = Enum.HorizontalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder }) })
+	ui.foos = foos
+	ui.foosLeft = button({ Text = "◀", Size = UDim2.fromOffset(100, 90), LayoutOrder = 1, MaxText = 40, Parent = foos })
+	ui.foosKick = button({ Text = "KICK", Size = UDim2.fromOffset(120, 90), LayoutOrder = 2, BackgroundColor3 = Theme.Accent,
+		TextColor3 = Theme.Bg, MaxText = 30, Parent = foos })
+	ui.foosRight = button({ Text = "▶", Size = UDim2.fromOffset(100, 90), LayoutOrder = 3, MaxText = 40, Parent = foos })
+	table.insert(ui.scales, make("UIScale", { Scale = 1, Parent = foos }))
 
 	-- Note composer (centre, above the JOIN area)
 	local composer = make("Frame", { Name = "NoteComposer", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 120),
