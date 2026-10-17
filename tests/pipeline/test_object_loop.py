@@ -209,3 +209,17 @@ def test_loop_end_to_end_on_a_synthetic_stove(tmp_path, monkeypatch):
     assert (cur / "roblox.glb").read_bytes() == before  # the current set is untouched
     assert (cur / "preflight" / "approval.json").read_text() == approval
     assert res["prior"]["regular"]["voxel"]
+
+
+def test_report_tables_from_a_loop_run(tmp_path, monkeypatch):
+    from objects.loop import report
+
+    test_loop_end_to_end_on_a_synthetic_stove(tmp_path, monkeypatch)
+    scene = tmp_path / "kitchen"
+    body = report.tables(scene)
+    assert "| stove | regular |" in body and "★" in body and "Recommendation:" in body
+    assert "no eval.json yet" in body  # the evaluator CLI was not run in this test
+    doc = tmp_path / "d.md"
+    doc.write_text(f"a\n{report.BEGIN}\nx\n{report.END}\nb\n")
+    report.write_between(doc, body)
+    assert "| stove |" in doc.read_text() and doc.read_text().endswith("b\n")
