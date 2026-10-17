@@ -2,14 +2,23 @@
 
 **Tagline:** You've seen this before. Now walk around in it.
 
-**Short description:** Add a photo or a video to your friends' shared memory board, and everyone can walk inside it
-from a VR headset, a browser or Roblox, and leave notes for the next person who visits.
+**Short description:** Turn the photos and phone videos you already have into places you can walk back into: with
+friends in Roblox, in a VR headset or a browser, or sitting next to someone who is starting to forget them.
 
 ---
 
 ## Inspiration
 
-Every group chat has a camera roll full of nights you weren't at. You get a 12-second clip, a blurry photo and "you
+One of our teammates' grandfather has Alzheimer's. The disease usually takes the newest memories first; the old
+places and the old faces tend to stay the longest. Families already know what helps on a good day: you sit together
+with the old photos and ask "do you remember this?" But a photo is flat. You can't turn around in it, and you can't
+sit back down at that table.
+
+So we asked what it would take to give him the room back. Take the photos and phone clips his family already has,
+rebuild the place and the people in it in 3D, and let him sit inside it next to the people who love him, in a
+headset or just on a laptop.
+
+Then we saw the same thing works for everyone, with less at stake. Every group chat has a camera roll full of nights you weren't at. You get a 12-second clip, a blurry photo and "you
 had to be there." We wanted the next best thing to having been there: to actually stand in the room, turn around, and
 see who was sitting where.
 
@@ -38,7 +47,8 @@ Déjà View has two modes.
   footage and its sound. Walk all the way around your friends at the foosball table, pause mid-game and look at
   them from behind, or step back to where the phone was and see the original video line up with them. In the
   kitchen, Seb opens the fridge and carries the milk out, and the door and the jug move with him. At the giant chess
-  board, both players stand there mid-game.
+  board, both players stand there mid-game. That's 4D reconstruction from one phone clip: the room in 3D, and the
+  people in it in 3D, moving through time.
 
 Then the room becomes social:
 
@@ -49,6 +59,9 @@ Then the room becomes social:
   with the person in VR, who sees them as ghosts.
 - **Notes that stay:** click the room on the DeepSpace map and type a note. It pops up in the headset as a sticky note
   where you clicked and stays for the next visitor.
+- **A visit, not a game:** for someone who is forgetting, the same world becomes a place to sit with family. Put the
+  old listing photos of the house and the birthday clips on one board, then walk in together: Grandpa in the headset
+  or at the laptop, the grandkids beside him in Roblox, and the room answering "whose birthday was this?" out loud.
 - **It starts on the memory board:** add a photo or clip with "Add a memory" in the DeepSpace app, and the card comes
   back with the world link, the Roblox link and the map link.
 
@@ -213,6 +226,10 @@ in our credits fill in what the camera never saw.
 
 ## What's next
 
+- Memory visits for families living with dementia, designed with caregivers and memory-care staff instead of
+  guessed at: a calm mode with no games and no labels, a family member's recorded voice in place of the guide's, and
+  a way to keep each visit. We haven't tried Déjà View with anyone living with dementia yet, and we'd only do that
+  with their family and care team.
 - Live Video builds in under a minute, so the "now do it" moment works for clips too.
 - A Vultr GPU worker next to HiPerGator, so we're not borrowing a class's GPUs.
 - Several clips of one night stitched into one room.
