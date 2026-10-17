@@ -98,6 +98,42 @@ def median_color(colors: np.ndarray, scale: float = 255.0) -> list[int]:
     return [int(v) for v in out]
 
 
+def dominant_color(colors: np.ndarray, min_share: float = 0.30, min_ratio: float = 1.4) -> list[int]:
+    """The body colour: the brighter large cluster when the object has a dark side and a lit front.
+
+    A fridge is the motivating case: the mask sees a dark side and a light front. A plain
+    median turns both into a muddy brown. Two-means keeps the lighter cluster when it holds
+    at least `min_share` of the points and is at least `min_ratio` brighter than the other.
+    """
+    c = np.asarray(colors, np.float64)
+    if c.ndim != 2 or c.shape[1] != 3 or len(c) == 0:
+        raise ValueError("colors must be N x 3 and not empty")
+    if float(np.max(c)) <= 1.0 and float(np.min(c)) >= 0.0:
+        c = c * 255.0
+    if len(c) < 8:
+        return median_color(c)
+    lum = c @ np.array([0.2126, 0.7152, 0.0722])
+    low = c[lum <= np.percentile(lum, 25)].mean(axis=0)
+    high = c[lum >= np.percentile(lum, 75)].mean(axis=0)
+    cent = np.stack([low, high])
+    labels = np.zeros(len(c), int)
+    for _ in range(12):
+        d = ((c[:, None, :] - cent[None]) ** 2).sum(axis=2)
+        labels = d.argmin(axis=1)
+        for i in range(2):
+            if np.any(labels == i):
+                cent[i] = c[labels == i].mean(axis=0)
+    counts = np.bincount(labels, minlength=2)
+    lum_c = cent @ np.array([0.2126, 0.7152, 0.0722])
+    i = int(np.argmax(lum_c))
+    j = 1 - i
+    if counts[i] / len(c) >= min_share and lum_c[i] >= lum_c[j] * min_ratio:
+        chosen = cent[i]
+    else:
+        chosen = np.median(c, axis=0)
+    return [int(v) for v in np.clip(np.round(chosen), 0, 255)]
+
+
 def _slug(label: str) -> str:
     return "".join(ch if ch.isalnum() else "-" for ch in label.lower()).strip("-") or "object"
 
@@ -143,7 +179,7 @@ def describe_object(
         "size": [round(float(v) * studs_per_meter, 3) for v in size_m],
         "yaw": 0.0,
         "shape": shape,
-        "color": median_color(c),
+        "color": dominant_color(c),
         "parts": [],
         "source": {"splats": int(keep.sum())},
     }

@@ -70,6 +70,21 @@ def test_describe_object_builds_a_studs_record_with_a_median_colour():
     assert 0.0 <= obj["confidence"] <= 1.0
 
 
+def test_dominant_colour_keeps_the_lit_front_over_a_dark_side():
+    dark = np.tile([0.14, 0.12, 0.11], (60, 1))
+    light = np.tile([0.81, 0.78, 0.75], (40, 1))
+    got = lift.dominant_color(np.vstack([dark, light]))
+    assert got[0] >= 190 and got[2] >= 175, got
+    assert got[0] >= got[2]
+
+
+def test_dominant_colour_falls_back_to_the_median_without_a_large_bright_cluster():
+    dark = np.tile([0.15, 0.14, 0.13], (95, 1))
+    glint = np.tile([0.95, 0.95, 0.95], (5, 1))
+    got = lift.dominant_color(np.vstack([dark, glint]))
+    assert got[0] < 70, got
+
+
 def test_describe_object_returns_none_when_too_few_splats():
     cam = _camera()
     pts = _grid(-1.0, 1.0, -0.5, 0.5)

@@ -7,19 +7,9 @@ ObjectLayout.VERSION = 1
 ObjectLayout.DEFAULT_INFLATE = 0.05 -- studs; covers the rough scanned original
 
 ObjectLayout.STYLES = {
-	flat = {
-		bodyTint = { 255, 255, 255 },
-		outline = false,
-		-- the reskin palette: clean colours by label, not the scanned median
-		labels = {
-			fridge = { 245, 246, 242 },
-			cabinet = { 244, 244, 240 },
-			counter = { 222, 208, 186 },
-			stove = { 40, 42, 46 },
-			["trash can"] = { 150, 153, 157 },
-			door = { 210, 205, 198 },
-		},
-	},
+	-- flat keeps the object's own body colour: the scan already knows a fridge is stainless,
+	-- not white. A label palette belongs to a deliberate theme, not the default style.
+	flat = { bodyTint = { 255, 255, 255 }, outline = false },
 	cartoon = { bodyTint = { 255, 255, 255 }, outline = true },
 	retro = { bodyTint = { 255, 255, 255 }, outline = false, quantize = 4 },
 	dark = { bodyTint = { 70, 72, 82 }, outline = false },
@@ -108,7 +98,6 @@ function ObjectLayout.plan(doc: any, opts: any?): any
 					color = styleColor(color(part.color, { 60, 60, 64 }), style),
 				})
 			end
-			local labelled = style.labels and style.labels[obj.label or id]
 			table.insert(plans, {
 				id = id,
 				label = obj.label or id,
@@ -116,7 +105,7 @@ function ObjectLayout.plan(doc: any, opts: any?): any
 				center = vec3(obj.center, `objects[{index}].center`),
 				size = size,
 				yaw = tonumber(obj.yaw) or 0,
-				color = styleColor(labelled or color(obj.color, { 240, 240, 240 }), style),
+				color = styleColor(color(obj.color, { 240, 240, 240 }), style),
 				transparency = obj.transparency or 0,
 				parts = parts,
 				affordance = obj.affordance,
