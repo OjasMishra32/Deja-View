@@ -446,6 +446,7 @@ const CURATED: readonly Curated[] = [
   { id: 'brick-apartment', name: 'Brick House apartment', kind: 'photo', line: `From 71 frames of ${TILTED_CREDIT}.` },
   { id: 'courts-foosball', name: 'Foosball at the Game Lawn', kind: 'video', line: 'From one phone video: two friends at the foosball table.' },
   { id: 'kitchen-cooking', name: 'Sebastian cooking', kind: 'video', line: 'From one phone video: Seb at the counters, the stove and the sink.' },
+  { id: 'chess-match', name: 'Giant chess match', kind: 'video', line: 'From one phone video: two friends playing on the giant board.' },
 ];
 const curatedIds = new Set(CURATED.map((c) => c.id));
 
