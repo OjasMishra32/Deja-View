@@ -196,6 +196,23 @@ export interface AnalyseOptions {
 }
 
 /**
+ * Where a one-photo world can be walked: a capsule from the spawn to `ahead` metres along the facing direction, `radius`
+ * wide, as a box. Both scale with the world (the trajectory is in the model's units; `scale` turns them into metres):
+ * the model's loop is 0.6 units and its walk ahead 1.35 to 1.6 units, and the walker is kept a little inside them.
+ */
+export function generatedWalkArea(spawn: P3, facing: { x: number; z: number }, scale: number): Bounds {
+  const s = Number.isFinite(scale) && scale > 0 ? Math.min(scale, 5) : 1;
+  const radius = 0.5 * s;
+  const ahead = 1.1 * s;
+  const ex = spawn.x + facing.x * ahead;
+  const ez = spawn.z + facing.z * ahead;
+  return {
+    min: [Math.min(spawn.x, ex) - radius, spawn.y, Math.min(spawn.z, ez) - radius],
+    max: [Math.max(spawn.x, ex) + radius, spawn.y + 2.2, Math.max(spawn.z, ez) + radius],
+  };
+}
+
+/**
  * Analyses a loaded world. `toContent` maps the splat file into the content frame (scene
  * transform, plus the debug flip). Returns the floor shift and everything the physics needs.
  */
@@ -329,6 +346,11 @@ export async function analyseWorld(mesh: SplatMesh, toContent: THREE.Matrix4, op
       min: [free.x - 0.1, free.y, free.z - 0.1],
       max: [free.x + 0.1, free.y + 2.2, free.z + 0.1],
     });
+  } else if (opts.asset.source === 'flashworld' && !video && !opts.flipped) {
+    // a world generated from one photo only holds up near the views the world model rendered: a small loop around
+    // the photo's camera and a short walk ahead of it (docs/FLASHWORLD.md, trajectories). Further away it smears,
+    // so the walker stays in that zone and can still look all the way around.
+    walkBounds = generatedWalkArea(free, facing, opts.asset.transform.scale);
   } else {
     walkBounds = unionBounds(walkBounds, around);
   }
