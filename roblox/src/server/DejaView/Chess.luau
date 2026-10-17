@@ -28,6 +28,38 @@ local selected: { [Player]: number } = {}
 local over = false
 local lastMove = ""
 local turnLabel: TextLabel? = nil
+local hidden: { [BasePart]: { number } } = {} -- world blocks cleared away for the board: {transparency, collide}
+
+-- Clears world blocks that poke up into the board area (a voxel world is rarely flat), so the board is visible
+-- and walkable; restored when the board goes away.
+local function clearArea(centre: CFrame, size: number)
+	local room = workspace:FindFirstChild("Room")
+	if not room then
+		return
+	end
+	local params = OverlapParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = { room }
+	local box = Vector3.new(size + square * 2, 14, size + square * 4)
+	for _, part in workspace:GetPartBoundsInBox(centre * CFrame.new(0, 7.1, 0), box, params) do
+		if part:IsA("BasePart") and not part:IsDescendantOf(folder :: any) and not hidden[part]
+			and part.Parent and part.Parent.Name ~= "Bounds" then
+			hidden[part] = { part.Transparency, if part.CanCollide then 1 else 0 }
+			part.Transparency = 1
+			part.CanCollide = false
+		end
+	end
+end
+
+local function restoreArea()
+	for part, saved in hidden do
+		if part.Parent then
+			part.Transparency = saved[1]
+			part.CanCollide = saved[2] == 1
+		end
+	end
+	hidden = {}
+end
 
 -- Square index -> world CFrame at the square's top centre. a1 is at the near-left corner, seen from white's side.
 local function squareCFrame(sq: number): CFrame
@@ -227,6 +259,7 @@ onSquareClicked = function(player: Player, sq: number)
 end
 
 function Chess.remove()
+	restoreArea()
 	if folder then
 		folder:Destroy()
 	end
@@ -281,6 +314,7 @@ function Chess.place(centre: Vector3, yaw: number, size: number?)
 		Parent = gui }, { Theme.corner(14), Theme.stroke(Theme.Accent, 1.5) })
 	turnLabel = Theme.label({ Text = "", FontFace = Theme.Heading, TextXAlignment = Enum.TextXAlignment.Center,
 		Size = UDim2.new(1, -20, 1, -12), Position = UDim2.fromOffset(10, 6), MaxText = 28, Parent = card })
+	clearArea(origin, square * 8)
 	syncPieces()
 	updateTurnBoard()
 	workspace:SetAttribute("ChessActive", true)
@@ -347,7 +381,8 @@ function Chess.start()
 		updateTurnBoard()
 	end)
 	workspace:GetAttributeChangedSignal("SceneId"):Connect(function()
-		folder, turnLabel, pieces = nil, nil, {}
+		-- the old room (and this board) is torn down with it; never carry a board into another room
+		folder, turnLabel, pieces, hidden = nil, nil, {}, {}
 		selected = {}
 		workspace:SetAttribute("ChessActive", false)
 	end)
