@@ -175,3 +175,47 @@ def project(K: np.ndarray, X_cv: np.ndarray) -> np.ndarray:
 def apply_T(T: np.ndarray, X: np.ndarray) -> np.ndarray:
     """Rigid/affine 4x4 (or (...,4,4) broadcast) applied to points (..., 3)."""
     return np.einsum("...ij,...j->...i", T[..., :3, :3], X) + T[..., :3, 3]
+
+
+# ------------------------------------------------------------------------------------------ evidence images
+
+
+def box_of(m: np.ndarray, pad: float = 0.08, aspect: float | None = None):
+    """(y0, y1, x0, x1) around the True pixels of m, padded by `pad` of its larger side and widened or heightened to
+    `aspect` (width / height); None when m is empty. The box may reach past the image."""
+    ys, xs = np.nonzero(m)
+    if len(ys) == 0:
+        return None
+    y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+    p = int(pad * max(y1 - y0, x1 - x0))
+    y0, y1, x0, x1 = y0 - p, y1 + p, x0 - p, x1 + p
+    if aspect:
+        cy, cx, hh, ww = (y0 + y1) / 2, (x0 + x1) / 2, y1 - y0, x1 - x0
+        if ww / hh < aspect:
+            ww = hh * aspect
+        else:
+            hh = ww / aspect
+        y0, y1, x0, x1 = int(cy - hh / 2), int(cy + hh / 2), int(cx - ww / 2), int(cx + ww / 2)
+    return int(y0), int(y1), int(x0), int(x1)
+
+
+def crop(img: np.ndarray, box, size: tuple[int, int], fill=128) -> np.ndarray:
+    """img[box] with out-of-frame parts filled, resized to size (w, h)."""
+    import cv2
+
+    y0, y1, x0, x1 = box
+    h, w = img.shape[:2]
+    out = np.full((y1 - y0, x1 - x0) + img.shape[2:], fill, img.dtype)
+    sy0, sy1, sx0, sx1 = max(0, y0), min(h, y1), max(0, x0), min(w, x1)
+    if sy1 > sy0 and sx1 > sx0:
+        out[sy0 - y0:sy1 - y0, sx0 - x0:sx1 - x0] = img[sy0:sy1, sx0:sx1]
+    return cv2.resize(out, size, interpolation=cv2.INTER_AREA)
+
+
+def label(img: np.ndarray, text: str, y: int = 18, scale: float = 0.5) -> np.ndarray:
+    """White text with a dark outline, top left (in place)."""
+    import cv2
+
+    cv2.putText(img, text, (6, y), cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), 3, cv2.LINE_AA)
+    cv2.putText(img, text, (6, y), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), 1, cv2.LINE_AA)
+    return img

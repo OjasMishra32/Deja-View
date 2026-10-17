@@ -157,3 +157,30 @@ the same texture with the gap in magenta, redraws a clean ceiling with the right
 a lighter wedge at the seam, so the lattice fill is used. The 3D-box fittings (`--fittings boxes`, fittings at
 3.14 m, ceiling at 3.22 m) look more solid but cost more against the photos (IMG_7352 -5.2 dB), so they are off.
 The apartment's current world (06:29) already has a continuous ceiling from every spot checked; nothing was changed.
+
+## Third: the sky as a backdrop at infinity (`sky.py`)
+
+What the footage never looked at overhead and far away (the night sky over the lawn, tree tops, the dorm's upper
+floors) is not lifted into 3D at all: it becomes a 360 backdrop that the viewer draws behind the splats and the
+Roblox place uses as its Sky. Everything at infinity is the same from every standing spot by construction.
+
+```
+render  far splats only (beyond world.bounds + 1.5 m, as roblox_mesh's skybox), cube faces from the spawn at 1.6 m
+        -> equirect 2048 x 1024 + alpha + range; per pixel, how many training cameras saw that point (in frame, not
+        behind a surface of the room); unseen far splats (blurred tops above the frames, glare behind the walls) and
+        the mirror world under the floor (by height) are dropped; genfill.palms crowns of palms beyond the box are
+        kept whole (--palms), crowns of palms inside it are left to the 3D world
+fill    the open sky is the photos' night sky (IMG_7363, sRGB ~(9, 11, 13)), the far ground a push-pull of the real
+        ground fading to unlit dark; Qwen-Image-Edit-2511 paints only a band above the real skyline (smoothed and
+        tapered, so its outline suggests no building) and the gaps next to real content, seeing the panorama rolled
+        so its edges fall where the band never reaches (no seam to repair) and, with --ref, a real photo as image 2;
+        joins are colour-corrected by a push-pull of the ring difference that fades inside the band; leftover magenta
+        and stray lights in open sky are removed; the zenith is smoothed along the azimuth
+faces   the equirect for the viewer (three.js equirectUv: centre +X, left quarter -Z) and sky-v3-<face>.png in
+        Roblox's Sky convention (roblox_mesh.SKY_FACES), real far splats rendered at face size, the fill sampled in
+check   gsplat views of the live world from standing spots, splats over black | splats over the backdrop
+```
+
+`hpg/sky.sbatch <scene> <name> [--hold]` runs it with the model worker; `hpg/sky-run.sh` runs more fills inside a
+held allocation. The backdrop is at infinity: far content in it (the dorm, the tree line) lines up with the far
+splats exactly at the spawn and drifts by parallax elsewhere; what it mainly fills are the empty directions.

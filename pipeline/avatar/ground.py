@@ -7,8 +7,9 @@
 2. Identity: Hungarian matching of world pelvis positions to the previous frame (gate 0.5 m, wider across gaps)
    with the network's tracking feature as a tie-break; the `people` longest tracks are kept, tracks under 1 s are
    dropped.
-3. Outliers: conf < 0.4, mask IoU < 0.3, or a single-frame flip of more than 60 degrees in the root, hip, spine
-   or shoulder bones; rejected frames are interpolated.
+3. Outliers: conf < 0.4, mask IoU < 0.3, a body more than a tenth outside the frame (unless the refine step trusts
+   it: its aligned fit matches the person mask), or a single-frame flip of more than 60 degrees in the root, hip,
+   spine or shoulder bones; rejected frames are interpolated.
 4. Shape: the median phenotype. Pose: the network's bone poses G (built on its per-frame rest skeleton R_t) are
    turned back into its pose parameters, delta_j = inv(inv(R_p) R_j) inv(G_p) G_j, and rebuilt on the median
    phenotype's rest skeleton R*, so bone lengths stay constant: G*_j = G*_p inv(R*_p) R*_j delta_j.
@@ -21,6 +22,7 @@
    fingers frozen at their median, face/jaw/eyes/tongue at rest.
 7. Times: the presentation time of each frame minus --start (the media element's clock), clipped to --max-seconds.
 
+Reads WORK/hmr.npz, or the refine step's WORK/hmr-refined.npz (same detections, aligned to the masks) when given.
 Writes WORK/tracks.npz (person-<k>/... arrays), WORK/ground.json (checks) and WORK/evidence/ground-*.jpg.
 """
 
@@ -270,12 +272,14 @@ def detection_iou(S: np.ndarray, mask: np.ndarray, others: list[np.ndarray]) -> 
 
 
 def solve(work: Path, poses: Path, people: int = 2, start: float = 0.0, max_seconds: float = 60.0,
-          anny_model=None, tris: np.ndarray | None = None, foot_vertices: np.ndarray | None = None) -> dict:
+          anny_model=None, tris: np.ndarray | None = None, foot_vertices: np.ndarray | None = None,
+          hmr_file: str = "hmr.npz", trusted: np.ndarray | None = None) -> dict:
+    """trusted: per detection, cut off by the frame edge but kept (the refine step's aligned fit matches the mask)."""
     import cv2
 
     from pipeline.avatar import body
 
-    h = np.load(work / "hmr.npz")
+    h = np.load(work / hmr_file)
     doc = read_json(poses)
     K = h["K"]
     W = int(doc["intrinsics"]["width"])
@@ -317,6 +321,9 @@ def solve(work: Path, poses: Path, people: int = 2, start: float = 0.0, max_seco
     Hh = int(doc["intrinsics"]["height"])
     uvd = project(K, v3d[:, ::4])
     in_frame = ((uvd[..., 0] >= 0) & (uvd[..., 0] < W) & (uvd[..., 1] >= 0) & (uvd[..., 1] < Hh)).mean(1)
+    cut_off = in_frame < 0.9
+    if trusted is not None and len(trusted) == n_det:
+        in_frame = np.where(trusted, 1.0, in_frame)
     det_iou = np.zeros(n_det)
     for f in used:
         dets = np.nonzero(frames == f)[0]
@@ -466,7 +473,8 @@ def solve(work: Path, poses: Path, people: int = 2, start: float = 0.0, max_seco
         rep = {
             "track": int(tid), "foundFraction": round(float(found.mean()), 4), "validFraction": round(float(valid.mean()), 4),
             "flipsRejected": int(flips), "positionOutliers": int(jumps.sum()),
-            "cutOffFrames": int(np.count_nonzero(in_frame[d] < 0.9)), "confMedian": round(float(np.median(h["conf"][d])), 3) if len(d) else None,
+            "cutOffFrames": int(np.count_nonzero(cut_off[d])), "cutOffTrusted": int(np.count_nonzero(cut_off[d] & (in_frame[d] >= 0.9))),
+            "confMedian": round(float(np.median(h["conf"][d])), 3) if len(d) else None,
             "detectionIoU": {"median": round(float(np.median(det_iou[d])), 3) if len(d) else None,
                              "p10": round(float(np.percentile(det_iou[d], 10)), 3) if len(d) else None},
             "phenotype": {lab: round(float(v), 3) for lab, v in zip(st["phenotype_labels"], ph)},

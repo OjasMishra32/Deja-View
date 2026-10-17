@@ -10,10 +10,14 @@ within 15 cm of another detected body (the other player, a bystander) count only
 when no clean view saw it (the person mask is one mask for everybody: a backpack or a too-wide fit would paint
 the other person's colours), and so do samples within ~12 px of the mask's edge. With the world given, samples hidden behind furniture (the foosball table in front
 of the legs; pipeline/avatar/world.py) are dropped. Samples
-are weighted by cos^2(normal, view) x frame sharpness x resolution; each texel keeps its 5 best samples and
-averages those that agree with their medoid (so one misaligned view does not smear in), except the face, which
-comes from the single frame where the visible face carries the most weight (most frontal, sharp, close), so it is
-not a blend of several views.
+are weighted by cos^2(normal, view) x frame sharpness x resolution; each texel keeps its 12 best samples (and the
+keyframe each came from). Exposure is normalised per keyframe: three gains per frame (the median ratio, in log space,
+of its samples to the texels' consensus colours on well-exposed texels; three rounds, bounded to 0.5-2, geometric mean
+1 so the clip's exposure stays), and each texel then takes the weighted median of its gain-corrected views per
+channel. Taking the few best views instead painted one view's lamp-lit highlight or auto-exposure dip into a patch
+(combine="best" keeps that: the medoid-agreeing mean of the 5 best). The face still comes from the single frame
+where the visible face carries the most weight (most frontal, sharp, close), gain-corrected, so it is not a blend of
+several views.
 
 Outputs per person k: tex_seen-<k>.png (seen texels, others black), seen-<k>.png (0/255), coverage-<k>.png (a
 false-colour weight map, evidence), regions-<k>.json (median colour per body region for the flat-colour
@@ -177,10 +181,56 @@ def others_zone(V_others: list[np.ndarray], tris: np.ndarray, K: np.ndarray, hw:
     return zone.astype(bool)
 
 
+def weighted_median(c: np.ndarray, w: np.ndarray, chunk: int = 250_000) -> np.ndarray:
+    """Per texel and channel: the weighted median of the samples c (N, K, 3) with weights w (N, K) (0 = no sample)."""
+    out = np.zeros((len(c), 3), np.float32)
+    for a in range(0, len(c), chunk):
+        cc, ww = c[a:a + chunk], w[a:a + chunk]
+        half = 0.5 * ww.sum(1, keepdims=True)
+        rows = np.arange(len(cc))
+        for ch in range(3):
+            v = cc[:, :, ch]
+            o = np.argsort(v, 1)
+            cw = np.cumsum(np.take_along_axis(ww, o, 1), 1)
+            i = np.argmax(cw >= half, 1)  # zero-weight samples never raise cw, so i lands on a real sample
+            out[a + rows, ch] = np.take_along_axis(v, o, 1)[rows, i]
+    return out
+
+
+def frame_gains(c: np.ndarray, w: np.ndarray, f: np.ndarray, n_frames: int, cons: np.ndarray, sample: np.ndarray,
+                lo: float = 15.0, hi: float = 235.0, min_n: int = 1500) -> np.ndarray:
+    """RGB gain per keyframe (c, w, f: the texels' kept samples, weights and keyframe slots; cons: the current
+    consensus colour per texel): exp(median(log(sample / consensus))) over its samples of the texels in `sample` whose
+    consensus and sample are well exposed (consensus in [lo, hi], sample in [5, 250)); frames with fewer than
+    `min_n` such samples keep gain 1. Returned with a sample-count-weighted geometric mean of 1, bounded to 0.5-2."""
+    raw, ws, fs = c[sample], w[sample], f[sample]  # the frames' own colours (no gain applied)
+    ref = np.broadcast_to(cons[sample][:, None, :], raw.shape)
+    ok = (ws > 0)[..., None] & (ref >= lo) & (ref <= hi) & (raw >= 5) & (raw < 250)
+    lr = np.where(ok, np.log(np.maximum(raw, 1e-3) / np.maximum(ref, 1e-3)), np.nan)
+    ff = np.broadcast_to(fs[..., None], lr.shape)
+    g = np.ones((n_frames, 3), np.float64)
+    cnt = np.zeros(n_frames)
+    for ch in range(3):
+        m = ok[..., ch]
+        fv, lv = ff[..., ch][m], lr[..., ch][m]
+        order = np.argsort(fv, kind="stable")
+        fv, lv = fv[order], lv[order]
+        cuts = np.searchsorted(fv, np.arange(n_frames + 1))
+        for j in range(n_frames):
+            seg = lv[cuts[j]:cuts[j + 1]]
+            if len(seg) >= min_n:
+                g[j, ch] = np.exp(np.median(seg))
+                cnt[j] += len(seg)
+    g = np.clip(g, 0.5, 2.0)
+    wsum = max(cnt.sum(), 1.0)
+    g /= np.exp((np.log(g) * cnt[:, None]).sum(0) / wsum)[None, :]
+    return np.clip(g, 0.5, 2.0).astype(np.float32)
+
+
 def bake(work: Path, assets: list[Asset], tracks, hmr, size: int = 2048, max_frames: int = 190,
-         depth_tol: float = 0.015, erode_px: int = 2, min_cos: float = 0.3, keep: int = 5,
+         depth_tol: float = 0.015, erode_px: int = 2, min_cos: float = 0.3, keep: int = 12,
          min_weight: float = 0.12, near_other: float = 0.02, occluders=None, cams: dict | None = None,
-         furniture_margin: float = 0.10, edge_px: int = 6) -> list[dict]:
+         furniture_margin: float = 0.10, edge_px: int = 6, combine: str = "median") -> list[dict]:
     """Bakes every person's seen texture. `tracks`: tracks.npz arrays; `hmr`: hmr.npz arrays. Samples near
     another detected body count `near_other` times their weight, so they only fill texels no clean view saw.
     occluders (world.Occluders) + cams (frameIndex -> T_view_cv): samples hidden behind furniture are dropped.
@@ -206,6 +256,7 @@ def bake(work: Path, assets: list[Asset], tracks, hmr, size: int = 2048, max_fra
     raw_w = [np.zeros(len(t.tid), np.float32) for t in tms]  # best unpenalised weight (decides 'seen')
     clean_w = [np.zeros(len(t.tid), np.float32) for t in tms]  # best weight away from other bodies
     best_c = [np.zeros((len(t.tid), keep, 3), np.float32) for t in tms]
+    best_f = [np.full((len(t.tid), keep), -1, np.int32) for t in tms]  # keyframe slot (n) of each kept sample
     nsamp = [np.zeros(len(t.tid), np.int32) for t in tms]
     sharp_all = []
     renderer = None
@@ -218,6 +269,7 @@ def bake(work: Path, assets: list[Asset], tracks, hmr, size: int = 2048, max_fra
     face_seen = [np.zeros(int(fm.sum()), bool) for fm in faces]
     face_score = [0.0] * n_people
     face_frame = [-1] * n_people
+    face_slot = [-1] * n_people
     for n, f in enumerate(keyframes):
         img = cv2.imread(str(work / "frames" / f"f{int(f):06d}.jpg"))
         mk = cv2.imread(str(work / "masks" / f"f{int(f):06d}.png"), cv2.IMREAD_GRAYSCALE)
@@ -299,17 +351,20 @@ def bake(work: Path, assets: list[Asset], tracks, hmr, size: int = 2048, max_fra
             np.maximum.at(raw_w[k], idx, w_raw)
             np.maximum.at(clean_w[k], idx, np.where(near, 0.0, w_raw).astype(np.float32))
             # insert into the per-texel best `keep` samples
-            bw, bc = best_w[k], best_c[k]
+            bw, bc, bf = best_w[k], best_c[k], best_f[k]
             allw = np.concatenate([bw[idx], w[:, None]], 1)
             allc = np.concatenate([bc[idx], col[:, None, :]], 1)
+            allf = np.concatenate([bf[idx], np.full((len(idx), 1), n, np.int32)], 1)
             o = np.argsort(-allw, 1)[:, :keep]
             bw[idx] = np.take_along_axis(allw, o, 1)
             bc[idx] = np.take_along_axis(allc, o[:, :, None], 1)
+            bf[idx] = np.take_along_axis(allf, o, 1)
             # face: keep this frame's samples if its visible face outweighs the best frame so far
             fsel = faces[k][idx]
             score = float(w[fsel].sum())
             if score > face_score[k]:
                 face_score[k], face_frame[k] = score, int(f)
+                face_slot[k] = n
                 fpos = np.cumsum(faces[k]) - 1
                 face_c[k][:] = 0
                 face_seen[k][:] = False
@@ -323,9 +378,31 @@ def bake(work: Path, assets: list[Asset], tracks, hmr, size: int = 2048, max_fra
         a, tm = assets[k], tms[k]
         bw, bc = best_w[k], best_c[k]
         seen = raw_w[k] >= min_weight  # texels only ever seen at grazing angles or blurred count as unseen
-        avg = robust_mean(bc, bw)
+        expo = None
+        if combine == "best":
+            avg = robust_mean(bc[:, :5], bw[:, :5])
+            g = np.ones((len(keyframes), 3), np.float32)
+        else:
+            bf = best_f[k]
+            g = np.ones((len(keyframes), 3), np.float32)
+            rng = np.random.default_rng(k)
+            has = np.nonzero(seen)[0]
+            sample = np.sort(rng.choice(has, size=min(len(has), 400_000), replace=False)) if len(has) else has
+            avg = weighted_median(bc, bw)
+            spread = []
+            for _ in range(3):
+                g = frame_gains(bc, bw, bf, len(keyframes), avg, sample)
+                corr = bc / g[np.maximum(bf, 0)]
+                avg = weighted_median(corr, bw)
+                spread.append(round(float(np.percentile(np.abs(np.log(g)), 90)), 4))
+            expo = {"frames": int(len(keyframes)), "gainP05": [round(float(x), 3) for x in np.percentile(g, 5, 0)],
+                    "gainP50": [round(float(x), 3) for x in np.percentile(g, 50, 0)],
+                    "gainP95": [round(float(x), 3) for x in np.percentile(g, 95, 0)], "absLogGainP90ByRound": spread,
+                    "samplesKept": keep}
+            log("texture", f"person {k}: exposure gains per keyframe {expo}")
         fidx = np.nonzero(faces[k])[0][face_seen[k]]
-        avg[fidx] = face_c[k][face_seen[k]]
+        gface = g[face_slot[k]] if face_slot[k] >= 0 else np.ones(3, np.float32)
+        avg[fidx] = face_c[k][face_seen[k]] / gface
         seen[fidx] = True
         tex = np.zeros((size, size, 3), np.uint8)
         tex[tm.ys[seen], tm.xs[seen]] = np.clip(avg[seen] + 0.5, 0, 255).astype(np.uint8)
@@ -347,7 +424,8 @@ def bake(work: Path, assets: list[Asset], tracks, hmr, size: int = 2048, max_fra
             "cleanFraction": round(float((clean_w[k][seen] >= min_weight).mean()), 4) if seen.any() else 0.0,
             "furnitureHiddenSamples": hidden_n[k],
             "faceFrame": face_frame[k],
-            "faceTexelsFromThatFrame": round(float(face_seen[k].mean()), 4) if len(face_seen[k]) else 0.0}, "texel_map": tm,
+            "faceTexelsFromThatFrame": round(float(face_seen[k].mean()), 4) if len(face_seen[k]) else 0.0,
+            "combine": combine, "exposure": expo}, "texel_map": tm,
             "region_of_texel": reg, "back_of_texel": back})
         log("texture", f"person {k}: coverage {out[-1]['coverage']}; region colours {colours}")
     return out
