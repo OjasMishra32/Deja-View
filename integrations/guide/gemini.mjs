@@ -15,18 +15,18 @@ const imagePart = (dataUrl) => {
   return { inlineData: { mimeType: match[1], data: match[2] } };
 };
 
-async function json(model, systemInstruction, image, text) {
+async function json(model, systemInstruction, image, text, mediaResolution = 'MEDIA_RESOLUTION_LOW') {
   const response = await ai().models.generateContent({
     model,
     contents: [{ role: 'user', parts: [{ text }, imagePart(image)] }],
-    config: { systemInstruction, responseMimeType: 'application/json', temperature: 0.4 },
+    config: { systemInstruction, responseMimeType: 'application/json', temperature: 0.4, mediaResolution },
   });
   return JSON.parse(response.text);
 }
 
 export async function describe(image) {
   if (mock()) { await sleep(120); return { caption: describeFallback(), degraded: true }; }
-  return { ...(await json(models.fast, DESCRIBE_SYSTEM, image, 'Describe this place.')), degraded: false };
+  return { ...(await json(models.fast, DESCRIBE_SYSTEM, image, 'Describe this place.', 'MEDIA_RESOLUTION_MEDIUM')), degraded: false };
 }
 
 export async function hotspots(image) {
