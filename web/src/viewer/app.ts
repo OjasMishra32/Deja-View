@@ -17,6 +17,7 @@ import { DEFAULT_BODY, DEFAULT_GROUND, EMPTY_WORLD, type GroundOptions } from '.
 import { FrameGovernor, XR_LEVELS } from './perf.ts';
 import { Player } from './player.ts';
 import { createGuide, type Guide, type GuideOptions } from './guide/index.ts';
+import { findMemorySource, MemoryIntro, reliefFor } from './memory-intro.ts';
 import { createSocial, type Cue, type SocialHandle } from './social/index.ts';
 import { SocialSocket } from './social/presence-client.ts';
 import { analyseWorld, applyTransform, loadSplatMesh, repairHiddenSplats, splatCount, type WorldAnalysis } from './world.ts';
@@ -113,6 +114,8 @@ class Viewer {
   guide: Guide | null = null;
   /** The viewer's one /ws connection; social and the guide listen on it. */
   live: SocialSocket | null = null;
+  /** "The photo becomes the world": the entry and exit around the picture this world was made from (memory-intro.ts). */
+  memory: MemoryIntro | null = null;
   private realityBusy = false;
   private liveUiTimer = 0;
   private leaving = false;
@@ -214,7 +217,13 @@ class Viewer {
           this.xrGovernor.reset();
           this.applyXrLevel(this.xrGovernor.level);
           this.controls.releaseLock();
-          void this.playVideo();
+          // in the headset the memory plays from the photo (the video starts once you stand in the world)
+          if (this.memory && !this.flipped && params.get('intro') !== '0') {
+            this.revealT = -1;
+            void this.memory.enter({ delay: 0.3, xr: true }).then(() => {
+              if (this.renderer.xr.isPresenting) void this.playVideo();
+            });
+          } else void this.playVideo();
         },
         onExit: (p) => {
           this.spark.maxStdDev = isOculus() || isMobile() ? LIGHT_STD_DEV : FULL_STD_DEV;
@@ -222,10 +231,21 @@ class Viewer {
           this.spark.maxPixelRadius = 512;
           this.player.place(p.x, p.y, p.z, p.yaw, 0);
           this.syncRig();
+          // left through the photo (or mid-way): the world grows back on the screen, once three.js has let go
+          // of the session (this runs inside its end event)
+          const m = this.memory;
+          if (m && !this.leaving && (m.phase === 'left' || m.active)) setTimeout(() => void this.beginIntro(0.15), 0);
         },
       },
       { framebufferScale: Math.min(1, Math.max(0.3, fb)), foveation: 1 },
     );
+    // the wrist panel's Exit VR shrinks the world back into the photo first
+    const exitXr = this.xr.exit.bind(this.xr);
+    this.xr.exit = () => {
+      const m = this.memory;
+      if (!m || !m.canLeave || !this.renderer.xr.isPresenting || params.get('intro') === '0') return exitXr();
+      void m.leave().then(exitXr);
+    };
 
     window.addEventListener('resize', () => this.resize());
     this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
@@ -290,6 +310,7 @@ class Viewer {
 
     await this.analyse();
     debug.stats.analysisMs = performance.now() - t0 - debug.stats.downloadMs;
+    const memoryReady = this.prepareMemory(base);
 
     if (asset.collider) {
       hud.setProgress('Loading the collider mesh', null);
@@ -310,6 +331,7 @@ class Viewer {
     };
 
     if (this.data.video) await this.setupVideo(this.data.video, base);
+    await memoryReady;
 
     // first frames render behind the loader so sorting is done when it lifts
     mesh.visible = true;
@@ -319,7 +341,9 @@ class Viewer {
     await nextFrame();
     debug.stats.loadMs = performance.now() - this.started;
     hud.finishLoading();
-    this.beginIntro();
+    // the memory waits for the loader to fade before the photo appears
+    const introDone = this.beginIntro(0.5);
+    this.hookBackLink();
     this.controls.enabled = true;
     debug.ready = true;
     debug.stage = 'ready';
@@ -329,6 +353,7 @@ class Viewer {
     hud.showVr(xrOk);
     if (hud.isTouch) hud.setCoach(true);
     else hud.setHint(true);
+    await introDone;
     if (!hud.helpSeen() && !hud.isTouch) {
       hud.toggleHelp(true);
       setTimeout(() => {
@@ -339,6 +364,83 @@ class Viewer {
       hud.toast('Floor is a guess', 'This world has no clear floor. Press F to fly, or U if it looks upside down.', 'info', 7000);
     }
     if (this.flipped) hud.toast('Flipped view', 'This world is shown upside down from its file (U to undo).', 'info', 5000);
+  }
+
+  /**
+   * Finds the picture this world was made from and builds the memory card (memory-intro.ts). Never holds the world
+   * back for long: without a picture, a camera or in time, the world opens with the plain reveal.
+   */
+  private async prepareMemory(base: string): Promise<void> {
+    const a = this.analysis;
+    if (!a || this.flipped || params.get('intro') === '0') return;
+    const t0 = performance.now();
+    const floor = a.floorY;
+    const work = (async () => {
+      const src = await findMemorySource({
+        scene: this.data,
+        base,
+        toWorld: (p) => [p[0], p[1] - floor, p[2]],
+        spawn: a.spawn,
+        eyeY: this.player.eyeHeight,
+      });
+      if (!src) return null;
+      const relief = reliefFor(src, a.grid, a.bounds);
+      return new MemoryIntro(
+        {
+          renderer: this.renderer,
+          scene: this.scene,
+          camera: this.camera,
+          fx: this.fx,
+          sky: this.sky,
+          palette: () => this.analysis?.palette ?? a.palette,
+          bounds: () => this.analysis?.bounds ?? a.bounds,
+          setVideoAlpha: (o) => this.video?.setOpacity(o),
+          hide: () => [
+            this.floorGlow.mesh.visible ? this.floorGlow.mesh : null,
+            this.social?.ghosts.group,
+            this.social?.notes.group,
+            this.scene.getObjectByName('guide-captions'),
+            this.scene.getObjectByName('guide-hotspots'),
+          ],
+          page: document.body,
+        },
+        src,
+        relief,
+      );
+    })().catch((e) => {
+      console.warn('memory intro skipped:', e);
+      return null;
+    });
+    const timeout = new Promise<null>((r) => setTimeout(() => r(null), 6000));
+    this.memory = await Promise.race([work, timeout]);
+    if (!this.memory) void work.then((late) => late?.dispose());
+    debug.stats.memoryMs = performance.now() - t0;
+    Object.defineProperty(debug, 'memory', { get: () => this.memory?.debug() ?? null, enumerable: true, configurable: true });
+  }
+
+  /** The back arrow shrinks the world back into the photo before it goes. */
+  private hookBackLink(): void {
+    const back = document.querySelector<HTMLAnchorElement>('.tw-back');
+    back?.addEventListener('click', (e) => {
+      const m = this.memory;
+      if (!m || !m.canLeave || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      if (this.leaving) {
+        location.assign(back.href);
+        return;
+      }
+      this.leaving = true;
+      void m.leave().then(() => {
+        this.disposeLive();
+        location.assign(back.href);
+      });
+    });
+    // back from the next page with this one kept in memory: the world grows again
+    window.addEventListener('pageshow', (e) => {
+      if (!e.persisted || this.memory?.phase !== 'left') return;
+      this.leaving = false;
+      void this.beginIntro(0.1);
+    });
   }
 
   /**
@@ -469,20 +571,18 @@ class Viewer {
     const body = presenting ? 'Opening it now. Press Enter VR again when it appears.' : 'Opening it now.';
     if (this.social) this.social.notify(title, body, 'ok');
     else hud.toast(title, body, 'ok');
-    setTimeout(
-      () => {
-        void (async () => {
-          try {
-            await this.renderer.xr.getSession()?.end();
-          } catch {
-            /* already ended */
-          }
-          this.disposeLive();
-          location.assign(url);
-        })();
-      },
-      presenting ? 1800 : 900,
-    );
+    // the world shrinks back into its photo while the note is read
+    const shrink = this.memory?.leave() ?? Promise.resolve();
+    const read = new Promise((r) => setTimeout(r, presenting ? 1800 : 900));
+    void Promise.all([shrink, read]).then(async () => {
+      try {
+        await this.renderer.xr.getSession()?.end();
+      } catch {
+        /* already ended */
+      }
+      this.disposeLive();
+      location.assign(url);
+    });
   }
 
   private async toggleReality(): Promise<void> {
@@ -727,14 +827,30 @@ class Viewer {
     hud.toast('Voxel collider', `${s.occupied.toLocaleString()} cells at ${(this.analysis.grid.size * 100).toFixed(0)} cm (V to hide)`, 'info');
   }
 
-  /** Short dolly into the spawn pose and the reveal front growing out from it. */
-  private beginIntro(): void {
+  /**
+   * The memory (the photo becomes the world) when this world has its picture; otherwise a short dolly into the spawn
+   * pose and the reveal front growing out from it. Resolves when the world is complete.
+   */
+  private beginIntro(delay = 0): Promise<void> {
     const a = this.analysis!;
     this.revealT = 0;
     this.loadFade = 1;
+    const m = this.memory;
+    if (m && !this.flipped && params.get('intro') !== '0' && !this.renderer.xr.isPresenting) {
+      // the camera stays put: it only turns once to face the photo, which then does the moving
+      this.revealT = -1;
+      this.loadFade = 0;
+      this.intro = null;
+      const aim = m.frameFor(new THREE.Vector3(this.player.pos.x, this.player.eyeY, this.player.pos.z));
+      this.player.yaw = aim.yaw;
+      this.player.pitch = aim.pitch;
+      this.syncRig();
+      return m.enter({ delay });
+    }
+    m?.cancel();
     if (this.renderer.xr.isPresenting || params.get('intro') === '0') {
       this.intro = null;
-      return;
+      return Promise.resolve();
     }
     const eye = new THREE.Vector3(a.spawn.x, a.spawn.y + this.player.eyeHeight, a.spawn.z);
     const back = new THREE.Vector3(Math.sin(a.spawn.yaw), 0, Math.cos(a.spawn.yaw));
@@ -743,7 +859,7 @@ class Viewer {
       const from: CameraPose = { position: eye.clone().addScaledVector(back, 0.55).add(new THREE.Vector3(0, 0.04, 0)), yaw: a.spawn.yaw + 0.1, pitch: -0.03 };
       this.intro = new IntroMove(from, { position: eye, yaw: a.spawn.yaw, pitch: 0 }, 2.6);
       this.intro.step(0, this.introPose);
-      return;
+      return Promise.resolve();
     }
     // pull back only through free space
     let d = 0;
@@ -756,6 +872,7 @@ class Viewer {
     const to: CameraPose = { position: eye, yaw: a.spawn.yaw, pitch: 0 };
     this.intro = new IntroMove(from, to, 3.0);
     this.intro.step(0, this.introPose);
+    return Promise.resolve();
   }
 
   private syncRig(): void {
@@ -779,7 +896,7 @@ class Viewer {
   /** Headset only: watch for dropped frames and step the splat cost down (or back up). */
   private governXr(intervalMs: number): void {
     // the load reveal and teleport fades regenerate or hide splats: not representative frames
-    if (this.revealT >= 0 || this.xr.fadeLevel > 0) return;
+    if (this.revealT >= 0 || this.xr.fadeLevel > 0 || this.memory?.active) return;
     const rate = (this.renderer.xr.getSession() as (XRSession & { frameRate?: number }) | null)?.frameRate;
     const budget = 1000 / (rate && rate > 20 ? rate : 72);
     const changed = this.xrGovernor.push(intervalMs, budget);
@@ -859,6 +976,8 @@ class Viewer {
         console.error(e);
       }
     }
+    // after the live layer: the memory keeps its panels out of the dark while the photo plays
+    this.memory?.update(dt);
     this.liveUiTimer -= dt;
     if (this.liveUiTimer <= 0 && this.social) {
       this.liveUiTimer = 0.25;
@@ -894,7 +1013,7 @@ class Viewer {
    * (soft splats hide it well); give them back only when there is clear headroom.
    */
   private adaptResolution(dt: number): void {
-    if (!this.dprAdaptive || this.revealT >= 0 || this.frameTimes.length < 60) return;
+    if (!this.dprAdaptive || this.revealT >= 0 || this.memory?.active || this.frameTimes.length < 60) return;
     this.dprTimer += dt;
     if (this.dprTimer < 2) return;
     const sorted = this.frameTimes.slice().sort((a, b) => a - b);
