@@ -58,3 +58,28 @@ def test_copy_refuses_a_path_outside_the_place(tmp_path):
     with pytest.raises(SystemExit) as e:
         people.copy_world_files(world, d, tmp_path / "memory")
     assert "outside" in str(e.value)
+
+
+@pytest.mark.parametrize("backdrop", ["block", "manifest"])
+def test_pack_writes_a_memory_that_has_every_file_its_scene_names(tmp_path, backdrop):
+    """write_scene, the end of `people.py pack`, on a place with a backdrop: every file the memory's scene.json names
+    is in the memory's folder."""
+    from fractions import Fraction
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    d, world = place(tmp_path, backdrop)
+    (d / "scene.json").write_text(json.dumps({"id": "the-courts", "world": world}))
+    out = tmp_path / "courts-foosball"
+    out.mkdir()
+    a = SimpleNamespace(world_scene=d, id="courts-foosball", name="Foosball", caption="")
+    people.write_scene(a, out, {}, np.eye(4), Fraction(30), 300, {"fx": 1000.0, "fy": 1000.0, "cx": 960.5, "cy": 540.5},
+                       1920, 1080, 0.5, 12.0, None, [], {"hasAudio": True})
+    scene = json.loads((out / "scene.json").read_text())
+    w = scene["world"]
+    named = [w["file"], w["collider"], w["topdown"]["file"]]
+    bd = w.get("backdrop") or json.loads((out / "backdrop.json").read_text())
+    named += [bd["file"], bd["sky"]]
+    for rel in named:
+        assert (out / rel).read_bytes() == (d / rel).read_bytes(), rel

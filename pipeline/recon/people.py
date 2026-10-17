@@ -1370,7 +1370,6 @@ def copy_world_files(world: dict, src_dir: Path, out_dir: Path) -> list[str]:
 
 def write_scene(a, out_dir: Path, meta: dict, c2w0: np.ndarray, fps: Fraction, n: int, Kf: dict, W: int, H: int,
                 near: float, far: float, thumb: np.ndarray | None, previews: list, stats: dict) -> None:
-    import shutil
     from datetime import datetime, timezone
 
     from common.media import save_jpg
@@ -1380,11 +1379,8 @@ def write_scene(a, out_dir: Path, meta: dict, c2w0: np.ndarray, fps: Fraction, n
     if not src or not src.get("world"):
         raise SystemExit(f"{a.world_scene}/scene.json has no world")
     world = json.loads(json.dumps(src["world"]))
-    for key in ("file", "collider"):
-        if world.get(key):
-            shutil.copy2(Path(a.world_scene) / world[key], out_dir / world[key])
-    if world.get("topdown", {}).get("file"):
-        shutil.copy2(Path(a.world_scene) / world["topdown"]["file"], out_dir / world["topdown"]["file"])
+    # the memory writes the place's whole world block, so it gets every file the block names (backdrop included)
+    copy_world_files(world, Path(a.world_scene), out_dir)
     if thumb is not None:
         import cv2
 
