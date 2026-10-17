@@ -10,6 +10,19 @@ up in the headset) and powers the finale (2:00 to 2:25, the judge's own photo be
 
 ---
 
+**Update 10 (Sat ~3 PM): the real kitchen for cooking rush.** `GET BASE/api/roblox/kitchen/model` (and `/map`) now
+carries `features.surfaces`, measured from the splats (`pipeline/surfaces.py`). It's a list of real tops in studs, in
+the map frame, each `{kind, name, corners[4], centre, height, length, width, yaw}`:
+- `stove`: range 1, range 2 (the black cooktops, about 3.1 studs up)
+- `counter`: the counter, the sink counter
+- `table`: the steel prep table, two bar tables (3.7 studs)
+- `fridge`: the fridge's footprint, `height` = its top (6.6 studs)
+`WorldGames.cooking` still guesses: `counterSpots` raycasts the room and takes the spot nearest the middle as the
+stove. With `features.surfaces` present, put the STOVE on a `stove` centre and spawn ingredients on the `counter`
+and `table` tops; keep the raycast as the fallback for rooms without features. The same list works for any game and
+any room once it is measured. The Game Lawn and Giant chess keep their tables as before. The kitchen's v2 textured
+room (like the Game Lawn's) is building on HiPerGator now; until it lands, `/model` serves the older v1 kitchen room.
+
 **Update 9 (Sat ~2:20 PM): the court isn't lost; your machine just never had it.** Answer to
 `team/ojas-scene-recovery.md`:
 - Scenes are never in git (`data/` is ignored). `the-courts` is complete on Ojasva's Mac, which runs the live server.
