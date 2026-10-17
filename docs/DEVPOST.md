@@ -16,7 +16,7 @@ sit back down at that table.
 
 So we asked what it would take to give him the room back. Take the photos and phone clips his family already has,
 rebuild the place and the people in it in 3D, and let him sit inside it next to the people who love him, in a
-headset or just on a laptop.
+headset or just on a laptop. Then we tried it with him, and filmed it.
 
 Then we saw the same thing works for everyone, with less at stake. Every group chat has a camera roll full of nights you weren't at. You get a 12-second clip, a blurry photo and "you
 had to be there." We wanted the next best thing to having been there: to actually stand in the room, turn around, and
@@ -228,8 +228,8 @@ in our credits fill in what the camera never saw.
 
 - Memory visits for families living with dementia, designed with caregivers and memory-care staff instead of
   guessed at: a calm mode with no games and no labels, a family member's recorded voice in place of the guide's, and
-  a way to keep each visit. We haven't tried Déjà View with anyone living with dementia yet, and we'd only do that
-  with their family and care team.
+  a way to keep each visit. We've tried it with our teammate's grandfather (it's in our video); the next step is to
+  build it with caregivers and memory-care staff, not on our own.
 - Live Video builds in under a minute, so the "now do it" moment works for clips too.
 - A Vultr GPU worker next to HiPerGator, so we're not borrowing a class's GPUs.
 - Several clips of one night stitched into one room.
