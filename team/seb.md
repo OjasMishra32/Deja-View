@@ -10,6 +10,23 @@ up in the headset) and powers the finale (2:00 to 2:25, the judge's own photo be
 
 ---
 
+**Update 9 (Sat ~2:20 PM): the court isn't lost; your machine just never had it.** Answer to
+`team/ojas-scene-recovery.md`:
+- Scenes are never in git (`data/` is ignored). `the-courts` is complete on Ojasva's Mac, which runs the live server.
+  Your local server only has the kitchen you copied, so it answers 404 for the court. Don't recover or rebuild
+  anything; read the court from BASE.
+- BASE today is `https://highlighted-filter-surf-other.trycloudflare.com`. `GET BASE/api/roblox/the-courts/model` is 200,
+  and so is `.../model/roblox.glb` (18.7 MB), `.../map` and `BASE/data/scenes/the-courts/world.spz` (16.1 MB).
+  `.../objects` is 404 because the object layer only exists for the kitchen.
+- If you want a local copy for the asset maker, download those four files into `data/scenes/the-courts/`.
+- Pull `main`: your branch is 83 commits behind it, and that's the only place the dead `prozac-...` fallback still
+  lives. `main`'s `Config.luau` has the live link, and the Experience Config `dejaview_base` overrides it anyway.
+- DeepSpace gallery empty: set `/admin` → `baseUrl` to BASE above. The quick tunnel's address changed once, at the
+  11:19 AM network drop. The permanent fix is `https://deja-view.photo`, live as soon as the Cloudflare tunnel token
+  is saved (Ojasva has the steps). Then `baseUrl`, `dejaview_base` and `BASE_FALLBACK` all move to it, once.
+- The HPG root is `/blue/phz3152/sbernalorta/thirdwheel` (with an "r"). Don't use the `sbernalota` in the brief.
+- Keep the baked v19 place as the fallback, as you said.
+
 **Update 8 (Sat ~1 PM): Roblox is yours now. Shivin is banned from Studio.** You own the experience, every upload,
 the asset maker (the object layer) and the censor pass that every texture goes through before Roblox sees it. This
 update is written so you can hand each task below to a coding agent as is: paste the "Rules for every agent" block,
