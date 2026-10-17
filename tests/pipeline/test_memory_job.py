@@ -470,3 +470,74 @@ def test_cut_with_the_real_ffmpeg_is_frame_exact_and_camera_sized(tmp_path):
     got = M.probe(cut)
     assert M.count_frames(cut) == 30 and (got["width"], got["height"]) == (160, 90) and got["audio"]
     assert M.check(p, "cut") == []
+
+
+# --- resuming a chain (--from) ---------------------------------------------------------------------------------------
+
+def written_job(tmp_path):
+    """A job folder as the first --submit leaves it: plan.json and one script per step."""
+    p = plan(tmp_path, 12.0)
+    root = Path(p.root)
+    (root / "steps").mkdir(parents=True)
+    (root / "plan.json").write_text(json.dumps(p.to_json()))
+    for s in p.steps:
+        (root / "steps" / f"{s.name}.sbatch").write_text("#!/bin/bash\n")
+    return p, root
+
+
+def finish(p, *names):
+    """Writes what each named step's check looks for."""
+    for n in names:
+        c = next(s for s in p.steps if s.name == n).checks
+        for f in c.get("files", []):
+            Path(f).parent.mkdir(parents=True, exist_ok=True)
+            Path(f).write_text("{}")
+        for d, pattern, k in c.get("globs", []) + ([c["glob"]] if "glob" in c else []):
+            target = Path(d) / pattern
+            target.parent.mkdir(parents=True, exist_ok=True)
+            for i in range(int(k)):
+                name = target.name.replace("[0-9]*", str(i)).replace("*", str(i))
+                (target.parent / name).write_text("x")
+
+
+def test_from_photofit_plans_photofit_and_install_only(tmp_path, capsys):
+    p, root = written_job(tmp_path)
+    finish(p, "pack", *[s.name for s in p.steps if s.name.startswith("body")])
+    part, problems = M.resume_plan(p, "photofit")
+    assert problems == [] and [s.name for s in part.steps] == ["photofit", "install"]
+    assert part.steps[0].after == [] and part.steps[1].after == ["photofit"]  # done steps drop out of the deps
+    assert M.main(["--from", "photofit", "--root", str(root), "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "resuming chess-match at photofit: photofit, install" in out
+    assert "\nregister " not in out and "\ncut " not in out
+
+
+def test_from_refuses_when_earlier_outputs_are_missing(tmp_path):
+    p, root = written_job(tmp_path)
+    finish(p, *[s.name for s in p.steps if s.name.startswith("body")])  # pack never finished
+    part, problems = M.resume_plan(p, "photofit")
+    assert problems and all(x.startswith("pack:") for x in problems)
+    with pytest.raises(SystemExit) as e:
+        M.main(["--from", "photofit", "--root", str(root), "--dry-run"])
+    assert "pack" in str(e.value)
+    with pytest.raises(SystemExit):
+        M.resume_plan(p, "nonsense")
+    with pytest.raises(SystemExit):
+        M.main(["--from", "photofit", "--root", str(tmp_path / "nowhere"), "--dry-run"])
+
+
+def test_from_submits_only_the_rest_and_keeps_the_first_record(tmp_path):
+    p, root = written_job(tmp_path)
+    (root / "submitted.json").write_text('{"jobs": {"cut": "1"}}')
+    finish(p, "pack", *[s.name for s in p.steps if s.name.startswith("body")])
+    calls = []
+
+    def fake(cmd, **kw):
+        calls.append(cmd)
+        return type("R", (), {"stdout": f"{500 + len(calls)}\n"})()
+
+    assert M.resume_main(["--from", "photofit", "--root", str(root), "--submit"], runner=fake) == 0
+    assert [c[-1].rsplit("/", 1)[-1] for c in calls] == ["photofit.sbatch", "install.sbatch"]
+    assert not any("--dependency" in x for x in calls[0]) and "--dependency=afterok:501" in calls[1]
+    assert json.loads((root / "submitted.json").read_text()) == {"jobs": {"cut": "1"}}  # the first run's record stays
+    assert len(list(root.glob("submitted-from-photofit-*.json"))) == 1
