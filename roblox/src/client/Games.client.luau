@@ -7,7 +7,8 @@ local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 
--- Diagnostic HUD, drawn before anything else so a stall is visible on screen.
+-- Diagnostic line for testing: hidden from players (set PP_DEBUG to true to show it on screen).
+local PP_DEBUG = false
 local diagGui = Instance.new("ScreenGui")
 diagGui.Name = "PPDiag"
 diagGui.ResetOnSpawn = false
@@ -23,10 +24,13 @@ diag.TextSize = 14
 diag.TextColor3 = Color3.fromRGB(120, 255, 150)
 diag.TextXAlignment = Enum.TextXAlignment.Left
 diag.Text = "PP CLIENT v5: start"
+diag.Visible = PP_DEBUG
 diag.Parent = diagGui
 local function dbg(text: string)
 	diag.Text = "PP CLIENT v5: " .. text
-	print("[PingPong] " .. text)
+	if PP_DEBUG then
+		print("[PingPong] " .. text)
+	end
 end
 
 local PingPongView = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PingPongView"))

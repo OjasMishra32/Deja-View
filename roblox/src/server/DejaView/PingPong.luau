@@ -206,27 +206,12 @@ local function buildTable(tableCf: CFrame, length: number, width: number, visibl
 	board.Text = ""
 	board.Parent = gui
 
-	local probeGui = Instance.new("BillboardGui")
-	probeGui.Name = "ClientProbeGui"
-	probeGui.Size = UDim2.fromOffset(420, 44)
-	probeGui.AlwaysOnTop = true
-	probeGui.StudsOffset = Vector3.new(0, 1.4, 0)
-	probeGui.Parent = anchor
-	local probe = Instance.new("TextLabel")
-	probe.Name = "ClientProbe"
-	probe.Size = UDim2.fromScale(1, 1)
-	probe.BackgroundTransparency = 1
-	probe.Font = Enum.Font.Code
-	probe.TextSize = 18
-	probe.TextColor3 = Color3.fromRGB(120, 255, 150)
-	probe.TextStrokeTransparency = 0.2
-	probe.Text = "server up, waiting for a client"
-	probe.Parent = probeGui
-
 	local signGui = Instance.new("BillboardGui")
 	signGui.Name = "RealPingPongSign"
 	signGui.Size = UDim2.fromOffset(360, 72)
 	signGui.AlwaysOnTop = true
+	-- above the scoreboard (same anchor), so the two never draw over each other
+	signGui.StudsOffset = Vector3.new(0, 3.2, 0)
 	signGui.Parent = anchor
 	local sign = Instance.new("TextLabel")
 	sign.Size = UDim2.fromScale(1, 1)
@@ -720,13 +705,7 @@ function PingPong.start()
 		PingPong.join(player)
 	end)
 	PPWho.OnServerInvoke = function(player)
-		local side = playerSide(player)
-		local probe = folder and folder:FindFirstChild("ClientProbe", true)
-		if probe and probe:IsA("TextLabel") then
-			probe.Text = string.format("CLIENT CONNECTED: %s (%s)", player.DisplayName, side or "no side")
-		end
-		print("[PingPong] PPWho from", player.Name, "side", side)
-		return side
+		return playerSide(player)
 	end
 
 	PPHit.OnServerEvent:Connect(function(player, payload)
