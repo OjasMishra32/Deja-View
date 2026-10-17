@@ -273,7 +273,8 @@ of being ready. A room is loadable once its map (6.2) returns 200.
   origin.
 - Optional query `maxParts` (default 6000, cap 12000): the server coarsens the voxels until the room fits.
 - Optional query `chunk=N`: the same response cut into chunks of at most 2,500 parts (about 120 KB), each repeating
-  the header fields plus `chunk` and `chunks`. Without `chunk`, all parts come in one response.
+  the header fields plus `chunk` and `chunks`. **`chunk` is 1-based:** ask for `chunk=1` first, then 2 up to `chunks`
+  (`chunk=0` is a 400). Without `chunk`, all parts come in one response.
 - Optional extra fields: `ceilingY` (studs, for an invisible lid), `bounds` (studs), and a 10th value per part (`1` =
   imagined, `0` = captured) for the reality-check tint.
 - Errors: `202 {"status":"building","retryAfter":2}` (wait and retry), `404 {"error":"No such scene"}`,
@@ -589,7 +590,7 @@ DeepSpace before each run. Our own footage leads; Fortnite comes second.
 ### 13.2 Server contract checks (Ojasva runs these after every server change)
 
 ```bash
-B=http://localhost:8788; K=$DV_KEY; S=test-tw-local
+B=http://localhost:8788; K=$DV_KEY; S=fortnite-brick-house     # a Photo world: a Video memory's map answers 404 (6.2)
 curl -s -F mode=photo -F name="curl photo" -F files=@room.jpg $B/api/scenes | jq '{id, mode, status}'
 curl -s $B/api/scenes | jq '[.[] | select(.status=="ready") | .id]'
 curl -s -X POST $B/api/presence/$S -H 'Content-Type: application/json' \

@@ -1,6 +1,6 @@
 // DOM overlay: loader, title, buttons, help card, video transport, toasts, touch joystick.
 
-import type { SceneMode } from '../../../shared/types.ts';
+import type { PublicMode, SceneMode } from '../../../shared/types.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -11,17 +11,24 @@ export interface HudHandlers {
   onPlayToggle?: () => void;
   onSeek?: (fraction: number) => void;
   onMute?: () => void;
+  /** The reality-check button (C). */
+  onReality?: () => void;
+  /** The leave-a-note button (N). */
+  onNote?: () => void;
 }
 
 /** Product name shown to people (page title, loader, wrist panel). */
 export const BRAND = 'Déjà View';
 
 /** How each mode is named to people: one photo becomes a world, a still-camera video becomes a room. */
-export const MODE_LABEL: Record<SceneMode, string> = {
+/** The mode as people read it. The API sends photo / video / sample; older servers sent the internal ids. */
+export const MODE_LABEL: Record<SceneMode | PublicMode, string> = {
   rentfree: 'Photo',
   thirdwheel: 'Video',
-  reconstruct: 'Reconstruct',
+  reconstruct: 'Photo',
   sample: 'Sample',
+  photo: 'Photo',
+  video: 'Video',
 };
 
 export function formatTime(t: number): string {
@@ -54,6 +61,9 @@ export class Hud {
   private duration = $('tw-duration');
   private mute = $('tw-btn-mute');
   private vr = $<HTMLButtonElement>('tw-btn-vr');
+  // optional: a page without the live buttons still works
+  private reality = document.getElementById('tw-btn-reality') as HTMLButtonElement | null;
+  private noteBtn = document.getElementById('tw-btn-note') as HTMLButtonElement | null;
   private toasts = $('tw-toasts');
   private scrubbing = false;
   private idleTimer = 0;
@@ -66,6 +76,8 @@ export class Hud {
     this.vr.addEventListener('click', () => this.handlers.onEnterVr?.());
     this.play.addEventListener('click', () => this.handlers.onPlayToggle?.());
     this.mute.addEventListener('click', () => this.handlers.onMute?.());
+    this.reality?.addEventListener('click', () => this.handlers.onReality?.());
+    this.noteBtn?.addEventListener('click', () => this.handlers.onNote?.());
     this.scrub.addEventListener('input', () => {
       this.scrubbing = true;
       this.setScrubFill(Number(this.scrub.value) / 1000);
@@ -88,7 +100,7 @@ export class Hud {
   }
 
   // ---------- loader ----------
-  setLoaderTitle(name: string, mode?: SceneMode): void {
+  setLoaderTitle(name: string, mode?: SceneMode | PublicMode): void {
     $('tw-loader-name').textContent = name;
     $('tw-loader-mode').textContent = mode ? MODE_LABEL[mode] ?? mode : BRAND;
   }
@@ -127,7 +139,7 @@ export class Hud {
   }
 
   // ---------- identity ----------
-  setScene(name: string, mode: SceneMode, caption?: string): void {
+  setScene(name: string, mode: SceneMode | PublicMode, caption?: string): void {
     $('tw-name').textContent = name;
     $('tw-mode').textContent = MODE_LABEL[mode] ?? mode;
     if (caption) $('tw-name').title = caption;
@@ -138,6 +150,20 @@ export class Hud {
   showVr(show: boolean, enabled = true): void {
     this.vr.hidden = !show;
     this.vr.disabled = !enabled;
+  }
+
+  /** Shows the live buttons once the world is open (reality check, leave a note). */
+  showLive(reality: boolean, notes: boolean): void {
+    if (this.reality) this.reality.hidden = !reality;
+    if (this.noteBtn) this.noteBtn.hidden = !notes;
+  }
+
+  /** The reality-check button state: lit while the imagined parts are tinted, busy while the parts load. */
+  setReality(on: boolean, busy = false): void {
+    if (!this.reality) return;
+    this.reality.classList.toggle('is-active', on);
+    this.reality.classList.toggle('is-busy', busy);
+    this.reality.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
 
   setVrLabel(text: string): void {

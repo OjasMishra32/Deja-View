@@ -4,9 +4,52 @@
 // sentence written here or at its source. Technical detail (backend names, exit codes, tool output) goes to the
 // scene's log.txt or the server console only.
 
-import type { SceneMode } from '../shared/types.ts';
+import type { PublicMode, PublicScene, Scene, SceneMode, SceneStatus } from '../shared/types.ts';
 
 export const PRODUCT = 'Déjà View';
+
+/** The mode name the API reports (contracts 4.1): video for thirdwheel, sample for samples, photo for every place. */
+export function publicMode(mode: unknown): PublicMode {
+  if (mode === 'thirdwheel' || mode === 'video') return 'video';
+  if (mode === 'sample') return 'sample';
+  return 'photo';
+}
+
+/** The job's own captions say how a world was made, not what is in it (pipeline/run_job.py, bundled samples). */
+const PIPELINE_CAPTION =
+  /^(generated from (one photo|the sharpest frame|your prompt)|built from the depth|the room (is built|was imagined) from|room generated from|this clip has no sound|sample world|synthetic rgbd clip)/i;
+
+/** True for a caption that only describes the pipeline ("Generated from one photo: ..."), never the place. */
+export function isPipelineCaption(caption: string | null | undefined): boolean {
+  return !!caption && PIPELINE_CAPTION.test(caption.trim());
+}
+
+/** Whether a scene is a Video memory (it stays in the headset and the browser; no Roblox room). */
+export function isVideoScene(scene: Pick<Scene, 'mode' | 'video'> | null | undefined): boolean {
+  return !!scene && (publicMode(scene.mode) === 'video' || !!scene.video);
+}
+
+const DEFAULT_STAGE: Record<SceneStatus, string> = {
+  queued: 'Queued',
+  uploading: 'Uploading',
+  running: 'Building',
+  downloading: 'Finishing',
+  ready: 'Ready',
+  failed: 'Failed',
+};
+
+/**
+ * A scene as the API and /ws send it (contracts 4.1, 4.2): `mode` as photo / video / sample, and `stage`,
+ * `progress` and `error` always present (a ready scene reads stage "Ready", progress 1, error null). Idempotent.
+ */
+export function publicScene(scene: Scene | PublicScene): PublicScene {
+  const status = scene.status;
+  const stage = typeof scene.stage === 'string' && scene.stage.trim() ? scene.stage : (DEFAULT_STAGE[status] ?? 'Building');
+  let progress = typeof scene.progress === 'number' && Number.isFinite(scene.progress) ? Math.min(1, Math.max(0, scene.progress)) : null;
+  if (status === 'ready') progress = 1;
+  const error = status === 'failed' ? (typeof scene.error === 'string' && scene.error ? scene.error : GENERIC_FAILURE.rentfree) : null;
+  return { ...scene, mode: publicMode(scene.mode), stage, progress: progress ?? 0, error };
+}
 
 /** Modes a scene can be created in. Internal ids stay rentfree/thirdwheel; the app calls them Photo and Video. */
 export const UPLOAD_MODES = ['rentfree', 'thirdwheel', 'reconstruct'] as const;

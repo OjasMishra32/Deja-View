@@ -91,7 +91,11 @@ describe('cross-site protection', () => {
     expect(res.status).toBe(201);
     expect(res.headers.get('access-control-allow-origin')).toBeNull();
     const scene = await res.json();
-    expect(scene.mode).toBe('rentfree');
+    expect(scene.mode).toBe('photo'); // contracts 4.1: responses report photo or video
+    expect(scene.stage).toBe('Queued');
+    expect(scene.progress).toBe(0);
+    expect(scene.error).toBeNull();
+    expect((await s.store.get(scene.id))?.mode).toBe('rentfree'); // stored under the internal id
     await s.runner.idle();
     const del = await fetch(`${s.base}/api/scenes/${scene.id}`, { method: 'DELETE', headers: { Origin: s.base } });
     expect(del.status).toBe(200);
@@ -147,11 +151,11 @@ describe('retry with a mode', () => {
     expect((await noVideo.json()).error).toBe('Video mode needs a video, and this scene was made from photos.');
     const same = await retry('clip-aaaaa', '?mode=video');
     expect(same.status).toBe(200);
-    expect((await same.json()).mode).toBe('thirdwheel');
+    expect((await same.json()).mode).toBe('video');
     await s.runner.idle();
     const switched = await retry('many-aaaaa', '', { mode: 'photo' });
     expect(switched.status).toBe(200);
-    expect((await switched.json()).mode).toBe('rentfree');
+    expect((await switched.json()).mode).toBe('photo');
     await s.runner.idle();
     expect((await s.store.get('many-aaaaa'))?.mode).toBe('rentfree');
     const plain = await retry('photo-aaaaa');

@@ -1,0 +1,1186 @@
+/* Déjà View host remote: the same light, quiet look as the site, sized for a phone held during the skit. */
+
+:root {
+  --bg: #f2f2f7;
+  --surface: #ffffff;
+  --surface-2: #f2f2f7;
+  --fill: rgba(118, 118, 128, 0.12);
+  --fill-2: rgba(118, 118, 128, 0.2);
+  --line: rgba(60, 60, 67, 0.12);
+  --line-2: rgba(60, 60, 67, 0.2);
+  --text: #1d1d1f;
+  --muted: #6e6e73;
+  --dim: #8e8e93;
+  --blue: #007aff;
+  --blue-soft: rgba(0, 122, 255, 0.1);
+  --green: #34c759;
+  --green-ink: #248a3d;
+  --green-soft: rgba(52, 199, 89, 0.14);
+  --orange: #ff9500;
+  --orange-ink: #c93400;
+  --red: #ff3b30;
+  --red-ink: #d70015;
+  --red-soft: rgba(255, 59, 48, 0.08);
+  --radius: 18px;
+  --radius-sm: 14px;
+  --gutter: 16px;
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', system-ui, sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+:focus-visible {
+  outline: 3px solid rgba(0, 122, 255, 0.45);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+.h-wrap {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+
+.h-mono {
+  font-weight: 600;
+}
+
+/* ---------- Top bar ---------- */
+
+.h-top {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--line);
+  padding-top: env(safe-area-inset-top);
+}
+
+.h-top .h-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+}
+
+.h-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.h-mark {
+  width: 26px;
+  height: 26px;
+}
+
+.h-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.h-spacer {
+  flex: 1;
+}
+
+/* Live updates: a word, coloured by the connection (the dot stays for the script, unseen). */
+.h-live {
+  display: inline-flex;
+  align-items: center;
+  color: var(--dim);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.h-live .h-dot {
+  display: none;
+}
+
+.h-live:has(.h-dot.ok) {
+  color: var(--green-ink);
+}
+
+.h-live:has(.h-dot.warn) {
+  color: var(--orange-ink);
+}
+
+.h-live:has(.h-dot.bad) {
+  color: var(--red-ink);
+}
+
+/* Status glyphs: flat filled circles with a mark, the way iOS shows a state. */
+.h-dot {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: center / 20px 20px no-repeat;
+}
+
+.h-dot.ok {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='10' fill='%2334c759'/%3E%3Cpath d='M5.6 10.3l2.9 2.9 5.9-6.2' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.h-dot.warn {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='10' fill='%23ff9500'/%3E%3Cpath d='M10 5.2v6' stroke='%23fff' stroke-width='2.2' stroke-linecap='round'/%3E%3Ccircle cx='10' cy='14.6' r='1.3' fill='%23fff'/%3E%3C/svg%3E");
+}
+
+.h-dot.bad {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='10' fill='%23ff3b30'/%3E%3Cpath d='M10 5.2v6' stroke='%23fff' stroke-width='2.2' stroke-linecap='round'/%3E%3Ccircle cx='10' cy='14.6' r='1.3' fill='%23fff'/%3E%3C/svg%3E");
+}
+
+.h-dot.off {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='10' fill='%23aeaeb2'/%3E%3Cpath d='M6 10h8' stroke='%23fff' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+.h-dot.idle {
+  border: 2px solid #d1d1d6;
+}
+
+.h-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--blue);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.16s var(--ease);
+}
+
+.h-icon:hover {
+  background: var(--fill-2);
+}
+
+.h-icon.spin svg {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+/* ---------- Layout ---------- */
+
+.h-main {
+  padding-top: 18px;
+  padding-bottom: calc(40px + env(safe-area-inset-bottom));
+}
+
+.h-main section {
+  margin-bottom: 28px;
+}
+
+.h-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 4px 10px;
+}
+
+.h-eyebrow {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.h-eyebrow-live {
+  color: var(--blue);
+}
+
+.h-summary {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dim);
+  text-align: right;
+}
+
+/* The script writes these in lower case; show them as sentences. */
+.h-summary,
+#live-txt {
+  display: inline-block;
+}
+
+.h-summary::first-letter,
+#live-txt::first-letter {
+  text-transform: uppercase;
+}
+
+.h-summary.ok {
+  color: var(--green-ink);
+}
+
+.h-summary.bad {
+  color: var(--red-ink);
+}
+
+.h-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+/* Phone: cues first, then the worlds, then the feed. */
+.h-col {
+  display: contents;
+}
+
+.h-col-side > section:first-child {
+  order: 1;
+}
+
+.h-col-main > section {
+  order: 2;
+}
+
+.h-feed-section {
+  order: 3;
+}
+
+/* ---------- Banner and key ---------- */
+
+.h-banner {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  background: #fff1f0;
+  color: #a50e0e;
+  font-size: 15px;
+}
+
+.h-key {
+  margin-bottom: 18px;
+  padding: 16px;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.h-key label {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.h-key label b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.h-key-row {
+  display: flex;
+  gap: 8px;
+}
+
+.h-key input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface-2);
+  font-size: 17px;
+  outline: none;
+}
+
+.h-key input:focus {
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.3);
+}
+
+/* ---------- Buttons ---------- */
+
+.h-btn {
+  --h: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--h);
+  padding: 0 18px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--fill);
+  color: var(--blue);
+  font-weight: 600;
+  font-size: 15px;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background 0.16s var(--ease),
+    opacity 0.16s var(--ease);
+}
+
+.h-btn:hover {
+  background: var(--fill-2);
+}
+
+.h-btn:active {
+  opacity: 0.7;
+}
+
+.h-btn-primary,
+.h-open {
+  background: var(--blue);
+  color: #fff;
+}
+
+.h-btn-primary:hover,
+.h-open:hover {
+  background: #0a84ff;
+}
+
+.h-btn-sm {
+  --h: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.h-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.h-btn[disabled] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.h-open[disabled] {
+  background: var(--fill);
+  color: var(--muted);
+  opacity: 1;
+}
+
+.h-btn.sent {
+  background: var(--green-soft);
+  color: var(--green-ink);
+}
+
+/* ---------- Status tiles ---------- */
+
+.h-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.h-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 14px 15px 15px;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.h-tile.wide {
+  grid-column: 1 / -1;
+}
+
+/* The server stopped answering: these are its last words, not news. */
+.h-tiles.stale .h-tile {
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+
+@media (max-width: 719px) {
+  .h-tile.fill {
+    grid-column: 1 / -1;
+  }
+}
+
+.h-tile.bad {
+  box-shadow: inset 0 0 0 1.5px rgba(255, 59, 48, 0.45);
+}
+
+.h-tile.warn {
+  box-shadow: inset 0 0 0 1.5px rgba(255, 149, 0, 0.45);
+}
+
+.h-tile-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.h-tile-name {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.h-tile-text {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.h-tile.bad .h-tile-text {
+  color: var(--red-ink);
+}
+
+.h-tile.warn .h-tile-text {
+  color: var(--orange-ink);
+}
+
+.h-tile-detail {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.h-fix {
+  margin-top: 8px;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.h-fix::before {
+  content: 'To fix: ';
+  font-weight: 600;
+  color: var(--red-ink);
+}
+
+.h-tile.warn .h-fix::before {
+  color: var(--orange-ink);
+}
+
+.h-tile.idle .h-fix,
+.h-tile.off .h-fix {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.h-tile.idle .h-fix::before,
+.h-tile.off .h-fix::before {
+  content: '';
+}
+
+.h-cmd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 6px 6px 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.h-cmd code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.h-cmd .h-btn {
+  background: var(--surface);
+}
+
+.h-where {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.h-where + .h-cmd {
+  margin-top: 4px;
+}
+
+.h-url {
+  color: var(--blue);
+  text-decoration: none;
+}
+
+.h-url:hover {
+  text-decoration: underline;
+}
+
+.h-link {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.h-link .h-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 8px;
+}
+
+/* ---------- Toggles: a tile with an iOS switch ---------- */
+
+.h-toggles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.h-toggle {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 108px;
+  padding: 14px 15px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.16s var(--ease);
+}
+
+.h-toggle:active {
+  transform: scale(0.98);
+}
+
+/* The switch: track and knob. */
+.h-toggle::before,
+.h-toggle::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  transition:
+    background 0.25s var(--ease),
+    transform 0.25s var(--ease);
+}
+
+.h-toggle::before {
+  width: 51px;
+  height: 31px;
+  border-radius: 999px;
+  background: #e9e9ea;
+}
+
+.h-toggle::after {
+  width: 27px;
+  height: 27px;
+  margin: 2px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(0, 0, 0, 0.06);
+  transform: translateX(-20px);
+}
+
+.h-toggle[aria-checked='true']::before {
+  background: var(--green);
+}
+
+.h-toggle[aria-checked='true']::after {
+  transform: none;
+}
+
+.h-toggle-name {
+  padding-right: 60px;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+/* The word stays for screen readers and the script; the switch says it. */
+.h-toggle-state {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.h-toggle-sub {
+  margin-top: auto;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.h-toggle.busy {
+  opacity: 0.6;
+}
+
+/* ---------- Thumbnails ---------- */
+
+.h-thumb {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #e8edf4, #d9dfe8);
+}
+
+.h-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ---------- Demo order ---------- */
+
+.h-slots {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.h-slot {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+  min-height: 76px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.h-slot.empty {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--line-2);
+}
+
+/* Phone: number, picture and name in one row, the buttons under them. */
+.h-slot {
+  flex-wrap: wrap;
+}
+
+.h-slot-top {
+  display: contents;
+}
+
+.h-slot .h-thumb {
+  order: 1;
+}
+
+.h-slot-body {
+  order: 2;
+}
+
+.h-slot-actions {
+  order: 3;
+  flex: 1 0 100%;
+}
+
+.h-slot-actions .h-open {
+  flex: 1;
+}
+
+.h-slot-n {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.h-slot.empty .h-slot-n {
+  background: var(--fill);
+  color: var(--muted);
+}
+
+.h-slot .h-thumb {
+  width: 64px;
+  height: 48px;
+}
+
+.h-slot-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.h-slot-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.h-slot-name {
+  font-weight: 600;
+  font-size: 17px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.h-slot.empty .h-slot-name {
+  color: var(--dim);
+  font-weight: 400;
+  font-size: 14px;
+  white-space: normal;
+}
+
+.h-slot-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.h-x {
+  width: 32px;
+  height: 32px;
+  color: var(--muted);
+}
+
+/* ---------- Worlds ---------- */
+
+.h-worlds {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.h-world {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.h-world.enter {
+  animation: in 0.4s var(--ease) both;
+}
+
+@keyframes in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.h-world .h-thumb {
+  width: 112px;
+  height: 80px;
+}
+
+.h-world.building {
+  box-shadow: inset 0 0 0 1.5px rgba(0, 122, 255, 0.35);
+}
+
+.h-world.failed {
+  opacity: 0.7;
+}
+
+.h-world.fresh {
+  box-shadow: inset 0 0 0 2px var(--blue);
+}
+
+.h-world-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.h-world-name {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  overflow-wrap: anywhere;
+}
+
+.h-world-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.h-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: #3c3c43;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.h-badge.here {
+  background: var(--green-soft);
+  color: var(--green-ink);
+}
+
+.h-badge.pinned {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.h-world-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+}
+
+.h-world-actions .h-open {
+  flex: 1;
+}
+
+.h-progress {
+  position: relative;
+  height: 4px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: #e5e5ea;
+  overflow: hidden;
+}
+
+.h-progress span {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 50%;
+  border-radius: inherit;
+  background: var(--blue);
+  transition: transform 0.6s var(--ease);
+}
+
+.h-progress.indeterminate span {
+  transform: scaleX(0.3);
+  animation: slide 1.4s ease-in-out infinite;
+}
+
+@keyframes slide {
+  from {
+    translate: -100% 0;
+  }
+  to {
+    translate: 340% 0;
+  }
+}
+
+.h-stage {
+  color: var(--blue);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.h-error {
+  color: var(--red-ink);
+  font-size: 13px;
+}
+
+.h-pick {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding-top: 2px;
+}
+
+.h-pick span {
+  margin-right: 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.h-empty {
+  padding: 24px 16px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--muted);
+  text-align: center;
+  font-size: 15px;
+}
+
+.h-skel {
+  height: 102px;
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, #fff 0%, #f7f7f9 50%, #fff 100%) 0 0 / 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* ---------- Feed: an inset list ---------- */
+
+.h-feed {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.h-feed li {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 10px;
+  padding: 11px 16px;
+  font-size: 15px;
+  border-top: 1px solid var(--line);
+}
+
+.h-feed li:first-child {
+  border-top: 0;
+}
+
+.h-feed li.new {
+  animation: in 0.35s var(--ease) both;
+}
+
+.h-feed time {
+  color: var(--dim);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.h-feed .h-dot {
+  display: none;
+}
+
+.h-feed li.k-ready span:last-child {
+  color: var(--green-ink);
+  font-weight: 600;
+}
+
+.h-feed li.k-failed span:last-child {
+  color: var(--red-ink);
+}
+
+.h-feed .h-feed-empty {
+  display: block;
+  color: var(--dim);
+  padding: 16px;
+}
+
+/* ---------- Toast ---------- */
+
+.h-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  z-index: 200;
+  width: max-content;
+  max-width: min(calc(100vw - 32px), 440px);
+  translate: -50% 16px;
+  opacity: 0;
+  padding: 12px 18px;
+  border-radius: 14px;
+  background: rgba(29, 29, 31, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  color: #fff;
+  font-weight: 500;
+  font-size: 15px;
+  text-align: center;
+  pointer-events: none;
+  transition: all 0.28s var(--ease);
+}
+
+.h-toast.show {
+  opacity: 1;
+  translate: -50% 0;
+}
+
+.h-toast.bad {
+  background: var(--red);
+}
+
+/* ---------- Table laptop ---------- */
+
+@media (min-width: 720px) {
+  :root {
+    --gutter: 28px;
+  }
+
+  .h-tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .h-slots {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .h-slot {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: left;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .h-slot-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    order: 0;
+  }
+
+  .h-slot {
+    flex-wrap: nowrap;
+  }
+
+  .h-slot-actions {
+    order: 2;
+    flex: none;
+  }
+
+  .h-slot .h-thumb {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+  }
+
+  .h-slot.empty .h-thumb {
+    display: none;
+  }
+
+  .h-slot-actions .h-open {
+    flex: 1;
+  }
+}
+
+@media (min-width: 1080px) {
+  .h-tiles {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .h-tile.wide {
+    grid-column: span 2;
+  }
+
+  .h-cols {
+    grid-template-columns: 400px minmax(0, 1fr);
+    gap: 28px;
+    align-items: start;
+  }
+
+  .h-col {
+    display: block;
+  }
+
+  .h-col-side {
+    position: sticky;
+    top: 70px;
+  }
+
+  .h-worlds {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  }
+
+  .h-world {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .h-world .h-thumb {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+  }
+
+  .h-feed {
+    max-height: calc(100vh - 380px);
+    overflow-y: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

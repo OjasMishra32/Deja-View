@@ -354,3 +354,49 @@ def test_preload_failure_exits_with_error(tmp_path):
     assert w.run() == 3
     last = json.loads((tmp_path / "jobs" / "worker.last.json").read_text())
     assert "gsplat" in last["error"]
+
+
+# ---------------------------------------------------------------------------------------------------- reality check
+
+
+class WorldFW(FakeFW):
+    """A fake FlashWorld that writes a real (tiny) world and its input camera, like the real runner."""
+
+    def generate(self, image, prompt, out_dir, progress=None, **kw):
+        import numpy as np
+
+        res = super().generate(image, prompt, out_dir, progress, **kw)
+        out = Path(out_dir)
+        xs, ys = np.meshgrid(np.linspace(-1.0, 1.0, 30), np.linspace(-0.8, 0.8, 24))
+        wall = np.stack([xs.ravel(), ys.ravel(), np.full(xs.size, -3.0)], axis=1)  # in front of the camera: seen
+        back = wall * np.array([1.0, 1.0, -1.0])  # behind it: imagined
+        pts = np.concatenate([wall, back]).astype(np.float32)
+        sio.write_spz(out / "world.spz", sio.Splats.from_rgb(pts, np.full((len(pts), 3), 0.5), 0.03, opacities=0.9))
+        cam = {"width": 320, "height": 240, "fx": 240.0, "fy": 240.0, "cx": 160.0, "cy": 120.0, "position": [0, 0, 0], "quaternion": [0, 0, 0, 1]}
+        (out / "input_camera.json").write_text(json.dumps(cam))
+        res["world"]["transform"] = {"position": [0, 0, 0], "quaternion": [0, 0, 0, 1], "scale": 1}
+        sio.write_json_atomic(out / "scene.json", res)
+        return res
+
+
+def test_rentfree_in_process_writes_the_reality_parts(tmp_path):
+    w = make_worker(tmp_path, WorldFW())
+    make_job(tmp_path, "rr1")
+    assert w.run() == 0
+    out = tmp_path / "jobs" / "done" / "rr1" / "out"
+    assert (tmp_path / "jobs" / "done" / "rr1" / "DONE").exists()
+    report = json.loads((out / "reality.json").read_text())
+    assert report["camera"]["source"] == "input_camera"
+    assert report["seen"]["count"] == 720 and report["imagined"]["count"] == 720
+    assert (out / "world-seen.spz").stat().st_size > 0 and (out / "world-imagined.spz").stat().st_size > 0
+
+
+def test_a_failed_reality_split_never_fails_the_job(tmp_path):
+    # FakeFW writes no world file: the split cannot run, the job still finishes
+    w = make_worker(tmp_path, FakeFW())
+    make_job(tmp_path, "rr2")
+    assert w.run() == 0
+    d = tmp_path / "jobs" / "done" / "rr2"
+    assert (d / "DONE").exists()
+    assert not (d / "out" / "reality.json").exists()
+    assert "reality split skipped" in (d / "log.txt").read_text()

@@ -486,6 +486,29 @@ def _generated_room(job: Job, tw: dict, video: dict) -> tuple[dict, dict]:
 
 
 MODES = {"rentfree": run_rentfree, "reconstruct": run_reconstruct, "thirdwheel": run_thirdwheel}
+# Modes whose world comes from one input camera (the photo, the video's plate): the reality check applies.
+REALITY_MODES = ("rentfree", "thirdwheel")
+
+
+def reality_parts(job: Job, result: dict) -> bool:
+    """Reality check: split the finished world into what the input camera saw and what the world model imagined
+    (pipeline/reality_split.py writes out/world-seen.spz, out/world-imagined.spz and out/reality.json; the server
+    copies every out/ file into the scene). Needs out/scene.json written first. Never fails the job."""
+    if job.mode not in REALITY_MODES or not isinstance(result.get("world"), dict):
+        return False
+    try:
+        import reality_split
+
+        reality_split.split_scene(job.out_dir, log=job.log)
+        return True
+    except Exception as e:  # the world is fine without it: the viewer then says there is no reality map
+        job.log(f"reality split skipped: {type(e).__name__}: {e}")
+        for name in ("world-seen.spz", "world-imagined.spz", "reality.json"):
+            try:
+                (job.out_dir / name).unlink()
+            except FileNotFoundError:
+                pass
+        return False
 
 
 def run(jobdir: Path | str) -> int:
@@ -509,6 +532,7 @@ def run(jobdir: Path | str) -> int:
         result = fn(job)
         result = {k: result[k] for k in ("world", "video", "thumb", "caption") if result.get(k) is not None}
         job.write_result(result)
+        reality_parts(job, result)
         job.log(f"job {job.id}: done in {time.time() - t0:.1f}s")
         job.finish_ok()
         return 0

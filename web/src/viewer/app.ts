@@ -1,5 +1,7 @@
 // Viewer boot: reads ?scene=<id>, fetches the Scene, builds renderer + Spark + world + physics +
-// controls + HUD + XR, and the video layer when the scene has one.
+// controls + HUD + XR, and the video layer when the scene has one. Once the world is visible, the live
+// layer starts on one /ws connection: social (presence ghosts, sticky notes, tag moments, reality check)
+// and the guide (labels, hold-to-ask, narration). ?follow=1 obeys host cues and opens new worlds.
 
 import * as THREE from 'three';
 import { SparkRenderer, isMobile, isOculus, type SplatMesh } from '@sparkjsdev/spark';
@@ -14,6 +16,9 @@ import { formatTime, Hud } from './hud.ts';
 import { DEFAULT_BODY, DEFAULT_GROUND, EMPTY_WORLD, type GroundOptions } from './physics.ts';
 import { FrameGovernor, XR_LEVELS } from './perf.ts';
 import { Player } from './player.ts';
+import { createGuide, type Guide, type GuideOptions } from './guide/index.ts';
+import { createSocial, type Cue, type SocialHandle } from './social/index.ts';
+import { SocialSocket } from './social/presence-client.ts';
 import { analyseWorld, applyTransform, loadSplatMesh, repairHiddenSplats, splatCount, type WorldAnalysis } from './world.ts';
 import type { CollisionWorld } from './voxels.ts';
 import { XrSystem } from './xr.ts';
@@ -59,6 +64,19 @@ function errorMessage(e: unknown): string {
 }
 
 const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+const SCENE_ID = /^[a-z0-9][a-z0-9-]{0,95}$/;
+
+/** Same labels at the same spots (within 1 cm): a `hotspots` echo of what this viewer just stored. */
+function sameLabels(a: ReadonlyArray<{ label: string; position: readonly number[] }>, raw: unknown): boolean {
+  if (!Array.isArray(raw) || raw.length !== a.length) return false;
+  const key = (l: string) => l.trim().toLowerCase();
+  const mine = new Map(a.map((h) => [key(h.label), h.position]));
+  return raw.every((h) => {
+    const p = h && typeof h === 'object' ? mine.get(key(String((h as { label?: unknown }).label ?? ''))) : undefined;
+    const r = h as { x?: unknown; y?: unknown; z?: unknown };
+    return !!p && [r.x, r.y, r.z].every((v, i) => typeof v === 'number' && Math.abs(v - p[i]!) < 0.01);
+  });
+}
 
 async function fetchScene(id: string): Promise<Scene> {
   const res = await fetch(`/api/scenes/${encodeURIComponent(id)}`, { cache: 'no-store' });
@@ -89,6 +107,15 @@ class Viewer {
   readonly controls: DesktopControls;
   readonly xr: XrSystem;
   mesh: SplatMesh | null = null;
+  /** Presence ghosts, sticky notes, tag moments and the reality check (web/src/viewer/social). */
+  social: SocialHandle | null = null;
+  /** Labels, hold-to-ask and narration (web/src/viewer/guide). */
+  guide: Guide | null = null;
+  /** The viewer's one /ws connection; social and the guide listen on it. */
+  live: SocialSocket | null = null;
+  private realityBusy = false;
+  private liveUiTimer = 0;
+  private leaving = false;
   analysis: WorldAnalysis | null = null;
   collider: MeshCollider | null = null;
   video: VideoLayerHandle | null = null;
@@ -272,7 +299,11 @@ class Viewer {
     hud.setProgress('Ready', 1);
     hud.setScene(this.data.name, this.data.mode, this.data.caption);
     hud.handlers = {
-      onEnterVr: () => this.enterVr(),
+      // the guide opens the microphone early (only when the site already has permission)
+      onEnterVr: () => {
+        this.guide?.warmUp();
+        void this.enterVr();
+      },
       onPlayToggle: () => this.togglePlay(),
       onSeek: (f) => this.video?.seek(f * (this.video.duration || 0)),
       onMute: () => this.toggleMute(),
@@ -292,6 +323,7 @@ class Viewer {
     this.controls.enabled = true;
     debug.ready = true;
     debug.stage = 'ready';
+    this.startLive();
 
     const xrOk = await this.xr.probe();
     hud.showVr(xrOk);
@@ -307,6 +339,178 @@ class Viewer {
       hud.toast('Floor is a guess', 'This world has no clear floor. Press F to fly, or U if it looks upside down.', 'info', 7000);
     }
     if (this.flipped) hud.toast('Flipped view', 'This world is shown upside down from its file (U to undo).', 'info', 5000);
+  }
+
+  /**
+   * The live layer, once the world is visible. Each part starts on its own: one that fails (or a server without
+   * the live routes) never stops the world from opening.
+   */
+  private startLive(): void {
+    const id = this.data.id;
+    const follow = params.get('follow') === '1';
+    try {
+      this.live = SCENE_ID.test(id) ? new SocialSocket(SocialSocket.urlFor(''), id) : null;
+    } catch (e) {
+      console.error('live socket not created', e);
+      this.live = null;
+    }
+    try {
+      this.social = createSocial(
+        {
+          sceneId: id,
+          renderer: this.renderer,
+          scene: this.scene,
+          camera: this.camera,
+          rig: this.rig,
+          worldRoot: this.flip,
+          splatMesh: () => this.mesh,
+          splatFx: this.fx,
+          toast: (t, b, k, ms) => hud.toast(t, b, k, ms),
+          eyeHeight: () => this.player.eyeHeight,
+          xrHeightOffset: () => this.xr.debug.heightOffset,
+          collision: () => this.world,
+          loadSplat: (url) => loadSplatMesh(url),
+          // the server splits Photo and Video worlds for the reality check (server/reality.ts); samples never
+          realityExpected: (this.data.mode as string) !== 'sample',
+          prepareRealityMesh: this.cameraRoom
+            ? (m) => {
+                m.updateMatrix();
+                repairHiddenSplats(m, m.matrix, this.cameraRoom!);
+              }
+            : undefined,
+          releasePointerLock: () => this.controls.releaseLock(),
+        },
+        // headset buttons: right grip = note, left Y = reality (xr.ts owns A, B, the right trigger on the wrist
+        // panel and both sticks; the guide owns X and the left trigger)
+        { cues: follow, socket: this.live ?? true, onCue: (cue) => this.onCue(cue, follow) },
+      );
+    } catch (e) {
+      console.error('social layer did not start', e);
+      this.social = null;
+    }
+    // ?narrate=never|always|photo, ?narrateDelay=, ?labelsDelay= (seconds): a quiet rehearsal, the test benches
+    const guideOpts: Partial<GuideOptions> = {};
+    const narrate = params.get('narrate');
+    if (narrate === 'photo' || narrate === 'always' || narrate === 'never') guideOpts.narrate = narrate;
+    for (const k of ['narrateDelay', 'labelsDelay'] as const) {
+      const v = Number(params.get(k));
+      if (params.has(k) && Number.isFinite(v) && v >= 0) guideOpts[k] = v;
+    }
+    try {
+      this.guide = createGuide({
+        scene: this.data,
+        sceneId: id,
+        baseUrl: '',
+        renderer: this.renderer,
+        three: this.scene,
+        camera: this.camera,
+        rig: this.rig,
+        worldRoot: this.flip,
+        splats: () => this.mesh,
+        collision: () => this.world,
+        toast: (t, b, k, ms) => hud.toast(t, b, k, ms),
+        media: () => this.video?.video ?? null,
+        hasVideo: () => !!this.video,
+        flipped: () => this.flipped,
+        // the right trigger presses wrist-panel buttons and picks note phrases before it asks about a label
+        pointerBusy: () => this.xr.panelHovered || (this.social?.debug.composer ?? 'idle') !== 'idle',
+        // rooms keep the 6 m reach; a big outdoor world lets labels sit as far away as half its size
+        labelReach: () => {
+          const b = this.analysis?.bounds;
+          return b ? Math.min(60, Math.max(6, 0.5 * Math.hypot(b.max[0] - b.min[0], b.max[2] - b.min[2]))) : 6;
+        },
+      }, guideOpts);
+      this.guide.start();
+    } catch (e) {
+      console.error('guide did not start', e);
+      this.guide = null;
+    }
+    if (this.live) {
+      this.live.on('hotspots', (m) => {
+        // the echo of labels this viewer just placed and stored would only pop them in again
+        if (this.guide && !sameLabels(this.guide.hotspots, m.hotspots)) this.guide.setHotspots(m.hotspots);
+      });
+      if (follow) this.live.on('scene', (m) => this.onSceneEvent(m.scene as Scene | undefined));
+      this.live.start();
+    }
+    hud.showLive(!!this.social?.reality, !!this.social);
+    hud.handlers.onReality = () => void this.toggleReality();
+    hud.handlers.onNote = () => this.social?.startNote();
+    Object.defineProperty(debug, 'social', { get: () => this.social?.debug ?? null, enumerable: true, configurable: true });
+    Object.defineProperty(debug, 'guide', { get: () => this.guide?.debug ?? null, enumerable: true, configurable: true });
+    Object.defineProperty(debug, 'socket', { get: () => !!this.live?.connected, enumerable: true, configurable: true });
+    window.addEventListener('pagehide', () => this.disposeLive(), { once: true });
+  }
+
+  /** Host cues from /ws (contracts 11). Social has already acted on `reality` when following. */
+  private onCue(cue: Cue, follow: boolean): void {
+    if (!follow) return;
+    if (cue.action === 'labels') this.guide?.setLabelsVisible(cue.on !== false);
+    else if (cue.action === 'load' && typeof cue.sceneId === 'string' && cue.sceneId !== this.data.id) this.openWorld(cue.sceneId, 'Opening the next world');
+  }
+
+  /** Follow mode: a world that finishes building while this page is open (the live finale) opens here. */
+  private onSceneEvent(scene: Scene | undefined): void {
+    if (!scene || typeof scene.id !== 'string' || scene.id === this.data.id) return;
+    if (scene.status === 'ready' && scene.world) this.openWorld(scene.id, `${scene.name || 'A new world'} is ready`);
+  }
+
+  /**
+   * Swaps to another world by reloading the page on it (the headset leaves VR first; press Enter VR again when it
+   * appears, about 5 s). The live layer is torn down before the page goes.
+   */
+  private openWorld(id: string, title: string): void {
+    if (this.leaving || !SCENE_ID.test(id)) return;
+    this.leaving = true;
+    const q = new URLSearchParams(location.search);
+    q.set('scene', id);
+    const url = `${location.pathname}?${q}`;
+    const presenting = this.renderer.xr.isPresenting;
+    const body = presenting ? 'Opening it now. Press Enter VR again when it appears.' : 'Opening it now.';
+    if (this.social) this.social.notify(title, body, 'ok');
+    else hud.toast(title, body, 'ok');
+    setTimeout(
+      () => {
+        void (async () => {
+          try {
+            await this.renderer.xr.getSession()?.end();
+          } catch {
+            /* already ended */
+          }
+          this.disposeLive();
+          location.assign(url);
+        })();
+      },
+      presenting ? 1800 : 900,
+    );
+  }
+
+  private async toggleReality(): Promise<void> {
+    const s = this.social;
+    if (!s || this.realityBusy) return;
+    this.realityBusy = true;
+    hud.setReality(s.realityOn, true);
+    try {
+      await s.toggleRealityCheck();
+    } catch (e) {
+      console.error('reality check', e);
+    } finally {
+      this.realityBusy = false;
+      hud.setReality(s.realityOn);
+    }
+  }
+
+  private disposeLive(): void {
+    try {
+      this.guide?.dispose();
+      this.social?.dispose();
+      this.live?.close();
+    } catch (e) {
+      console.warn('live layer teardown', e);
+    }
+    this.guide = null;
+    this.social = null;
+    this.live = null;
   }
 
   /** Loads the GLB collider in the current frame (scene transform, flip and floor shift). */
@@ -638,6 +842,27 @@ class Viewer {
         hud.setPlaying(this.video.playing, !this.videoStarted);
         if (this.videoReady) hud.setTime(this.video.currentTime, this.video.duration);
       }
+    }
+
+    // the live layer reads this frame's head pose and XR input, and draws before the render
+    if (this.social) {
+      try {
+        this.social.update(dt);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    if (this.guide) {
+      try {
+        this.guide.update(dt);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    this.liveUiTimer -= dt;
+    if (this.liveUiTimer <= 0 && this.social) {
+      this.liveUiTimer = 0.25;
+      hud.setReality(this.social.realityOn, this.realityBusy);
     }
 
     this.renderer.render(this.scene, this.camera);

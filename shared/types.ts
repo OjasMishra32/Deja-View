@@ -13,6 +13,21 @@ export type Quat = [number, number, number, number];
  */
 export type SceneMode = 'rentfree' | 'thirdwheel' | 'reconstruct' | 'sample';
 
+/**
+ * The mode as the HTTP API and /ws report it (team/contracts.md 4.1): `photo` (rentfree and reconstruct), `video`
+ * (thirdwheel) or `sample`. The server stores the internal ids above; every response maps them (server/copy.ts
+ * publicScene), so clients must accept both spellings.
+ */
+export type PublicMode = 'photo' | 'video' | 'sample';
+
+/** A Scene as the API sends it: public mode name, and `stage`, `progress` and `error` always present. */
+export type PublicScene = Omit<Scene, 'mode' | 'error' | 'stage' | 'progress'> & {
+  mode: PublicMode;
+  stage: string;
+  progress: number;
+  error: string | null;
+};
+
 export type SceneStatus = 'queued' | 'uploading' | 'running' | 'downloading' | 'ready' | 'failed';
 
 /** Where a scene's heavy lifting ran. */
@@ -36,6 +51,11 @@ export interface WorldAsset {
   spawn?: { position: Vec3; yaw: number };
   /** Optional precomputed bounds in the viewer frame. */
   bounds?: { min: Vec3; max: Vec3 };
+  /**
+   * The floor plan the map bake writes (contracts 4.2): an orthographic view from above, ceiling cut off, covering
+   * exactly `min` to `max` in (x, z). Image right = +X, image down = +Z. Relative to the scene directory.
+   */
+  topdown?: { file: string; min: [number, number]; max: [number, number] };
   /** Optional collider mesh (GLB) in the same file frame as the splat. */
   collider?: string;
   source: 'flashworld' | 'anysplat' | 'marble-sample' | 'plate-depth' | 'other';
@@ -87,6 +107,11 @@ export interface Scene {
   video?: VideoLayer;
   /** Free-form notes for the gallery card (e.g. what the AI filled in). */
   caption?: string;
+  /**
+   * 'guide': `caption` is the guide's description of the input photo (POST /describe at upload). It is also the
+   * world model's text prompt and survives the job's own result caption.
+   */
+  captionSource?: 'guide';
 }
 
 export interface HealthInfo {
@@ -94,13 +119,72 @@ export interface HealthInfo {
   version: string;
   https: boolean;
   lan: string[];
-  hpg: { online: boolean; user: string; worker: { alive: boolean; host?: string; gpu?: string; lastBeat?: string } };
+  /** `user` (the cluster account) is only in the server's own copy; /api/health and /ws leave it out. */
+  hpg: { online: boolean; user?: string; worker: { alive: boolean; host?: string; gpu?: string; lastBeat?: string } };
   space: { available: boolean };
   local: { python: boolean };
 }
 
-/** Messages pushed over /ws. */
-export type ServerEvent = { type: 'scene'; scene: Scene } | { type: 'scene_deleted'; id: string } | { type: 'health'; health: HealthInfo };
+/**
+ * A Roblox moment relayed to the viewer (team/contracts.md 6.4): `tag` ({by, target}) or `round` ({state, scores}).
+ * `t` is Unix seconds on the server's clock; tag events also carry the target's `pos` (room-frame metres) and
+ * `targetName`. Unknown types pass through with their simple fields.
+ */
+export interface RobloxEvent {
+  type: string;
+  t: number;
+  [k: string]: unknown;
+}
+
+/** A sticky note left in a world (contracts 7.2). Position in room-frame metres; createdAt is ISO UTC. */
+export interface SceneNote {
+  id: string;
+  sceneId: string;
+  author: string;
+  text: string;
+  x: number;
+  y: number;
+  z: number;
+  createdAt: string;
+}
+
+/** A host cue (contracts 11): flip the reality check, show or hide labels, or load another world (follow mode). */
+export interface HostCue {
+  action: 'reality' | 'labels' | 'load';
+  on?: boolean;
+  /** The world the cue is for (`load`: the world to open). Missing: whatever world is open. */
+  sceneId?: string;
+  /** Who sent it ('host', 'bot', ...). */
+  by?: string;
+  /** Unix seconds on the server's clock. */
+  at: number;
+}
+
+/** A 3D label pinned in a world: room-frame metres (floor at y = 0), plus where it came from in the input image. */
+export interface StoredHotspot {
+  label: string;
+  blurb: string;
+  x: number;
+  y: number;
+  z: number;
+  /** Normalized position in the image the guide labelled (0..1, x right, y down), when known. */
+  u?: number;
+  v?: number;
+  source?: string;
+}
+
+/**
+ * Messages pushed over /ws (contracts 10). Every client ignores types it does not know. On the wire a `scene` is
+ * a PublicScene (mode photo / video / sample): server/index.ts maps it when it publishes.
+ */
+export type ServerEvent =
+  | { type: 'scene'; scene: Scene }
+  | { type: 'scene_deleted'; id: string }
+  | { type: 'health'; health: HealthInfo }
+  | { type: 'roblox'; sceneId: string; event: RobloxEvent }
+  | { type: 'note'; sceneId: string; note: SceneNote }
+  | ({ type: 'cue' } & HostCue)
+  | { type: 'hotspots'; sceneId: string; hotspots: StoredHotspot[] };
 
 /** Fragment a pipeline job writes to out/scene.json; the server merges it into the Scene. */
 export interface JobResult {

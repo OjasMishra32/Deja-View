@@ -1,17 +1,19 @@
 // HTTP API handlers (everything except the HTML pages and the WebSocket upgrade, which live in index.ts).
 //
-// Reads (GET /api/scenes, GET /api/scenes/:id, GET /api/health, GET /data/...) answer any origin, so the viewer can
-// load assets from anywhere. Changes (POST /api/scenes, POST /api/scenes/:id/retry, DELETE /api/scenes/:id) carry no
-// CORS headers and pass server/guard.ts first: the app's own pages, or a request with the API token.
+// Reads (GET /api/scenes, GET /api/scenes/:id, GET /api/scenes/:id/hotspots, GET /api/health, GET /data/...) answer
+// any origin, so the viewer can load assets from anywhere. Changes (POST /api/scenes, POST /api/scenes/:id/retry,
+// PUT /api/scenes/:id/hotspots, DELETE /api/scenes/:id) carry no CORS headers and pass server/guard.ts first: the
+// app's own pages, or a request with the API token.
 //
 // Every `error` in a response body is a short product sentence; technical detail goes to the server log.
 
 import { rm } from 'node:fs/promises';
 import type { Backend, Scene, SceneMode, ServerEvent } from '../shared/types.ts';
-import { normalizeMode, type UploadMode } from './copy.ts';
+import { normalizeMode, publicScene, type UploadMode } from './copy.ts';
 import { CORS_HEADERS, notFound, safeJoin, serveFile } from './files.ts';
 import { MUTATING_METHODS, mutationBlocked, NOT_ALLOWED_MESSAGE, type GuardOptions } from './guard.ts';
-import type { HealthMonitor } from './health.ts';
+import { publicHealth, type HealthMonitor } from './health.ts';
+import { cleanStoredHotspots, MAX_HOTSPOTS_BODY, readHotspots, writeHotspots } from './hotspots.ts';
 import { DEFAULT_ORDER, type JobRunner } from './jobs.ts';
 import type { SceneStore } from './store.ts';
 import { isValidId } from './store.ts';
@@ -46,7 +48,24 @@ export const MESSAGES = {
   badPath: "That file path isn't valid.",
   serverError: 'Something went wrong on the server. Try again.',
   readOnly: 'This copy of the app can only show scenes. Make changes from the main Déjà View server.',
+  badHotspots: 'Send the labels as JSON with a hotspots list (label, blurb, x, y, z).',
+  hotspotsTooLarge: 'That list of labels is too big.',
 } as const;
+
+/** Thrown by a capped request body (server/index.ts) once a body sent without a length passes the limit. */
+export class BodyTooLarge extends Error {
+  constructor() {
+    super('request body too large');
+  }
+}
+
+/** Whether reading a body failed because it was cut off at the size limit. */
+function tooLargeError(e: unknown): boolean {
+  for (let x: unknown = e, i = 0; x && i < 4; x = (x as { cause?: unknown }).cause, i++) {
+    if (x instanceof BodyTooLarge || (x as Error)?.message === 'request body too large') return true;
+  }
+  return false;
+}
 
 /** Read-only responses: any origin may read them. */
 function json(data: unknown, status = 200, headers: Record<string, string> = {}): Response {
@@ -132,6 +151,7 @@ export function createApp(deps: AppDeps) {
         return privateError(415, MESSAGES.notAForm);
       }
     } catch (e) {
+      if (tooLargeError(e)) return privateError(413, MESSAGES.tooLarge(limitGb));
       console.warn(`[upload] could not read the request body: ${(e as Error).message}`);
       return privateError(400, MESSAGES.unreadableUpload);
     }
@@ -139,9 +159,9 @@ export function createApp(deps: AppDeps) {
     if (total > deps.maxUploadBytes) return privateError(413, MESSAGES.tooLarge(limitGb));
     try {
       const scene = await createSceneFromUpload(store, upload);
-      deps.publish({ type: 'scene', scene });
+      deps.publish({ type: 'scene', scene }); // mapped to the public shape where it is sent (server/index.ts)
       runner.enqueue(scene.id, { only: only ?? backendParam(new URL(req.url).searchParams.get('backend')) });
-      return privateJson(scene, 201);
+      return privateJson(publicScene(scene), 201);
     } catch (e) {
       if (e instanceof UploadError) return privateError(e.status, e.message);
       console.error('[upload]', e);
@@ -183,14 +203,48 @@ export function createApp(deps: AppDeps) {
     }
     const only = backendParam(url.searchParams.get('backend') ?? body.backend);
     const s = await runner.retry(id, only, mode);
-    return s ? privateJson(s) : privateError(404, MESSAGES.noSuchScene);
+    return s ? privateJson(publicScene(s)) : privateError(404, MESSAGES.noSuchScene);
+  }
+
+  /** GET: the scene's stored 3D labels, `{hotspots: []}` when none were stored yet. */
+  async function getHotspots(id: string): Promise<Response> {
+    if (!isValidId(id) || !(await store.get(id))) return error(404, MESSAGES.noSuchScene);
+    return json({ hotspots: await readHotspots(store.sceneDir(id)) });
+  }
+
+  /** PUT: replaces the scene's labels (the viewer stores what it placed) and tells every viewer on /ws. */
+  async function putHotspots(id: string, req: Request): Promise<Response> {
+    if (!isValidId(id) || !(await store.get(id))) return privateError(404, MESSAGES.noSuchScene);
+    if (Number(req.headers.get('content-length') || 0) > MAX_HOTSPOTS_BODY) return privateError(413, MESSAGES.hotspotsTooLarge);
+    let raw: string;
+    try {
+      raw = await req.text();
+    } catch {
+      return privateError(400, MESSAGES.unreadableUpload);
+    }
+    if (raw.length > MAX_HOTSPOTS_BODY) return privateError(413, MESSAGES.hotspotsTooLarge);
+    let body: unknown;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      return privateError(400, MESSAGES.badHotspots);
+    }
+    const hotspots = cleanStoredHotspots(body);
+    if (!hotspots) return privateError(400, MESSAGES.badHotspots);
+    // A list whose every entry is broken is a client bug, not "clear the labels": keep what is stored.
+    // (An explicit empty list still clears them.)
+    const sent = Array.isArray(body) ? body : (body as { hotspots: unknown[] }).hotspots;
+    if (sent.length > 0 && hotspots.length === 0) return privateError(400, MESSAGES.badHotspots);
+    await writeHotspots(store.sceneDir(id), hotspots);
+    deps.publish({ type: 'hotspots', sceneId: id, hotspots });
+    return privateJson({ ok: true, hotspots });
   }
 
   /** Answers a CORS preflight: read methods get CORS headers, changes get none (so browsers refuse them). */
   function preflight(req: Request): Response {
     const wanted = (req.headers.get('access-control-request-method') ?? '').toUpperCase();
     if (wanted && MUTATING_METHODS.has(wanted)) {
-      return new Response(null, { status: 204, headers: { Allow: 'GET, HEAD, POST, DELETE, OPTIONS', Vary: 'Origin' } });
+      return new Response(null, { status: 204, headers: { Allow: 'GET, HEAD, POST, PUT, DELETE, OPTIONS', Vary: 'Origin' } });
     }
     return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
@@ -215,11 +269,11 @@ export function createApp(deps: AppDeps) {
 
     if (path === '/api/health') {
       if (method !== 'GET' && method !== 'HEAD') return error(405, MESSAGES.methodNotAllowed);
-      return json(await deps.health.info(url.searchParams.get('refresh') === '1'));
+      return json(publicHealth(await deps.health.info(url.searchParams.get('refresh') === '1')));
     }
 
     if (path === '/api/scenes' || path === '/api/scenes/') {
-      if (method === 'GET' || method === 'HEAD') return json(await store.list());
+      if (method === 'GET' || method === 'HEAD') return json((await store.list()).map(publicScene));
       if (method === 'POST') return createScene(req);
       return privateError(405, MESSAGES.methodNotAllowed);
     }
@@ -229,10 +283,18 @@ export function createApp(deps: AppDeps) {
       const id = decodeURIComponent(m[1]!);
       if (method === 'GET' || method === 'HEAD') {
         const s = isValidId(id) ? await store.get(id) : null;
-        return s ? json(s) : error(404, MESSAGES.noSuchScene);
+        return s ? json(publicScene(s)) : error(404, MESSAGES.noSuchScene);
       }
       if (!isValidId(id)) return privateError(404, MESSAGES.noSuchScene);
       if (method === 'DELETE') return deleteScene(id, url);
+      return privateError(405, MESSAGES.methodNotAllowed);
+    }
+
+    m = /^\/api\/scenes\/([^/]+)\/hotspots\/?$/.exec(path);
+    if (m) {
+      const id = decodeURIComponent(m[1]!);
+      if (method === 'GET' || method === 'HEAD') return getHotspots(id);
+      if (method === 'PUT') return putHotspots(id, req);
       return privateError(405, MESSAGES.methodNotAllowed);
     }
 

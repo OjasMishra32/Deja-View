@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Roblox model preview</title>
+  <style>html, body { margin: 0; background: #0c0c0e; } #gl { display: none; } #out { display: block; }</style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/node_modules/three/build/three.module.js",
+        "three/addons/": "/node_modules/three/examples/jsm/",
+        "@sparkjsdev/spark": "/node_modules/@sparkjsdev/spark/dist/spark.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+<canvas id="out"></canvas>
+<script type="module">
+  // The splat world (Spark) next to its Roblox model (roblox.glb, studs, scaled back to metres) from the same cameras:
+  //   ?scene=<id>&model=<repo-relative dir holding roblox.glb + roblox-model.json, default data/scenes/<id>>
+  // Columns: splat, mesh unlit (the baked texture as is), mesh lit (a rough stand-in for Roblox's default lighting).
+  // Rows: the headset spawn, the Roblox spawn facing it, behind the headset spawn, an overview from a corner, and
+  // straight down from above (the mesh without its ceiling chunks there, so the layout shows).
+  // window.__ready / __error / __info are read by tests/harness/roblox-model-preview.ts.
+  import * as THREE from 'three';
+  import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+  import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
+
+  const p = new URLSearchParams(location.search);
+  const sceneId = p.get('scene');
+  const modelDir = p.get('model') || `data/scenes/${sceneId}`;
+  const W = Number(p.get('w') || 560), H = Number(p.get('h') || 350), PAD = 6, TOP = 22;
+  const FOV = Number(p.get('fov') || 75);
+  const BG = 0x0c0c0e;
+
+  try {
+    const scene = await (await fetch(`/data/scenes/${sceneId}/scene.json`)).json();
+    const meta = await (await fetch(`/${modelDir}/roblox-model.json`)).json();
+    const spm = meta.studsPerMeter;
+    const floorY = Number(meta.floorY ?? scene.world.floorY ?? 0);
+
+    const gl = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    gl.setPixelRatio(1);
+    gl.setSize(W, H);
+    gl.outputColorSpace = THREE.SRGBColorSpace;
+    gl.domElement.id = 'gl';
+    document.body.appendChild(gl.domElement);
+    const camera = new THREE.PerspectiveCamera(FOV, W / H, 0.03, 500);
+    camera.rotation.order = 'YXZ';
+
+    // splat: the scene transform, then the floor to y = 0 (the room frame)
+    const splatScene = new THREE.Scene();
+    splatScene.background = new THREE.Color(BG);
+    const spark = new SparkRenderer({ renderer: gl });
+    splatScene.add(spark);
+    const t = scene.world.transform;
+    const splat = new SplatMesh({ url: `/data/scenes/${sceneId}/${scene.world.file}` });
+    splat.position.set(t.position[0], t.position[1] - floorY, t.position[2]);
+    splat.quaternion.set(...t.quaternion).normalize();
+    splat.scale.setScalar(t.scale || 1);
+    splatScene.add(splat);
+
+    const gltf = await new GLTFLoader().loadAsync(`/${modelDir}/roblox.glb`);
+    const lit = gltf.scene;
+    lit.scale.setScalar(1 / spm);
+    const unlit = lit.clone(true);
+    unlit.traverse((o) => {
+      if (o.isMesh) o.material = new THREE.MeshBasicMaterial({ map: o.material.map, vertexColors: !o.material.map });
+    });
+    const unlitScene = new THREE.Scene();
+    unlitScene.background = new THREE.Color(BG);
+    unlitScene.add(unlit);
+    const litScene = new THREE.Scene();
+    litScene.background = new THREE.Color(BG);
+    litScene.add(lit);
+    litScene.add(new THREE.HemisphereLight(0xdfe6ff, 0x5a5048, 1.6));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+    sun.position.set(0.4, 1, 0.3);
+    litScene.add(sun);
+    await splat.initialized;
+
+    // cameras (room frame metres): eye height 1.6
+    const S = (v) => v.map((c) => c / spm);
+    const hs = S(meta.headsetSpawn ?? [0, 0, 0]);
+    const rs = S(meta.spawn ?? [0, 0, 5]);
+    const bmin = S(meta.bounds.min), bmax = S(meta.bounds.max);
+    const yaw0 = Number(scene.world.spawn?.yaw ?? 0);
+    const ceil = meta.hasCeiling && meta.ceilingY ? meta.ceilingY / spm : null;
+    const overH = ceil ? Math.max(1.8, ceil - 0.35) : 4.5;
+    const cx = (bmin[0] + bmax[0]) / 2, cz = (bmin[2] + bmax[2]) / 2;
+    // overview: from the corner of the walkable area nearest the headset spawn's back-left, looking at it
+    const ox = hs[0] + Math.max(-6, Math.min(6, (bmax[0] - hs[0]) * 0.7));
+    const oz = hs[2] + Math.max(-6, Math.min(6, (bmax[2] - hs[2]) * 0.7));
+    const lookYaw = (from, to) => Math.atan2(-(to[0] - from[0]), -(to[2] - from[2]));
+    const views = [
+      { name: 'headset spawn', eye: [hs[0], 1.6, hs[2]], yaw: yaw0, pitch: -0.08 },
+      { name: 'roblox spawn', eye: [rs[0], 1.6, rs[2]], yaw: lookYaw(rs, hs), pitch: -0.08 },
+      { name: 'behind the headset', eye: [hs[0], 1.6, hs[2]], yaw: yaw0 + Math.PI, pitch: -0.08 },
+      { name: 'overview', eye: [ox, overH, oz], yaw: lookYaw([ox, 0, oz], [hs[0], 0, hs[2] - 2]), pitch: -0.45 },
+    ];
+    const ext = Math.max(bmax[0] - hs[0], hs[0] - bmin[0], bmax[2] - hs[2], hs[2] - bmin[2]);
+    const topH = Math.min(40, Math.max(5, (0.8 * ext) / Math.tan((FOV / 2) * Math.PI / 180)));
+    views.push({ name: 'top down', eye: [hs[0], topH, hs[2]], yaw: 0, pitch: -Math.PI / 2 + 1e-4, noCeiling: true });
+    const ceilingNodes = [];
+    for (const root of [lit, unlit]) root.traverse((o) => o.name.startsWith('ceiling_') && ceilingNodes.push(o));
+
+    const out = document.getElementById('out');
+    out.width = 3 * W + 4 * PAD;
+    out.height = views.length * (H + TOP + PAD) + PAD;
+    const ctx = out.getContext('2d');
+    ctx.fillStyle = '#0c0c0e';
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.font = 'bold 13px sans-serif';
+
+    const frame = () => new Promise((r) => requestAnimationFrame(r));
+    const label = (text, x, y, color = '#c6ff3d') => {
+      ctx.fillStyle = color;
+      ctx.fillText(text, x, y);
+    };
+    // How well the unlit mesh stands in for the splat from this camera: the share of the splat's covered pixels the
+    // mesh also covers, and the mean colour difference (0-255, RGB) where both cover the pixel.
+    const compare = (x0, x1, y0) => {
+      const a = ctx.getImageData(x0, y0, W, H).data, b = ctx.getImageData(x1, y0, W, H).data;
+      const lit = (d, i) => Math.abs(d[i] - 12) + Math.abs(d[i + 1] - 12) + Math.abs(d[i + 2] - 14) > 18;
+      let sa = 0, both = 0, diff = 0;
+      for (let i = 0; i < a.length; i += 4) {
+        if (!lit(a, i)) continue;
+        sa++;
+        if (!lit(b, i)) continue;
+        both++;
+        diff += (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2])) / 3;
+      }
+      return { meshCoversSplat: +(both / Math.max(1, sa)).toFixed(3), meanColourDiff: +(diff / Math.max(1, both)).toFixed(1) };
+    };
+    const info = [];
+    for (let k = 0; k < views.length; k++) {
+      const v = views[k];
+      camera.position.set(...v.eye);
+      camera.rotation.set(v.pitch, v.yaw, 0);
+      camera.updateMatrixWorld();
+      const y = PAD + k * (H + TOP + PAD);
+      // Spark sorts asynchronously for the current camera: render until it settles
+      for (let i = 0; i < 45; i++) {
+        gl.render(splatScene, camera);
+        await frame();
+      }
+      ctx.drawImage(gl.domElement, PAD, y + TOP);
+      for (const o of ceilingNodes) o.visible = !v.noCeiling;
+      gl.render(unlitScene, camera);
+      ctx.drawImage(gl.domElement, 2 * PAD + W, y + TOP);
+      gl.render(litScene, camera);
+      ctx.drawImage(gl.domElement, 3 * PAD + 2 * W, y + TOP);
+      const e = v.eye.map((c) => c.toFixed(2)).join(', ');
+      label(`${v.name}  (${e}) m, yaw ${(v.yaw * 180 / Math.PI).toFixed(0)}`, PAD, y + 15);
+      label('splat (Spark)', PAD + W - 100, y + 15, '#9aa0aa');
+      label('Roblox mesh, unlit', 2 * PAD + W, y + 15, '#9aa0aa');
+      label('Roblox mesh, lit', 3 * PAD + 2 * W, y + 15, '#9aa0aa');
+      info.push({ name: v.name, eye: v.eye, yaw: v.yaw, pitch: v.pitch, ...compare(PAD, 2 * PAD + W, y + TOP) });
+    }
+    label(`${meta.name}: ${meta.triangles} triangles in ${meta.chunks.length} chunks, ${meta.textureSize}px textures`,
+      out.width - 520, out.height - 4, '#9aa0aa');
+    window.__info = { views: info, triangles: meta.triangles, chunks: meta.chunks.length, rows: views.length, rowHeight: H + TOP + PAD };
+  } catch (e) {
+    window.__error = String((e && e.stack) || e);
+  }
+  window.__ready = true;
+</script>
+</body>
+</html>

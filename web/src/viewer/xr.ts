@@ -110,6 +110,11 @@ export class XrSystem {
   /** Debug/test readout. */
   readonly debug = { aiming: false, valid: false, reason: '', snapTurns: 0, teleports: 0, moved: 0, heightOffset: 0 };
 
+  /** The right pointer is on a wrist-panel button (its trigger press belongs to the panel). */
+  get panelHovered(): boolean {
+    return this.hoverId !== null;
+  }
+
   constructor(private host: XrHost, private opts: XrOptions) {
     const { renderer } = host;
     renderer.xr.enabled = true;

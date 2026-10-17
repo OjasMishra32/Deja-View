@@ -7,9 +7,14 @@
   "scripts": {
     "dev": "bun --hot server/index.ts",
     "start": "NODE_ENV=production bun server/index.ts",
-    "https": "THIRDWHEEL_HTTPS=1 bun --hot server/index.ts",
+    "https": "NODE_ENV=production THIRDWHEEL_HTTPS=1 bun server/index.ts",
+    "https:dev": "THIRDWHEEL_HTTPS=1 THIRDWHEEL_HMR=1 bun --hot server/index.ts",
     "cert": "bun scripts/make-cert.ts",
     "samples": "bun scripts/fetch-samples.ts",
+    "tunnel": "bun scripts/tunnel.ts",
+    "mock:deepspace": "bun tests/harness/mock-deepspace.ts",
+    "mock:guide": "bun tests/harness/mock-guide.ts",
+    "demo:mocks": "bun scripts/demo-mocks.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test tests"
   },

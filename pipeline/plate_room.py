@@ -394,13 +394,33 @@ def estimate_floor(points: np.ndarray, normals: np.ndarray, weights: np.ndarray)
     return fy, "assumed (floor not visible)"
 
 
+_REMAP_COLS = 4096  # cv2.remap needs both map sides under SHRT_MAX (32767): samples go in as a grid this wide
+_REMAP_ROWS = 8192
+
+
 def _sample_bilinear(img: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
+    """Bilinear samples of `img` at pixel coordinates (u, v), edges replicated. Any number of points: they are laid
+    out as a grid at most _REMAP_COLS wide (a 1 x N map fails for N >= 32767 in OpenCV), in chunks if needed."""
     import cv2
 
-    mx = u.astype(np.float32).reshape(1, -1)
-    my = v.astype(np.float32).reshape(1, -1)
-    out = cv2.remap(img.astype(np.float32), mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
-    return out.reshape(-1, img.shape[2]) if img.ndim == 3 else out.reshape(-1)
+    src = img.astype(np.float32)
+    ch = img.shape[2] if img.ndim == 3 else 1
+    u = np.asarray(u, np.float32).reshape(-1)
+    v = np.asarray(v, np.float32).reshape(-1)
+    n = int(u.size)
+    out = np.empty((n, ch), np.float32)
+    step = _REMAP_COLS * _REMAP_ROWS
+    for s in range(0, n, step):
+        e = min(n, s + step)
+        m = e - s
+        cols = min(_REMAP_COLS, m)
+        rows = -(-m // cols)
+        pad = rows * cols - m
+        mx = np.pad(u[s:e], (0, pad)).reshape(rows, cols)
+        my = np.pad(v[s:e], (0, pad)).reshape(rows, cols)
+        r = cv2.remap(src, mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+        out[s:e] = r.reshape(-1, ch)[:m]
+    return out if img.ndim == 3 else out.reshape(-1)
 
 
 def _facing_quats(normals: np.ndarray) -> np.ndarray:

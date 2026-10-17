@@ -165,6 +165,33 @@ export interface JobRunnerOptions {
   order?: Backend[];
   /** Minimum time between progress writes per scene. */
   reportIntervalMs?: number;
+  /**
+   * Runs once before a fresh job directory is built (not when re-attaching after a restart): the server describes
+   * the input photo here (contracts 8, /describe) and stores the caption. Returns the updated scene, or nothing to
+   * keep it. A throw is logged and the job runs anyway.
+   */
+  prepare?: (scene: Scene, ctx: PrepareContext) => Promise<Scene | null | void>;
+}
+
+export interface PrepareContext {
+  /** Shows a stage on the scene while it is still queued. */
+  report: (stage: string) => void;
+  log: (msg: string) => void;
+  signal: AbortSignal;
+}
+
+/**
+ * The world model's text prompt: the upload's own prompt first, then the guide's description of the photo (or, for
+ * a Video upload, of the clip's empty first second: the room the plate is built into; contracts 8). Without either,
+ * the pipeline's built-in captioner describes the photo itself.
+ */
+export function jobPrompt(scene: Scene): string | undefined {
+  const own = scene.input?.prompt?.trim() || '';
+  const described =
+    (scene.mode === 'rentfree' || scene.mode === 'thirdwheel') && scene.captionSource === 'guide' ? scene.caption?.trim() || '' : '';
+  if (!own) return described || undefined;
+  if (!described) return own;
+  return `${own}${/[.!?]$/.test(own) ? '' : '.'} ${described}`;
 }
 
 export interface EnqueueOptions {
@@ -237,6 +264,13 @@ const MODE_REQUIREMENT: Record<SceneMode, (r: JobResult) => string | null> = {
 /** Files from out/ that are never copied into the scene directory. */
 const OUT_SKIP = new Set(['scene.json', 'log.txt', 'progress.json', 'DONE', 'FAILED']);
 
+/**
+ * Files that describe one particular world. A rebuild that brings a new world without them removes the old ones, so
+ * the reality check, the input camera and the stored labels never belong to the previous world. (Roblox maps key
+ * their cache on the world file and rebuild by themselves.)
+ */
+export const WORLD_DERIVED = ['reality.json', 'world-seen.spz', 'world-imagined.spz', 'input_camera.json', 'input_depth.npy', 'hotspots.json'];
+
 export class JobRunner {
   private active = new Map<string, { abort: AbortController; done: Promise<void> }>();
   private lanes = new Map<string, Lane>();
@@ -292,7 +326,7 @@ export class JobRunner {
       stage: 'Queued',
       progress: 0,
       error: undefined,
-      ...(switching ? { mode, world: undefined, video: undefined, caption: undefined } : {}),
+      ...(switching ? { mode, world: undefined, video: undefined, caption: undefined, captionSource: undefined } : {}),
     });
     if (!s) return null;
     this.opts.emit(s);
@@ -383,10 +417,11 @@ export class JobRunner {
     }
     const attempt = (prev?.attempt ?? 0) + 1;
     const state: JobState = { sceneId: scene.id, jobId: `${scene.id}-a${attempt}`, attempt, ...(only ? { only } : {}) };
+    const prompt = jobPrompt(scene);
     const job: JobSpec = {
       id: state.jobId,
       mode: scene.mode,
-      ...(scene.input?.prompt ? { prompt: scene.input.prompt } : {}),
+      ...(prompt ? { prompt } : {}),
       params: { sceneId: scene.id, name: scene.name, inputs: files, attempt },
     };
     await writeJsonAtomic(join(jobDir, 'job.json'), job);
@@ -486,8 +521,25 @@ export class JobRunner {
       }
 
       if (!job || !state || startIndex === 0) {
+        let scene = scene0;
+        if (this.opts.prepare) {
+          try {
+            const next = await this.opts.prepare(scene0, {
+              report: (stage) => {
+                reporter.set({ stage });
+                void reporter.flush();
+              },
+              log,
+              signal,
+            });
+            if (next) scene = next;
+          } catch (e) {
+            log(`preparing the job: ${errMessage(e)}`);
+          }
+          if (signal.aborted) return;
+        }
         try {
-          ({ job, state } = await this.prepareJobDir(scene0, prevState, opts.only));
+          ({ job, state } = await this.prepareJobDir(scene, prevState, opts.only));
         } catch (e) {
           await fail("This scene's uploaded files are missing. Upload them again.", `Could not prepare the job: ${errMessage(e)}`);
           return;
@@ -606,6 +658,11 @@ export class JobRunner {
       await copyFile(src, part, fsc.COPYFILE_FICLONE);
       await rename(part, dst);
     }
+    if (result.world) {
+      const stale = WORLD_DERIVED.filter((f) => !toCopy.has(f));
+      const gone = (await Promise.all(stale.map((f) => unlink(join(ctx.sceneDir, f)).then(() => f, () => null)))).filter(Boolean);
+      if (gone.length) ctx.log(`removed what belonged to the previous world: ${gone.join(', ')}`);
+    }
     ctx.log(`outputs: ${[...toCopy].join(', ')}`);
     return (s: Scene): Scene => {
       const next: Scene = { ...s, status: 'ready', stage: 'Ready', progress: 1 };
@@ -615,7 +672,8 @@ export class JobRunner {
       if (result.video) next.video = result.video;
       else delete next.video;
       if (result.thumb) next.thumb = result.thumb;
-      if (result.caption) next.caption = result.caption;
+      // the guide's description of the photo (stored at upload) says more than the job's generic line
+      if (result.caption && !(s.captionSource === 'guide' && s.caption)) next.caption = result.caption;
       return next;
     };
   }

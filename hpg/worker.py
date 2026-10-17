@@ -494,6 +494,7 @@ class Worker:
             if not images and videos:  # a frame of a clip, not a photo: say so in the gallery caption
                 result["caption"] = "Generated from the sharpest frame of your clip: the rest of the room was imagined."
                 write_json_atomic(job.out_dir / "scene.json", result)
+            self.reality_parts(job)
             diag = read_json(job.out_dir / "flashworld.json", {}) or {}
             job.log(f"world: {result['world']['splatCount']} splats, floor {'found' if result['world']['floorY'] is not None else 'not found'}, "
                     f"generation {diag.get('generateSeconds')}s, total {diag.get('totalSeconds')}s")
@@ -506,6 +507,22 @@ class Worker:
                 job.finish_failed(user, detail)
             except TypeError:  # an older Job without a detail argument
                 job.finish_failed(f"{user}\n{detail}")
+
+    @staticmethod
+    def reality_parts(job) -> bool:
+        """Reality check parts next to the world (out/world-seen.spz, out/world-imagined.spz, out/reality.json), the
+        same step pipeline/run_job.py runs. Reads out/scene.json, so it runs after the result is written. Never fails
+        the job: without the parts the viewer only says there is no reality map."""
+        try:
+            import reality_split  # noqa: WPS433 (pipeline/ is on sys.path)
+
+            reality_split.split_scene(job.out_dir, log=job.log)
+            return True
+        except Exception as e:
+            job.log(f"reality split skipped: {type(e).__name__}: {e}")
+            for name in ("world-seen.spz", "world-imagined.spz", "reality.json"):
+                (job.out_dir / name).unlink(missing_ok=True)
+            return False
 
     def python_for(self, mode: str) -> str:
         env = {"thirdwheel": "TW_PY_VIDEO", "reconstruct": "TW_PY_ANYSPLAT", "rentfree": "TW_PY_FLASHWORLD"}.get(mode)

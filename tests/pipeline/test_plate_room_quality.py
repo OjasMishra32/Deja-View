@@ -143,3 +143,28 @@ def test_plate_room_continues_cut_off_surfaces_down_to_the_floor(tmp_path):
         assert len(ys) > 50, dist
         assert ys[0] < floor_y + 0.05 and ys[-1] > top - 0.08, (dist, ys[0], ys[-1])
         assert np.diff(ys).max() < 0.05  # one continuous face down to the floor, nothing floats
+
+
+def test_bilinear_sampling_takes_any_number_of_points():
+    """cv2.remap refuses a map with a side of 32767 or more (OpenCV 5 asserts it): a 1 x N map broke every phone
+    photo in the local fallback. The samples now go in as a grid, and match small remaps exactly."""
+    from plate_room import _sample_bilinear
+
+    rng = np.random.default_rng(3)
+    img = rng.random((90, 160, 3)).astype(np.float32)
+    n = 100_000
+    u = (rng.random(n) * 170 - 5).astype(np.float32)
+    v = (rng.random(n) * 100 - 5).astype(np.float32)
+    out = _sample_bilinear(img, u, v)
+    assert out.shape == (n, 3)
+    ref = np.concatenate([
+        cv2.remap(img, u[i:i + 4000].reshape(1, -1), v[i:i + 4000].reshape(1, -1), cv2.INTER_LINEAR,
+                  borderMode=cv2.BORDER_REPLICATE).reshape(-1, 3)
+        for i in range(0, n, 4000)
+    ])
+    assert np.abs(out - ref).max() < 1e-6
+    one = _sample_bilinear(img[..., :1], u, v)
+    assert one.shape == (n, 1)
+    flat = _sample_bilinear(img[..., 0], u, v)
+    assert flat.shape == (n,)
+    assert _sample_bilinear(img, u[:0], v[:0]).shape == (0, 3)

@@ -153,6 +153,9 @@ button { font: inherit; color: inherit; }
 }
 .tw-icon-btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
 .tw-icon-btn.is-active { color: var(--accent); }
+/* the live layer speaks in the shared lime (social and guide UI) */
+#tw-btn-reality.is-active { color: #C6FF3D; background: rgba(198, 255, 61, 0.12); }
+#tw-btn-reality.is-busy { opacity: 0.6; cursor: progress; }
 .tw-icon-btn--small { width: 30px; height: 30px; }
 .tw-icon-btn .i-off { display: none; }
 .tw-icon-btn.is-muted .i-on { display: none; }
@@ -252,7 +255,8 @@ button { font: inherit; color: inherit; }
   backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
   animation: tw-pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
-  max-height: calc(100vh - 110px); overflow: auto;
+  /* ends above the guide's mic button (bottom right) */
+  max-height: calc(100vh - 78px - var(--safe-t) - 124px); overflow: auto;
 }
 @keyframes tw-pop { from { opacity: 0; transform: translateY(-6px) scale(0.98); } }
 .tw-help__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
@@ -332,6 +336,7 @@ body:not(.is-touch) .tw-keys[data-for='touch'] { display: none; }
   .tw-brand { display: none; }
   .tw-icon-btn { width: 34px; height: 34px; }
   #tw-btn-full { display: none; }
+  #tw-btn-note { display: none; }
   .tw-vr { height: 44px; padding: 0 12px; }
   .tw-vr span { display: none; }
   .tw-help { top: auto; bottom: calc(76px + var(--safe-b)); right: 10px; left: 10px; width: auto; }

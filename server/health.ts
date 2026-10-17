@@ -60,6 +60,15 @@ export interface HealthOptions {
   local: () => Promise<boolean>;
 }
 
+/**
+ * HealthInfo as /api/health and /ws send it: the cluster account name stays on this machine (the response is public
+ * once the tunnel is up, and nothing outside the server needs it).
+ */
+export function publicHealth(h: HealthInfo): HealthInfo {
+  const { user: _user, ...hpg } = h.hpg;
+  return { ...h, hpg };
+}
+
 export class HealthMonitor {
   readonly hpgOnline: Cached<{ online: boolean; reason?: string }>;
   readonly worker: Cached<WorkerStatus>;

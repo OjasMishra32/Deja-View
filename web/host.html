@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Déjà View · Host</title>
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#f2f2f7" />
+    <meta name="color-scheme" content="light" />
+    <link rel="icon" href="./public/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./src/host.css" />
+  </head>
+  <body>
+    <header class="h-top">
+      <div class="h-wrap">
+        <a class="h-brand" href="/" aria-label="Déjà View home">
+          <svg class="h-mark" viewBox="0 0 32 32" aria-hidden="true">
+            <defs>
+              <linearGradient id="dv-mark" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#5ac8fa" />
+                <stop offset="1" stop-color="#007aff" />
+              </linearGradient>
+            </defs>
+            <rect width="32" height="32" rx="7.2" fill="url(#dv-mark)" />
+            <path d="M16 7.6c-5.2 0-9.4 3.4-9.4 7.7 0 2.5 1.4 4.7 3.7 6.1-.2 1.3-.9 2.5-1.9 3.4 2-.1 3.8-.8 5.1-1.9.8.1 1.6.2 2.5.2 5.2 0 9.4-3.4 9.4-7.8S21.2 7.6 16 7.6z" fill="#fff" />
+            <path d="M13.7 19.4v-4.2a2.3 2.3 0 0 1 4.6 0v4.2z" fill="#007aff" />
+          </svg>
+          <span>Déjà View</span>
+        </a>
+        <span class="h-chip">Host</span>
+        <span class="h-spacer"></span>
+        <span class="h-live" id="live" title="Live updates"><span class="h-dot" id="live-dot"></span><span id="live-txt">connecting</span></span>
+        <button class="h-icon" id="refresh" type="button" aria-label="Check everything again">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 11a8 8 0 1 0-2.3 5.7" /><path d="M20 4v7h-7" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="h-wrap h-main" id="main">
+      <div class="h-banner" id="banner" role="alert" hidden></div>
+
+      <form class="h-key" id="key-form" hidden>
+        <label for="key-input"><b>This page needs the event key.</b> It is the <span class="h-mono">DV_KEY</span> from the server's .env; it stays on this device.</label>
+        <div class="h-key-row">
+          <input id="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="Event key" />
+          <button class="h-btn h-btn-primary" type="submit">Save</button>
+        </div>
+      </form>
+
+      <section class="h-status" aria-labelledby="status-title">
+        <div class="h-head">
+          <h2 class="h-eyebrow" id="status-title">Before you start</h2>
+          <span class="h-summary" id="status-summary">checking</span>
+        </div>
+        <div class="h-tiles" id="tiles" aria-live="polite"></div>
+      </section>
+
+      <div class="h-cols">
+        <div class="h-col h-col-side">
+          <section aria-labelledby="cues-title">
+            <div class="h-head"><h2 class="h-eyebrow" id="cues-title">In the headset</h2></div>
+            <div class="h-toggles">
+              <button class="h-toggle" id="t-reality" type="button" role="switch" aria-checked="false" data-action="reality">
+                <span class="h-toggle-name">Reality check</span>
+                <span class="h-toggle-state">Off</span>
+                <span class="h-toggle-sub">Tints what was imagined</span>
+              </button>
+              <button class="h-toggle" id="t-labels" type="button" role="switch" aria-checked="true" data-action="labels">
+                <span class="h-toggle-name">Labels</span>
+                <span class="h-toggle-state">On</span>
+                <span class="h-toggle-sub">Names on things in the world</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="h-feed-section" aria-labelledby="feed-title">
+            <div class="h-head"><h2 class="h-eyebrow" id="feed-title">Live feed</h2><span class="h-summary" id="feed-count"></span></div>
+            <ol class="h-feed" id="feed" aria-live="polite"></ol>
+          </section>
+        </div>
+
+        <div class="h-col h-col-main">
+          <section class="h-live-section" id="live-section" aria-labelledby="build-title" hidden>
+            <div class="h-head"><h2 class="h-eyebrow h-eyebrow-live" id="build-title">Live build</h2><span class="h-summary" id="build-count"></span></div>
+            <div class="h-worlds" id="live-worlds" aria-live="polite"></div>
+          </section>
+
+          <section aria-labelledby="order-title">
+            <div class="h-head"><h2 class="h-eyebrow" id="order-title">Demo order</h2><span class="h-summary">pinned on this device</span></div>
+            <div class="h-slots" id="slots"></div>
+          </section>
+
+          <section aria-labelledby="worlds-title">
+            <div class="h-head"><h2 class="h-eyebrow" id="worlds-title">Worlds</h2><span class="h-summary" id="worlds-count"></span></div>
+            <div class="h-worlds" id="worlds" aria-live="polite">
+              <div class="h-skel"></div>
+              <div class="h-skel"></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <div class="h-toast" id="toast" role="status"></div>
+    <script type="module" src="./src/host.ts"></script>
+  </body>
+</html>

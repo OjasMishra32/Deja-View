@@ -343,3 +343,49 @@ def test_thirdwheel_tells_the_person_when_nobody_moves(tmp_path):
     res = json.loads((jd / "out" / "scene.json").read_text())
     assert "We didn't find anyone moving in this clip" in res["caption"], res["caption"]
     assert_product_copy(res["caption"])
+
+
+# ---------------------------------------------------------------------------------------------------- reality check
+
+
+def _world_job(tmp: Path, mode: str = "rentfree", world: bool = True):
+    import splat_io as sio
+    from common.jobio import Job
+
+    jd = _job(tmp, mode)
+    job = Job(jd)
+    out = job.out_dir
+    out.mkdir(parents=True, exist_ok=True)
+    xs, ys = np.meshgrid(np.linspace(-1.0, 1.0, 20), np.linspace(-0.8, 0.8, 16))
+    wall = np.stack([xs.ravel(), ys.ravel(), np.full(xs.size, -3.0)], axis=1)
+    pts = np.concatenate([wall, wall * np.array([1.0, 1.0, -1.0])]).astype(np.float32)
+    if world:
+        sio.write_spz(out / "world.spz", sio.Splats.from_rgb(pts, np.full((len(pts), 3), 0.5), 0.03, opacities=0.9))
+    cam = {"width": 320, "height": 240, "fx": 240.0, "fy": 240.0, "cx": 160.0, "cy": 120.0, "position": [0, 0, 0], "quaternion": [0, 0, 0, 1]}
+    (out / "input_camera.json").write_text(json.dumps(cam))
+    result = {"world": {"file": "world.spz", "transform": {"position": [0, 0, 0], "quaternion": [0, 0, 0, 1], "scale": 1}, "floorY": None}}
+    job.write_result(result)
+    return job, result
+
+
+def test_reality_parts_land_in_out_after_a_photo_job(tmp_path):
+    import run_job
+
+    job, result = _world_job(tmp_path)
+    assert run_job.reality_parts(job, result) is True
+    report = json.loads((job.out_dir / "reality.json").read_text())
+    assert report["seen"]["count"] == 320 and report["imagined"]["count"] == 320
+    for name in ("world-seen.spz", "world-imagined.spz"):
+        assert (job.out_dir / name).stat().st_size > 0
+
+
+def test_reality_parts_skip_reconstructions_and_never_raise(tmp_path):
+    import run_job
+
+    job, result = _world_job(tmp_path / "a", mode="reconstruct")
+    assert run_job.reality_parts(job, result) is False
+    assert not (job.out_dir / "reality.json").exists()
+    job, result = _world_job(tmp_path / "b", world=False)
+    assert run_job.reality_parts(job, result) is False
+    assert not any((job.out_dir / n).exists() for n in ("reality.json", "world-seen.spz", "world-imagined.spz"))
+    assert "reality split skipped" in (job.dir / "log.txt").read_text()
