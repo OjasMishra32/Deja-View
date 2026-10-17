@@ -9,7 +9,21 @@ Everything below was checked against the live Gemini docs and SDK on Fri Oct 16,
 checked, it says so and tells you how to check it. If something here turns out to be wrong on the night, tell Ojasva
 right away and use the fallback listed for it.
 
-> **Update 8 (Sat ~4 PM): the site is on its own domain now: `https://deja-view.photo`.** It's permanent. Use it for
+> **Update 9 (Sat ~9 PM): your guide is live on `https://deja-view.photo`, with a real Gemini key on the demo Mac.**
+> Labels, the greeting and spoken answers work in every world and memory (browser and Quest). What changed in
+> `integrations/guide/` (`git pull`):
+> - **Thinking set to low** on every JSON call, and a schema for `/hotspots`. At the default level the thinking used up
+>   the 600-token cap: labels came back as cut-off JSON after about 27 s. Now about 3 s, cached after the first view.
+> - **Busy or used-up models hand over:** an understanding call that gets 429 or 503 retries on the other model
+>   (fast and spatial). `MODEL_TTS` now lists several speech models; one that runs out of its daily quota rests for an
+>   hour and the next speaks. The free key's quota for `gemini-3.8-flash-lite-tts` ran out tonight, so the demo Mac
+>   lists `gemini-3.8-flash-tts`, `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-preview-tts` first.
+> - **The viewer reads the answer aloud with the device's own voice** when no audio comes back at all.
+> - `WORLD_HINTS` has `old-house-kitchen`. Tests: 33 pass.
+> Still yours: the `kitchen-cooking` clip notes with the freezer, fridge and milk moments (Update 7 item 3), and a
+> run through every world on the Quest asking "who won?" and "what is this?" to tune the prompts.
+
+ `https://deja-view.photo`.** It's permanent. Use it for
 > testing labels in every world. The guide (Update 7 item 1) is still the top job: once it runs on port 8795 on the
 > demo Mac, Ojasva restarts the server with `GUIDE_URL` and it's live on the domain at once.
 

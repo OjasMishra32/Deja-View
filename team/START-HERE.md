@@ -22,7 +22,7 @@ Who does what now, each in their own file's newest update:
 - Seb: Roblox on his account, censor pass and gate, cooking rush, the kitchen v2 room (seb.md Updates 11 to 13).
 - Shivin: his three product jobs are merged and fixed on `main`. Next: headset and phone QA, three small fixes
   (`SHIVIN-README.md`).
-- Brianna: turn the Gemini guide on first (brianna.md Updates 7 and 8).
+- Brianna: the guide is live on the domain; clip notes and prompt tuning next (brianna.md Update 9).
 - Ojasva: worlds, memories, the site and the server.
 
 **Update 5 (Sat ~5:30 AM):** on the link now: `the-courts` (shown as Infinity Hall Game Lawn) and `brick-apartment`.
