@@ -105,7 +105,12 @@ local drop = Sim.newState(Vector3.new(0, 2, -1), Vector3.new(0, 0, 0), 0)
 local first = fly(drop, 3)
 check("the first table event is on the correct half", first.tables[1] == "A", `first={first.tables[1]}`)
 
--- 5. two descents count as two bounces (the server turns the second into a point)
+-- 5. a single contact is reported once even when the ball skims the surface
+local skim = Sim.newState(Vector3.new(0, 0.9, -1), Vector3.new(0, -1, 2), 0)
+local sk = fly(skim, 0.5)
+check("one skimmed contact is one reported bounce", #sk.tables == 1, `bounces={#sk.tables}`)
+
+-- 5b. two real descents count as two bounces (the server turns the second into a point)
 local bounce = Sim.newState(Vector3.new(0, 2, -1), Vector3.new(0, -6, 0), 0)
 local two = fly(bounce, 3)
 check("a second descent is a second bounce", #two.tables >= 2, `bounces={#two.tables}`)
