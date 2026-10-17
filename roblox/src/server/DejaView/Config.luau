@@ -44,19 +44,27 @@ local Config = {
 local snapshot: any = nil
 local values: { [string]: any } = {}
 
+-- Cache per config version: GetValue warns on every call for a key that is not defined yet,
+-- and presence reads use_mock 4 times a second.
+local MISSING = newproxy()
+local cache: { [string]: any } = {}
+
 local function read(key: string): any
 	if values[key] ~= nil then
 		return values[key]
 	end
-	if snapshot then
-		local ok, v = pcall(function()
+	if not snapshot then
+		return nil
+	end
+	local v = cache[key]
+	if v == nil then
+		local ok, got = pcall(function()
 			return snapshot:GetValue(key)
 		end)
-		if ok then
-			return v
-		end
+		v = if ok and got ~= nil then got else MISSING
+		cache[key] = v
 	end
-	return nil
+	return if v == MISSING then nil else v
 end
 
 function Config.init()
@@ -75,6 +83,7 @@ function Config.init()
 	pcall(function()
 		snap.UpdateAvailable:Connect(function()
 			snap:Refresh()
+			cache = {}
 		end)
 	end)
 	print("[DejaView] config: base =", Config.base(), "mock =", Config.useMock(), "round =", Config.roundSeconds())
