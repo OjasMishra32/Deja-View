@@ -20,6 +20,7 @@ local HIT_SLACK = 1.8
 local BOT_DELAY = 0.28
 
 local frame = CFrame.new()
+local tableYaw = 0
 local len, wid = Sim.LEN, Sim.WID
 local folder: Folder? = nil
 local ball: Part? = nil
@@ -97,6 +98,10 @@ local function updateBoard()
 			to = state and state.to or nil,
 			bounce = lastBounce,
 			serving = state and state.serving or false,
+			c = frame.Position,
+			yaw = tableYaw,
+			len = len,
+			wid = wid,
 		})
 	end
 end
@@ -141,6 +146,7 @@ end
 local function buildTable(tableCf: CFrame, length: number, width: number, visible: boolean)
 	destroyTable()
 	frame, len, wid = tableCf, length, width
+	tableYaw = select(2, tableCf:ToOrientation())
 	local root = workspace:FindFirstChild("Room")
 	folder = Instance.new("Folder")
 	folder.Name = "PingPongTable"
@@ -438,12 +444,35 @@ local function onHit(player: Player, payload: any)
 	if type(payload) ~= "table" then
 		return
 	end
-	local aim = tonumber(payload.aim) or 0
-	local flight = tonumber(payload.flight) or 0.75
+	local charge = math.clamp(tonumber(payload.charge) or 0, 0, 1)
+	local dir = payload.dir
+	local aimed = typeof(dir) == "Vector3" and dir.Magnitude > 0.1
 	local p0 = state.p
 	state.serving = false
 	state.rally = (state.rally or 0) + 1
 	state.best = math.max(state.best or 0, state.rally)
+	if aimed and payload.vr ~= true then
+		-- hold to charge, aim with the camera: reach and pace grow with the hold, and a late aim sails out
+		local reach = (len / 2) * (0.55 + charge * 0.95)
+		local target = p0 + (dir :: Vector3).Unit * reach
+		if target.Y < Sim.TOP_Y + Sim.BALL_R then
+			target = Vector3.new(target.X, Sim.TOP_Y + Sim.BALL_R, target.Z)
+		end
+		local flight = math.clamp(0.95 - charge * 0.45, 0.45, 0.95)
+		local v = Sim.assistVelocity(p0, target, flight)
+		if v.Magnitude > Sim.MAX_SPEED then
+			v = v.Unit * Sim.MAX_SPEED
+		end
+		state.to = other(side)
+		lastHitter = side
+		lastBounce = nil
+		state.lastTouch = state.t
+		state.v = v
+		ball.CFrame = frame * CFrame.new(state.p)
+		broadcastState()
+		updateBoard()
+		return
+	end
 	if payload.vr == true and typeof(payload.cf) == "CFrame" and typeof(payload.vel) == "Vector3" then
 		-- the paddle really hit it: reflect off the blade and let the ball fly
 		local blade = payload.cf :: CFrame
@@ -458,6 +487,13 @@ local function onHit(player: Player, payload: any)
 		end
 		local before = state.v
 		Sim.paddleHit(state, blade.UpVector, payload.vel :: Vector3, 0.8)
+		if state.v ~= before then
+			local boost = 0.75 + charge * 0.5
+			state.v = state.v * boost
+			if state.v.Magnitude > Sim.MAX_SPEED then
+				state.v = state.v.Unit * Sim.MAX_SPEED
+			end
+		end
 		if state.v == before then
 			broadcastState() -- the ball was moving away; nothing to return
 			return
@@ -481,8 +517,30 @@ local function serveHit(player: Player, payload: any)
 	end
 	state.serving = false
 	state.serveInFlight = true
-	local aim = type(payload) == "table" and (tonumber(payload.aim) or 0) or 0
-	launch(other(side), state.p, 0.8, aim)
+	local charge = type(payload) == "table" and math.clamp(tonumber(payload.charge) or 0.3, 0, 1) or 0.3
+	local dir = type(payload) == "table" and payload.dir or nil
+	if typeof(dir) == "Vector3" and dir.Magnitude > 0.1 then
+		local reach = (len / 2) * (0.55 + charge * 0.95)
+		local target = state.p + dir.Unit * reach
+		if target.Y < Sim.TOP_Y + Sim.BALL_R then
+			target = Vector3.new(target.X, Sim.TOP_Y + Sim.BALL_R, target.Z)
+		end
+		local flight = math.clamp(0.95 - charge * 0.45, 0.45, 0.95)
+		local v = Sim.assistVelocity(state.p, target, flight)
+		if v.Magnitude > Sim.MAX_SPEED then
+			v = v.Unit * Sim.MAX_SPEED
+		end
+		state.to = other(side)
+		lastHitter = side
+		lastBounce = nil
+		state.lastTouch = state.t
+		state.v = v
+		ball.CFrame = frame * CFrame.new(state.p)
+		broadcastState()
+		updateBoard()
+		return true
+	end
+	launch(other(side), state.p, 0.8, 0)
 	return true
 end
 
