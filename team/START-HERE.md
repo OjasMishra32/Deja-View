@@ -1,0 +1,108 @@
+# Start here: what each of us does right now
+
+This page is current and final. The long guides (`shivin.md`, `brianna.md`, `seb.md`) are being updated to match it; if
+anything in them disagrees with this page, **this page wins** until they are refreshed.
+
+**The product:** Déjà View. Two modes: **Photo** (one photo becomes a world you walk into) and **Video** (a still-camera
+video becomes a room with the real footage standing in it in 3D). Walk around in a Meta Quest 3S or a browser.
+
+**The demo (a short skit, then a live finale):** "We had a game night. Seb skipped it." Seb drops the game-night video into
+the group chat, the bot replies with the world, the judge puts on the headset and is standing in it with sound. Gemini
+pins labels on things and answers "who won?" out loud. A reality-check toggle tints what the AI imagined. Shivin and
+Brianna join from Roblox and play tag with the judge. The DeepSpace map shows everyone live, and a note typed on the map
+pops up in the headset. Finale: "now do it": the judge's own photo becomes a world they walk into.
+
+Details for every connection: `contracts.md`. The whole plan: `plan.md`.
+
+---
+
+## Shivin: Déjà View in Roblox
+
+Someone texts a photo of a real room, it becomes a 3D world, and you plus friends join that same room in Roblox and play
+tag with the person in the VR headset.
+
+**Tonight**
+1. Roblox Studio → new place → publish it (private) → Game Settings → Security → **Allow HTTP Requests** on.
+2. Build against **mock data** (the server endpoint is not public yet). A ModuleScript returns a map in exactly this shape:
+   `{ studsPerMeter = 3.57, spawn = {x, y, z}, parts = { {x, y, z, sx, sy, sz, r, g, b}, ... } }`
+   Each part: centre in studs (Y up), size in studs, colour 0 to 255.
+3. Build in order:
+   - **Room loader:** anchored Parts, built in batches so the game never freezes, behind a "Moving in..." loading screen.
+   - **Room picker** board.
+   - **VR ghost:** a head and two hands gliding along a fake path, smoothly interpolated.
+   - **Tag rounds:** 90 s, the VR player is "it", tagged within 4 studs, scoreboard and sounds.
+4. Look: dark UI, lime accent **#C6FF3D**, bold type.
+
+**Real endpoints** (live Sat ~4 PM on a public https link):
+- `GET /api/roblox/<sceneId>/map` returns the map shape above.
+- `POST /api/roblox/<sceneId>/presence`, about 4 per second: send `{players:[{id, name, x, y, z, yaw}]}`, get back
+  `{others:[{id, name, kind, x, y, z, yaw, hands?}], t}`. All in studs.
+- `POST /api/roblox/<sceneId>/event`: `{type: "tag", by, target}` or `{type: "round", state: "start" | "end", scores}`.
+
+**Deadlines:** working on mock data by Sat 10 AM; on the real server by Sat 4 PM.
+
+---
+
+## Brianna: Gemini, the AI brain
+
+Gemini decides what the world looks like, then makes the room talk. **No Capital One for you.**
+
+**Tonight**
+1. Gemini API key: https://aistudio.google.com/apikey. Keep it in `.env`, never in code.
+2. One small web server (Node, Bun or Python) with four endpoints. Only the Déjà View server calls it (no CORS needed):
+   - `POST /describe {image}` returns `{caption}`: one or two sentences describing the place for a world generator
+     (layout, materials, light, what is likely just outside the frame; no people). This text decides what the AI imagines
+     behind you.
+   - `POST /hotspots {image, scene}` returns `{hotspots:[{label, x, y, blurb}]}`: the 3 to 6 most interesting things in
+     the shot; `x`, `y` are 0 to 1 positions in the image. The viewer pins them as floating labels in 3D.
+   - `POST /narrate {image, scene}` returns `{answer, speech}`: a funny one-line welcome when someone enters.
+   - `POST /ask {image, audio | question, scene, history}` returns `{question, answer, speech, hotspot?}`. `audio` is the
+     spoken question as a webm data URL (Gemini understands audio directly). `speech` is the answer as Gemini text-to-speech
+     audio, returned as a WAV data URL.
+3. Answers: one or two short spoken sentences, specific to the image, a little funny; **under 2 s** for `/ask`.
+4. Test with curl on room photos and a screenshot of a gaming setup (the skit is a game night).
+
+**Deadline:** all four endpoints working via curl by Sat 10 AM; wired into the headset by Ojasva Saturday afternoon.
+
+---
+
+## Seb: Vultr, the text bot, DeepSpace
+
+How memories get in, and who is in them.
+
+**Right now (30 min)**
+1. **Vultr:**
+   - Get the free $100 code (`mlh.link/vultr-discover` or an MLH coach), create the account, Billing → Gift Code.
+   - Test-deploy one **Cloud GPU, NVIDIA A40 48 GB, New Jersey** (or Los Angeles). Those are the only places with enough
+     GPU memory. Ubuntu.
+   - **Destroy it right away**: stopped instances still bill.
+   - Tell Ojasva "Vultr OK" or exactly what failed.
+2. **DeepSpace:** open the referral link and enter **SWAMPHACKS2026 before creating the account** (otherwise the free
+   credits are lost). Use Node 24.
+
+**Then build**
+- **Text-a-memory bot (Photon, iMessage):**
+  - Photon's free lines only talk to numbers you register first, so register the demo phones tonight.
+  - **Demo mode:** a table of known demo clips (by file hash) and keywords such as `#dejaview gamenight` that maps to
+    pre-built scene ids, so the bot replies instantly.
+  - **Live path:** upload to `POST /api/scenes` (`mode=photo` or `mode=video`, `name`, `files`), poll
+    `GET /api/scenes/<id>` until `status` is `ready`, then reply with the thumbnail and the `/view?scene=<id>` link.
+- **DeepSpace app** (`npm create deepspace@latest`):
+  - **Sign-in** and a **gallery** of memories from `GET /api/scenes`.
+  - A **live top-down map** of who is inside a memory. The Déjà View server pushes positions to your
+    `POST /api/ingest` (header `X-DejaView-Key`, body `{sceneId, t, people:[{id, name, kind, x, y, z, yaw}]}`,
+    metres, Y up, about 4 per second).
+  - **Notes inside the memory:** click a spot on the map, type a note; it appears floating in the headset. Store notes
+    as `{id, sceneId, author, text, x, y, z, createdAt}`. The Déjà View server reads `GET /api/notes?sceneId=<id>` and
+    forwards headset-made notes to `POST /api/notes` (same header).
+- **Capital One (Nessie): optional, your idea, only after the rest works.** Nothing depends on it.
+
+**Deadlines:** Vultr tonight; the bot replying by Sat 10 AM; the DeepSpace map and notes by Sat 4 PM.
+
+---
+
+## Everyone
+
+- Point your coding agent at this page, your guide in `team/`, and `team/contracts.md`.
+- Write your own code (it must be written during the event) and list the AI tools you used on Devpost, as the rules require.
+- Full demo run Sat 10 PM; feature freeze Sun 4 AM; submission Sun 8 AM.
