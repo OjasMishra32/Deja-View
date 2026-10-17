@@ -22,7 +22,9 @@ function ProxyRoom.build(sceneId: string, parent: Instance, image: (string) -> s
 		p.Name = t.kind .. i
 		p.Anchored, p.CanCollide, p.CanQuery, p.CanTouch, p.CastShadow = true, false, false, false, false
 		p.Material = Enum.Material.SmoothPlastic
-		p.Color = Color3.fromRGB(20, 20, 22)
+		-- only the painted side shows: the part itself is invisible, so from behind (a camera outside the room) the
+		-- panel is see-through instead of a black slab
+		p.Transparency = 1
 		p.TopSurface, p.BottomSurface = Enum.SurfaceType.Smooth, Enum.SurfaceType.Smooth
 		local c = Vector3.new(t.c[1], t.c[2], t.c[3])
 		local d = Instance.new("Decal")
