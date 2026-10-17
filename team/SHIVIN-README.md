@@ -6,6 +6,42 @@ Still no Roblox and no Devpost.
 
 The site is `https://deja-view.photo`. Every world opens at `https://deja-view.photo/view?scene=<id>`.
 
+## Round 2 (Sat ~10 PM): what's next
+
+Round 1 is in: your three fixes (listing flag, archive instead of delete, `--from <step>`) are merged on `main`, and
+your laptop QA is in `team/qa/shivin-quest.md`. Thank you. `git pull` first. Still no Roblox and no Devpost.
+
+What changed since round 1, so the QA below covers it:
+- **The Gemini guide is live** in every world: floating labels, a spoken greeting, and spoken answers (hold T or
+  Space, or the blue mic button). If Gemini's voice is out of quota, the device reads the answer aloud.
+- **The old house kitchen** is a new, cleaner version (no black holes at your feet).
+- **The host tablet page** (`/host`) has a Videos row and a Worlds row you swipe sideways, with "Watch here" and
+  "Walk here" on each card.
+
+In order:
+1. **Quest QA, now with the guide (about 45 min).** Fill the Quest table in `team/qa/shivin-quest.md` (section 1
+   below), and in every world also: do the labels show up and point at the right things, do you hear the greeting,
+   and does a spoken question ("what is this?", in a memory "who won?") get a sensible spoken answer within about
+   5 s. Note any world where the guide is wrong or silent, with what you asked.
+2. **Tablet QA (about 15 min).** Open `https://deja-view.photo/host` on an iPad or phone: swipe both rows, try
+   "Watch here" on a video and "Walk here" on a world, check nothing overflows. Add a "Tablet" section to the same file.
+3. **Guide request log (about 30 min, branch `shivin/guide-log`).** `integrations/guide/server.mjs` logs nothing per
+   request, so tonight we couldn't see what was rate limited. Log one line per request: endpoint, status, total ms,
+   whether it was cached or degraded, and the Gemini error code (429, 503) when there is one. Never log the image,
+   the audio, the key or the full answer. Done when `npm test` covers the line format and a degraded call.
+4. **A memory's backdrop files (about 30 min, branch `shivin/pack-backdrop`).** `pipeline/recon/people.py pack`
+   copies only the place's world file, collider and top-down map, but writes the place's whole `world` block, so a
+   place with `world.backdrop` would give a memory that names files it doesn't have. Copy every file the block names
+   (check them before copying). Done when a test in `tests/pipeline/` packs a place with a backdrop and every file
+   `scene.json` names is in the memory's folder.
+5. **Listing marks on some photos only (optional, about 1 h, branch `shivin/listing-subset`).** In
+   `pipeline/listing.py` the shared check is all or nothing: one photo without the mark (a floor plan, an unstamped
+   hero shot) hides a centre mark on all the others (docs/listing.md, Limits). Make the shared check tolerate a
+   photo or two without it, with no new false alarms on clean sets (the docs table must still read 0 of 48). Tests
+   in `tests/pipeline/test_listing.py`.
+
+Same rules as round 1 (below). Push each branch and tell Ojasva.
+
 ## Rules
 
 - Work on a branch: `git switch -c shivin/<task>` off an up-to-date `main`, push the branch, tell Ojasva. Never commit
