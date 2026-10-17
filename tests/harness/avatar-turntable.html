@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Avatar turntable</title>
+  <style>html, body { margin: 0; background: #16161a; } #gl { display: none; } #out { display: block; }</style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/node_modules/three/build/three.module.js",
+        "three/addons/": "/node_modules/three/examples/jsm/",
+        "@sparkjsdev/spark": "/node_modules/@sparkjsdev/spark/dist/spark.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+<canvas id="out"></canvas>
+<script type="module">
+  // Avatar GLBs (pipeline/avatar/glb.py) played the way the viewer will: GLTFLoader, unlit material, AnimationMixer
+  // with mixer.setTime(t) on clip "video" (t = seconds on the video element's clock).
+  //   ?glbs=<repo paths, comma separated>&t=<seconds>[&poses=<clip>-poses.json][&world=<world.spz>][&frame=<jpg>]
+  //   [&check=<avatar-check.json>]
+  // Output canvas: one row per avatar with 8 views around it (yaw 0..315 deg, the other people hidden), then a row
+  // with the paused scene from the recording camera at t (avatars over the splat world when given) next to the real
+  // frame. check=: skinned positions of the listed vertices at the listed key times, compared with numpy.
+  // window.__ready / __error / __info are read by tests/harness/avatar-turntable.ts.
+  import * as THREE from 'three';
+  import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+  const p = new URLSearchParams(location.search);
+  const glbs = (p.get('glbs') || '').split(',').filter(Boolean);
+  const T = Number(p.get('t') || 0);
+  const W = Number(p.get('w') || 300), H = Number(p.get('h') || 400), PAD = 4, TOP = 20;
+  const info = { avatars: [], check: null, rows: 0, rowHeight: H + TOP + PAD };
+
+  async function json(path) { return await (await fetch('/' + path)).json(); }
+
+  try {
+    const gl = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    gl.setPixelRatio(1);
+    gl.outputColorSpace = THREE.SRGBColorSpace;
+    gl.domElement.id = 'gl';
+    document.body.appendChild(gl.domElement);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x2a2a30);
+    const grid = new THREE.GridHelper(10, 20, 0x666670, 0x44444a);
+    scene.add(grid);
+    const loader = new GLTFLoader();
+    const avatars = [];
+    for (const path of glbs) {
+      const g = await loader.loadAsync('/' + path);
+      const root = g.scene;
+      let skinned = null;
+      root.traverse((o) => {
+        if (o.isSkinnedMesh) { skinned = o; o.frustumCulled = false; }
+      });
+      const clip = g.animations.find((a) => a.name === 'video');
+      const mixer = new THREE.AnimationMixer(root);
+      mixer.clipAction(clip).play();
+      scene.add(root);
+      avatars.push({ path, root, skinned, clip, mixer });
+      info.avatars.push({ path, duration: clip.duration, tracks: clip.tracks.length, material: skinned.material.type,
+                          vertices: skinned.geometry.attributes.position.count, bones: skinned.skeleton.bones.length });
+    }
+    const setTime = (t) => {
+      // a looping action wraps setTime(duration) to t = 0: clamp just below the end (the viewer must do the same)
+      for (const a of avatars) a.mixer.setTime(Math.min(Math.max(t, 0), a.clip.duration - 1e-4));
+      scene.updateMatrixWorld(true);
+      for (const a of avatars) a.skinned.skeleton.update();
+    };
+
+    // numeric check: skinned world positions vs numpy LBS
+    if (p.get('check')) {
+      const chk = await json(p.get('check'));
+      const res = [];
+      const v = new THREE.Vector3();
+      for (const person of chk.people) {
+        const a = avatars.find((x) => x.path.endsWith(person.file));
+        if (!a) continue;
+        for (const c of person.checks) {
+          setTime(c.time);
+          let maxErr = 0, sum = 0;
+          c.vertices.forEach((vid, i) => {
+            a.skinned.getVertexPosition(vid, v);
+            v.applyMatrix4(a.skinned.matrixWorld);
+            const e = Math.hypot(v.x - c.positions[i][0], v.y - c.positions[i][1], v.z - c.positions[i][2]);
+            maxErr = Math.max(maxErr, e); sum += e;
+          });
+          res.push({ file: person.file, key: c.key, time: c.time, n: c.vertices.length, maxErrMm: +(maxErr * 1000).toFixed(3), meanErrMm: +(sum / c.vertices.length * 1000).toFixed(3) });
+        }
+      }
+      info.check = res;
+    }
+
+    setTime(T);
+    const out = document.getElementById('out');
+    const cols = 8;
+    const hasPaused = !!p.get('poses');
+    const poses = hasPaused ? await json(p.get('poses')) : null;
+    const K = poses ? poses.intrinsics : null;
+    const PW = 3 * (W + PAD) + W, PH = K ? Math.round(PW * K.height / K.width) : 0;
+    info.rows = avatars.length;
+    out.width = cols * (W + PAD) + PAD;
+    out.height = avatars.length * (H + TOP + PAD) + PAD + (hasPaused ? PH + TOP + PAD : 0);
+    const ctx = out.getContext('2d');
+    ctx.fillStyle = '#101014';
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.font = '13px sans-serif';
+    gl.setSize(W, H);
+    const cam = new THREE.PerspectiveCamera(40, W / H, 0.05, 200);
+    const box = new THREE.Box3();
+    const tmp = new THREE.Vector3();
+    avatars.forEach((a, r) => {
+      avatars.forEach((b) => (b.root.visible = b === a));
+      // bounds of the skinned mesh at t
+      box.makeEmpty();
+      const pos = a.skinned.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i += 7) {
+        a.skinned.getVertexPosition(i, tmp);
+        box.expandByPoint(tmp.applyMatrix4(a.skinned.matrixWorld));
+      }
+      const c = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      info.avatars[r].bounds = { min: box.min.toArray().map((x) => +x.toFixed(3)), max: box.max.toArray().map((x) => +x.toFixed(3)) };
+      const dist = Math.max(size.y, 1.2) * 1.9;
+      for (let k = 0; k < cols; k++) {
+        const yaw = (k * Math.PI * 2) / cols;
+        cam.position.set(c.x + dist * Math.sin(yaw), c.y + 0.25, c.z + dist * Math.cos(yaw));
+        cam.lookAt(c.x, c.y, c.z);
+        gl.render(scene, cam);
+        const x = PAD + k * (W + PAD), y = PAD + r * (H + TOP + PAD);
+        ctx.drawImage(gl.domElement, x, y + TOP);
+        ctx.fillStyle = '#ddd';
+        ctx.fillText(`${a.path.split('/').pop()}  yaw ${k * 45}°  t=${T.toFixed(2)}s`, x + 4, y + 14);
+      }
+    });
+    avatars.forEach((b) => (b.root.visible = true));
+
+    if (hasPaused) {
+      const tr = poses.track.reduce((best, f) => (Math.abs(f.time - T) < Math.abs(best.time - T) ? f : best));
+      const y0 = PAD + avatars.length * (H + TOP + PAD);
+      gl.setSize(PW, PH);
+      const pc = new THREE.PerspectiveCamera(2 * Math.atan(K.height / 2 / K.fy) * 180 / Math.PI, PW / PH, 0.05, 300);
+      pc.position.fromArray(tr.position);
+      pc.quaternion.fromArray(tr.quaternion);
+      let pausedScene = scene;
+      if (p.get('world')) {
+        const { SparkRenderer, SplatMesh } = await import('@sparkjsdev/spark');
+        const ws = new THREE.Scene();
+        ws.background = new THREE.Color(0x101014);
+        const spark = new SparkRenderer({ renderer: gl });
+        ws.add(spark);
+        const splat = new SplatMesh({ url: '/' + p.get('world') });
+        ws.add(splat);
+        await splat.initialized;
+        for (const a of avatars) ws.add(a.root);
+        pausedScene = ws;
+        for (let i = 0; i < 4; i++) { gl.render(ws, pc); await new Promise((r) => setTimeout(r, 200)); }
+      }
+      setTime(T);
+      gl.render(pausedScene, pc);
+      info.paused = { frameIndex: tr.frameIndex, time: tr.time, size: [PW, PH] };
+      const snap = gl.domElement.toDataURL('image/png');
+      const img = new Image();
+      await new Promise((r) => { img.onload = r; img.src = snap; });
+      ctx.drawImage(img, PAD, y0 + TOP);
+      ctx.fillStyle = '#ddd';
+      ctx.fillText(`paused at t=${T.toFixed(2)}s from the recording camera (frame ${tr.frameIndex})${p.get('world') ? ' over the splat world' : ''}`, PAD + 4, y0 + 14);
+      if (p.get('frame')) {
+        const fr = new Image();
+        await new Promise((r, j) => { fr.onload = r; fr.onerror = j; fr.src = '/' + p.get('frame'); });
+        const fx = PAD + PW + PAD;
+        const fw = out.width - fx - PAD;
+        ctx.drawImage(fr, fx, y0 + TOP, fw, Math.round(fw * fr.height / fr.width));
+        ctx.fillText('the real frame', fx + 4, y0 + 14);
+      }
+    }
+    window.__info = info;
+    window.__ready = true;
+  } catch (e) {
+    window.__error = String(e && e.stack || e);
+    window.__ready = true;
+  }
+</script>
+</body>
+</html>

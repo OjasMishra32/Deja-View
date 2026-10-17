@@ -1,0 +1,48 @@
+# HiPerGator "avatar" environment ($TW_ENVS/avatar): pipeline/avatar (people from a video become skinned,
+# textured, animated glTF avatars). Built by hpg/setup-avatar.sh, which first installs
+#   torch==2.8.0 torchvision==0.23.0 from https://download.pytorch.org/whl/cu128
+# and then this file under a torch constraint, so the torch lines below never swap the CUDA 12.8 build.
+#
+# Licences: Multi-HMR 2 code and checkpoint are NAVER non-commercial (plus BEDLAM and AnnyOne terms); Anny is
+# Apache-2.0 with CC0 assets; the DINOv3 backbone code (fetched by torch.hub at run time) is under the DINOv3
+# License; Qwen-Image-Edit-2511 is Apache-2.0; Open3D, pygltflib are MIT. No SMPL-family file is installed:
+# never add anny's "smpl" extra.
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.8.0
+torchvision==0.23.0
+
+# Body model + per-frame pose/shape. The archive URL pins the exact commit (no VCS checkout needed).
+multihmr2 @ https://github.com/naver/multi-hmr2/archive/f066532d096034700e5ba8b7b1ca655729d3ea6e.tar.gz
+anny==0.6.0
+warp-lang==1.18.0
+roma>=1.5.7
+einops
+torchmetrics
+scikit-learn
+termcolor
+tqdm
+# Imported by the DINOv3 hub entry points that Multi-HMR 2 loads through torch.hub.
+ftfy
+omegaconf
+regex
+submitit
+
+# Geometry, texture baking, glTF export.
+open3d==0.19.0          # 0.20 needs glibc 2.35; HiPerGator RHEL 9 has 2.34
+trimesh
+pygltflib==1.16.5
+scipy
+opencv-python-headless
+numpy
+pillow
+pyyaml
+requests
+
+# Back-view generation (Qwen-Image-Edit-2511 through QwenImageEditPlusPipeline).
+diffusers==0.41.0
+transformers>=4.57,<6
+accelerate
+safetensors
+huggingface_hub
+
+pytest
