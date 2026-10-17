@@ -1,17 +1,23 @@
-// Typed client for the ThirdWheel HTTP API and the /ws event stream (docs/ARCHITECTURE.md).
+// Typed client for the HTTP API and the /ws event stream (docs/ARCHITECTURE.md).
 
 import type { HealthInfo, Scene, SceneMode, ServerEvent } from '../../shared/types.ts';
 
 export type { HealthInfo, Scene, SceneMode, ServerEvent };
 
-/** Modes a user can create (samples are bundled, never uploaded). */
-export type CreatableMode = Exclude<SceneMode, 'sample'>;
+/**
+ * The two modes a person can pick, as the upload API names them:
+ *   photo  one photo (or a prompt) becomes a world you walk into
+ *   video  a still-camera video becomes a room with the real footage in 3D
+ */
+export type UploadMode = 'photo' | 'video';
 
 export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
     readonly body?: unknown,
+    /** Technical details the server sent next to its message, for a collapsed block. */
+    readonly details = '',
   ) {
     super(message);
     this.name = 'ApiError';
@@ -29,17 +35,31 @@ export function apiUrl(path: string): string {
   return apiBase + path;
 }
 
-function messageFromBody(body: unknown): string | undefined {
-  if (!body) return undefined;
-  if (typeof body === 'string') return body.trim().slice(0, 300) || undefined;
+/** A details value as text: a string, or lines of a string array. */
+function detailString(v: unknown): string {
+  if (typeof v === 'string') return v.trim();
+  if (Array.isArray(v)) return v.filter((x) => typeof x === 'string').join('\n').trim();
+  return '';
+}
+
+/** The message and optional technical details of an error response body. */
+export function errorFromBody(body: unknown): { message?: string; details: string } {
+  if (!body) return { details: '' };
+  if (typeof body === 'string') {
+    // A bare text body is not ours (a proxy page, say); an HTML page is never worth showing.
+    const text = body.trim();
+    return { message: text && !text.startsWith('<') ? text.slice(0, 300) : undefined, details: '' };
+  }
   if (typeof body === 'object') {
     const b = body as Record<string, unknown>;
-    for (const key of ['error', 'message', 'detail']) {
-      const v = b[key];
-      if (typeof v === 'string' && v) return v;
-    }
+    const message = [b.error, b.message].find((v): v is string => typeof v === 'string' && !!v.trim());
+    const details = detailString(b.details);
+    const detail = detailString(b.detail);
+    if (message) return { message, details: details || detail };
+    if (detail) return { message: detail, details };
+    return { details };
   }
-  return undefined;
+  return { details: '' };
 }
 
 function parseBody(text: string): unknown {
@@ -56,11 +76,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     res = await fetch(apiUrl(path), { ...init, headers: { Accept: 'application/json', ...(init?.headers ?? {}) } });
   } catch {
-    throw new ApiError('Cannot reach the ThirdWheel server. Is it still running?', 0);
+    throw new ApiError("Can't reach the server. Check that it is still running, then try again.", 0);
   }
   const body = parseBody(await res.text());
   if (!res.ok) {
-    throw new ApiError(messageFromBody(body) ?? `${res.status} ${res.statusText}`.trim(), res.status, body);
+    const { message, details } = errorFromBody(body);
+    throw new ApiError(message ?? `The server answered ${`${res.status} ${res.statusText}`.trim()}.`, res.status, body, details);
   }
   return body as T;
 }
@@ -103,7 +124,7 @@ export interface UploadFile {
 }
 
 export interface CreateSceneInput {
-  mode: CreatableMode;
+  mode: UploadMode;
   name: string;
   prompt?: string;
   files: UploadFile[];
@@ -126,43 +147,44 @@ export function uploadStatusMessage(status: number, statusText = ''): string {
   if (status === 413) return 'That file is too big to upload. Trim the clip (10 to 30 s is plenty) or pick a smaller file.';
   if (status === 415) return 'The server does not accept that file type. Use a photo (JPEG, PNG, HEIC) or a video (MP4, MOV, WebM).';
   if (status === 429) return 'The server is busy with other uploads. Try again in a moment.';
-  if (status >= 500) return `The server hit a problem with this upload (${status}). Try again; if it keeps happening, check the server log.`;
-  return `Upload failed (${`${status} ${statusText}`.trim()}).`;
+  if (status >= 500) return `The server hit a problem with this upload (${status}). Try again in a moment.`;
+  return `The upload was refused (${`${status} ${statusText}`.trim()}).`;
 }
 
 /**
- * POST /api/scenes as multipart. Uses XMLHttpRequest because fetch has no upload progress.
+ * POST /api/scenes as multipart with mode=photo or mode=video.
+ * Uses XMLHttpRequest because fetch has no upload progress.
  */
 export function createScene(input: CreateSceneInput, onProgress?: (p: UploadProgress) => void): UploadHandle {
-  const form = new FormData();
-  form.append('mode', input.mode);
-  form.append('name', input.name);
-  if (input.prompt && input.prompt.trim()) form.append('prompt', input.prompt.trim());
-  for (const f of input.files) form.append('files', f.blob, f.name);
-
-  const xhr = new XMLHttpRequest();
+  const req = new XMLHttpRequest();
   const promise = new Promise<Scene>((resolve, reject) => {
-    xhr.open('POST', apiUrl('/api/scenes'));
-    xhr.setRequestHeader('Accept', 'application/json');
-    xhr.upload.onprogress = (e) => {
+    const form = new FormData();
+    form.append('mode', input.mode);
+    form.append('name', input.name);
+    if (input.prompt && input.prompt.trim()) form.append('prompt', input.prompt.trim());
+    for (const f of input.files) form.append('files', f.blob, f.name);
+    req.open('POST', apiUrl('/api/scenes'));
+    req.setRequestHeader('Accept', 'application/json');
+    req.upload.onprogress = (e) => {
       onProgress?.({ loaded: e.loaded, total: e.total, fraction: e.lengthComputable ? e.loaded / e.total : NaN });
     };
-    xhr.onload = () => {
-      const body = parseBody(xhr.responseText);
-      if (xhr.status >= 200 && xhr.status < 300) {
+    req.onload = () => {
+      const body = parseBody(req.responseText);
+      if (req.status >= 200 && req.status < 300) {
         const scene = body && typeof body === 'object' && 'scene' in body ? (body as { scene: Scene }).scene : (body as Scene);
         if (scene && typeof scene === 'object' && typeof scene.id === 'string') resolve(scene);
-        else reject(new ApiError('The server accepted the upload but did not return a scene.', xhr.status, body));
+        else reject(new ApiError('The server took the upload but sent nothing back. Check the gallery before trying again.', req.status, body));
       } else {
-        reject(new ApiError(messageFromBody(body) ?? uploadStatusMessage(xhr.status, xhr.statusText), xhr.status, body));
+        const { message, details } = errorFromBody(body);
+        reject(new ApiError(message ?? uploadStatusMessage(req.status, req.statusText), req.status, body, details));
       }
     };
-    xhr.onerror = () => reject(new ApiError('Upload failed: the connection dropped. Same Wi-Fi as the laptop?', 0));
-    xhr.ontimeout = () => reject(new ApiError('Upload timed out.', 0));
-    xhr.onabort = () => reject(new ApiError('Upload cancelled.', 0));
-    xhr.send(form);
+    req.onerror = () => reject(new ApiError('The connection dropped during the upload. Check that this device is on the same Wi-Fi as the laptop, then try again.', 0));
+    req.ontimeout = () => reject(new ApiError('The upload timed out. Try again on a stronger connection.', 0));
+    req.onabort = () => reject(new ApiError('Upload cancelled.', 0));
+    req.send(form);
   });
-  return { promise, abort: () => xhr.abort() };
+  return { promise, abort: () => req.abort() };
 }
 
 /** URL of a file inside a scene directory. */
@@ -342,95 +364,84 @@ export class LiveEvents {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Text from the server and the pipelines (stage lines, captions, errors) is shown as is. These
-// helpers keep it in product language and split tool output off the readable sentence.
-
-const DETERMINER = /\b(?:a|an|the|no|this|that|your|our|its)\s+$/i;
-const SENTENCE_START = /(?:^|[.!?]\s+|\n\s*)$/;
-
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-/** Replacement that reads right wherever it lands: "the" when needed, capitalised at a sentence start. */
-function noun(word: string) {
-  return (before: string) => {
-    const text = DETERMINER.test(before) ? word : `the ${word}`;
-    return SENTENCE_START.test(before) ? capitalize(text) : text;
-  };
-}
-
-const COPY_RULES: [RegExp, (before: string, ...groups: string[]) => string][] = [
-  // "Rent Free (ModelName) needs ..." -> "Rent Free needs ..."
-  [/\s*\((?:FlashWorld|AnySplat|Video Depth Anything)\)/g, () => ''],
-  // Hosted demo backends.
-  [/\b(?:FlashWorld\s+(?:Hugging\s?Face\s+)?|Hugging\s?Face\s+|HF\s+)Spaces?\b/g, noun('cloud GPU')],
-  [/\b([Tt]he)\s+Space\b/g, (_b, the) => `${the} cloud GPU`],
-  // "... with ModelName." -> "..."
-  [/\s+(?:with|using|via|by)\s+(?:FlashWorld|AnySplat|Video Depth Anything)\b/g, () => ''],
-  [/\bFlashWorld\s+(world)\b/g, (before, w) => (SENTENCE_START.test(before) ? capitalize(w) : w)],
-  [/\b(?:Video\s+)?Depth\s+Anything(?:\s+V2)?\b/g, noun('depth model')],
-  [/\bFlashWorld\b/g, noun('world model')],
-  [/\bAnySplat\b/g, noun('reconstruction model')],
-  [/\bHugging\s?Face\b/g, () => 'cloud'],
-];
+// Text from the server and the pipelines (stage lines, captions, errors) is written as product
+// sentences at its source and shown as is. The page only folds technical output into a details
+// block and never shows where files live on the server.
 
 /**
- * Rewrites model and hosting names in server-provided text into product language, so a stage
- * line like "Loading <model> onto the GPU" reads "Loading the world model onto the GPU".
- * URLs are left untouched. User-written text (names, prompts) should not be passed through.
+ * Absolute filesystem paths, so they can be cut down to the file name. A POSIX path may contain
+ * single spaces ("/Users/me/Application Support/x") as long as more path follows the space.
  */
-export function productCopy(text: string | undefined | null): string {
-  const src = String(text ?? '');
-  if (!/FlashWorld|AnySplat|Depth Anything|Hugging\s?Face|HF Space|\bSpace\b/.test(src)) return src;
-  return src
-    .split(/(https?:\/\/\S+)/)
-    .map((part, i) => {
-      if (i % 2) return part; // a URL
-      let out = part;
-      for (const [re, fn] of COPY_RULES) {
-        out = out.replace(re, (...args: unknown[]) => {
-          const offset = args[args.length - 2] as number;
-          const whole = args[args.length - 1] as string;
-          const groups = args.slice(1, -2) as string[];
-          return fn(whole.slice(0, offset), ...groups);
-        });
-      }
-      return out;
-    })
-    .join('');
+const ABS_PATH =
+  /(?<![\w.:/~-])(?:~?\/[^\s"'()<>[\]{},;|/]+\/[^\s"'()<>[\]{},;|]*(?: [^\s"'()<>[\]{},;|/]+\/[^\s"'()<>[\]{},;|]*)*|[A-Za-z]:\\(?:[^\\\s"'<>|]+\\)+[^\\\s"'<>|]*)/g;
+
+/** Replaces absolute server paths with their last component: "/srv/data/jobs/x/out" -> "out". */
+export function hideServerPaths(text: string): string {
+  return text.replace(ABS_PATH, (path) => {
+    const parts = path.split(/[\\/]/).filter(Boolean);
+    return parts[parts.length - 1] ?? '';
+  });
 }
 
-/** Where tool output starts inside a message: an ffmpeg log tag, a traceback, or a new line. */
+/** Where tool output starts inside a message that has no separate details: a log tag, a traceback, or a new line. */
 const TOOL_OUTPUT = /\s*\(?\s*\[[^\]\n]{1,80} @ 0x[0-9a-f]+\]|\s*\(?\s*Traceback \(most recent call last\)|\n/;
 
+export interface ErrorText {
+  /** The sentence a person reads. */
+  headline: string;
+  /** Technical output for a collapsed details block; empty when there is none. */
+  detail: string;
+}
+
 /**
- * Splits an error into the sentence a person reads and the tool output behind it, for example
- * '"clip.mp4": not a readable video ([mov,mp4 @ 0x1] moov atom not found)' becomes
- * { headline: '"clip.mp4": not a readable video', detail: '[mov,mp4 @ 0x1] moov atom not found' }.
+ * The readable sentence and the technical details of an error, with server paths removed.
+ * When the server sends details separately they go in the details block as they are; otherwise a
+ * trailing traceback or tool log in the message is folded away so the sentence stands alone.
  */
-export function splitErrorMessage(message: string | undefined | null): { headline: string; detail: string } {
-  const msg = productCopy(String(message ?? '').trim());
+export function errorText(message: string | undefined | null, details?: string | null): ErrorText {
+  const msg = hideServerPaths(String(message ?? '').trim());
+  const extra = hideServerPaths(String(details ?? '').trim());
+  if (extra) return { headline: clip(msg, 400), detail: extra === msg ? '' : extra };
   const m = TOOL_OUTPUT.exec(msg);
   if (!m || m.index < 8) return { headline: clip(msg, 400), detail: '' };
   let headline = msg.slice(0, m.index).replace(/[\s:;,(]+$/, '');
   let detail = msg.slice(m.index).trim().replace(/^\(\s*/, '');
   if (m[0].includes('(') && detail.endsWith(')')) detail = detail.slice(0, -1).trimEnd();
-  // Keep a closing summary such as "Not available: ..." with the readable part.
-  const tail = /\.?\s+(Not available: [^\n]*)$/.exec(detail);
-  if (tail) {
-    detail = detail.slice(0, tail.index).trimEnd();
-    headline = `${headline}. ${tail[1]}`;
-  }
   if (!/[.!?]$/.test(headline)) headline += '.';
   return { headline: clip(headline, 400), detail };
+}
+
+/** Technical details a scene carries next to its error, under whichever name the server uses. */
+export function sceneErrorDetails(scene: Scene): string {
+  const s = scene as Scene & Record<string, unknown>;
+  for (const key of ['errorDetails', 'errorDetail', 'details']) {
+    const v = detailString(s[key]);
+    if (v) return v;
+  }
+  return '';
 }
 
 function clip(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s;
 }
 
-/** Human summary of where jobs will run, for the health strip. */
+// ---------------------------------------------------------------------------------------------
+// Modes as people see them: Photo and Video.
+
+export type ModeKind = 'photo' | 'video' | 'sample';
+
+/** Which of the two modes a scene belongs to. Several-photo reconstructions count as Photo. */
+export function modeKind(mode: string | undefined): ModeKind {
+  if (mode === 'thirdwheel' || mode === 'video') return 'video';
+  if (mode === 'sample') return 'sample';
+  return 'photo';
+}
+
+export const MODE_NAME: Record<ModeKind, string> = { photo: 'Photo', video: 'Video', sample: 'Sample' };
+
+// ---------------------------------------------------------------------------------------------
+
+/** Human summary of where jobs will run, for the compute strip. */
 export interface HealthSummary {
   gpu: { ok: boolean; label: string; detail: string };
   worker: { ok: boolean; label: string; detail: string };
@@ -440,29 +451,29 @@ export interface HealthSummary {
 export function summarizeHealth(h: HealthInfo | undefined): HealthSummary {
   if (!h) {
     return {
-      gpu: { ok: false, label: 'GPU', detail: 'checking' },
-      worker: { ok: false, label: 'Warm worker', detail: 'checking' },
-      fallbacks: { ok: false, label: 'Fallbacks', detail: 'checking' },
+      gpu: { ok: false, label: 'GPU cluster', detail: 'checking' },
+      worker: { ok: false, label: 'Warm GPU', detail: 'checking' },
+      fallbacks: { ok: false, label: 'Backup', detail: 'checking' },
     };
   }
   const w = h.hpg?.worker;
   const fb: string[] = [];
   if (h.space?.available) fb.push('cloud GPU');
-  if (h.local?.python) fb.push('local Mac');
+  if (h.local?.python) fb.push('this laptop');
   return {
     gpu: {
       ok: !!h.hpg?.online,
-      label: 'HiPerGator',
+      label: 'GPU cluster',
       detail: h.hpg?.online ? 'online' : 'offline',
     },
     worker: {
       ok: !!w?.alive,
-      label: 'Warm worker',
-      detail: w?.alive ? [w.gpu, w.host].filter(Boolean).join(' on ') || 'alive' : 'asleep',
+      label: 'Warm GPU',
+      detail: w?.alive ? [w.gpu, w.host].filter(Boolean).join(' on ') || 'ready' : 'asleep',
     },
     fallbacks: {
       ok: fb.length > 0,
-      label: 'Fallbacks',
+      label: 'Backup',
       detail: fb.length ? fb.join(' + ') : 'none',
     },
   };

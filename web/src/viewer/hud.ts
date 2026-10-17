@@ -13,9 +13,13 @@ export interface HudHandlers {
   onMute?: () => void;
 }
 
-const MODE_LABEL: Record<SceneMode, string> = {
-  rentfree: 'Rent Free',
-  thirdwheel: 'Third Wheel',
+/** Product name shown to people (page title, loader, wrist panel). */
+export const BRAND = 'Déjà View';
+
+/** How each mode is named to people: one photo becomes a world, a still-camera video becomes a room. */
+export const MODE_LABEL: Record<SceneMode, string> = {
+  rentfree: 'Photo',
+  thirdwheel: 'Video',
   reconstruct: 'Reconstruct',
   sample: 'Sample',
 };
@@ -86,7 +90,7 @@ export class Hud {
   // ---------- loader ----------
   setLoaderTitle(name: string, mode?: SceneMode): void {
     $('tw-loader-name').textContent = name;
-    $('tw-loader-mode').textContent = mode ? MODE_LABEL[mode] ?? mode : 'ThirdWheel';
+    $('tw-loader-mode').textContent = mode ? MODE_LABEL[mode] ?? mode : BRAND;
   }
 
   setProgress(stage: string, fraction: number | null, note?: string): void {
@@ -127,7 +131,7 @@ export class Hud {
     $('tw-name').textContent = name;
     $('tw-mode').textContent = MODE_LABEL[mode] ?? mode;
     if (caption) $('tw-name').title = caption;
-    document.title = `${name} · ThirdWheel`;
+    document.title = `${name} · ${BRAND}`;
   }
 
   // ---------- buttons ----------

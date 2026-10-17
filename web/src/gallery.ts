@@ -3,14 +3,16 @@
 import {
   ApiError,
   LiveEvents,
+  MODE_NAME,
   deleteScene,
+  errorText,
   getHealth,
   lanUrls,
   listScenes,
-  productCopy,
+  modeKind,
   retryScene,
   sceneAssetUrl,
-  splitErrorMessage,
+  sceneErrorDetails,
   summarizeHealth,
   viewUrl,
   type HealthInfo,
@@ -619,7 +621,7 @@ function renderLan() {
     link.textContent = health ? 'No Wi-Fi address found' : 'finding this laptop…';
     link.removeAttribute('href');
     inline.textContent = health ? 'not on a network' : 'finding address';
-    note.textContent = health ? 'Connect the laptop to Wi-Fi, then reload. Phones and the Quest must be on the same network.' : '';
+    note.textContent = health ? 'Connect the laptop to Wi-Fi, then reload. Phones and the headset must be on the same network.' : '';
     qr.innerHTML = '';
     return;
   }
@@ -638,8 +640,8 @@ function renderLan() {
     }
   }
   note.textContent = health?.https || url.startsWith('https:')
-    ? 'Scan with your phone camera or type it into the Quest browser. Accept the certificate warning once per device.'
-    : 'Scan with your phone camera or type it into the Quest browser. VR mode on the Quest needs HTTPS: start the server with bun run https.';
+    ? 'Scan it with your phone camera or type it into the headset browser. Accept the certificate warning once per device.'
+    : 'Scan it with your phone camera or type it into the headset browser. VR in the headset needs HTTPS: start the server with bun run https.';
 }
 
 async function copyText(text: string): Promise<boolean> {
@@ -666,12 +668,6 @@ async function copyText(text: string): Promise<boolean> {
 // ---------------------------------------------------------------------------------------------
 // Gallery
 
-const MODE_LABEL: Record<string, string> = {
-  rentfree: 'Rent Free',
-  thirdwheel: 'Third Wheel',
-  reconstruct: 'Reconstruct',
-  sample: 'Sample',
-};
 const STATUS_LABEL: Record<string, string> = {
   queued: 'Queued',
   uploading: 'Uploading',
@@ -681,11 +677,11 @@ const STATUS_LABEL: Record<string, string> = {
   failed: 'Failed',
 };
 const BACKEND_LABEL: Record<string, string> = {
-  'hpg-worker': 'HiPerGator worker',
-  'hpg-batch': 'HiPerGator batch',
+  'hpg-worker': 'warm GPU',
+  'hpg-batch': 'GPU cluster',
   'hf-space': 'cloud GPU',
-  local: 'this Mac',
-  bundled: 'bundled',
+  local: 'this laptop',
+  bundled: 'built in',
 };
 const ACTIVE = new Set(['queued', 'uploading', 'running', 'downloading']);
 
@@ -719,7 +715,7 @@ function ordered(): Scene[] {
 
 function matches(s: Scene): boolean {
   if (filter === 'all') return true;
-  return s.mode === filter;
+  return modeKind(s.mode) === filter;
 }
 
 /** The scene's thumbnail, else its first uploaded photo, else a generated cover. */
@@ -737,25 +733,38 @@ function metaLine(s: Scene): string {
   return [ago(s.createdAt), clip, s.backend ? BACKEND_LABEL[s.backend] ?? s.backend : ''].filter(Boolean).join(' · ');
 }
 
-/** Stage line in product language; falls back to the status. */
+/** The server's stage line, else the status. */
 function stageText(s: Scene): string {
-  return productCopy(s.stage) || STATUS_LABEL[s.status] || s.status;
+  return s.stage?.trim() || STATUS_LABEL[s.status] || s.status;
+}
+
+/** What the scene was made from, for cards whose job has not finished. */
+function sourceLine(s: Scene): string {
+  const files = s.input?.files ?? [];
+  if (modeKind(s.mode) === 'video') return 'From one video';
+  if (files.length > 1) return `From ${files.length} photos`;
+  if (files.some((f) => /\.(mp4|mov|m4v|webm|mkv|avi)$/i.test(f))) return 'From one clip';
+  if (files.length) return 'From one photo';
+  return s.input?.prompt ? 'From a description' : 'From one photo';
 }
 
 function subline(s: Scene): string {
-  // Prompts are the user's own words and stay as typed; captions and stages come from the pipelines.
-  const caption = s.caption ? productCopy(s.caption) : '';
-  if (s.status === 'failed') return s.stage && s.stage !== 'Failed' ? `Stopped at: ${stageText(s)}` : 'Something went sideways.';
-  if (ACTIVE.has(s.status)) return s.input?.prompt ? `“${s.input.prompt}”` : caption || (s.mode === 'thirdwheel' ? 'Lifting your friend into 3D' : 'Building the room');
+  // Prompts are the person's own words and captions come from the server; both are shown as written.
+  const kind = modeKind(s.mode);
+  const caption = s.caption?.trim() ?? '';
+  const prompt = s.input?.prompt?.trim();
+  if (s.status === 'failed') return s.stage && s.stage !== 'Failed' ? `Stopped at: ${stageText(s)}` : 'This one did not make it.';
+  // The stage line under it already says what is happening; this says what it is being made from.
+  if (ACTIVE.has(s.status)) return prompt ? `“${prompt}”` : caption && caption !== stageText(s) ? caption : sourceLine(s);
   if (caption) return caption;
-  if (s.input?.prompt) return `“${s.input.prompt}”`;
-  return s.mode === 'thirdwheel' ? 'Walkable kitchen, real friend, original audio' : s.mode === 'sample' ? 'Bundled sample world' : 'Walkable world';
+  if (prompt) return `“${prompt}”`;
+  return kind === 'video' ? 'The room, with the real footage in 3D' : kind === 'sample' ? 'A world to try first' : 'A world you can walk into';
 }
 
-/** The failure reason, with any tool output folded into a details block. */
-function errorBox(error: string | undefined): string {
-  const { headline, detail } = splitErrorMessage(error || 'The job failed without saying why. Check log.txt in the scene folder.');
-  return `<div class="error-box">${esc(headline)}${detail ? `<details><summary>Details</summary><pre>${esc(detail)}</pre></details>` : ''}</div>`;
+/** The failure reason, with technical details folded into a collapsed block. */
+function errorBox(s: Scene): string {
+  const { headline, detail } = errorText(s.error || 'This one stopped without a reason. Retry it, or make it again.', sceneErrorDetails(s));
+  return `<div class="error-box"><span>${esc(headline)}</span>${detail ? `<details><summary>Details</summary><pre>${esc(detail)}</pre></details>` : ''}</div>`;
 }
 
 function cardBody(s: Scene): string {
@@ -772,7 +781,7 @@ function cardBody(s: Scene): string {
            <div class="progress${pct === null ? ' indeterminate' : ''}"><div class="progress-fill" style="transform:scaleX(${pct !== null ? Math.max(0.02, pct / 100) : 0.3})"></div></div>`
         : ''
     }
-    ${s.status === 'failed' ? errorBox(s.error) : ''}
+    ${s.status === 'failed' ? errorBox(s) : ''}
     <div class="card-foot">
       <span class="meta" title="${esc(s.createdAt)}">${esc(meta)}</span>
       ${s.status === 'failed' ? `<button class="btn btn-xs" data-act="retry" type="button">Retry</button>` : ''}
@@ -789,7 +798,8 @@ function cardBody(s: Scene): string {
 
 function badges(s: Scene): string {
   const active = ACTIVE.has(s.status);
-  return `<span class="badge mode-${esc(s.mode)}">${esc(MODE_LABEL[s.mode] ?? s.mode)}</span>
+  const kind = modeKind(s.mode);
+  return `<span class="badge mode-${kind}">${MODE_NAME[kind]}</span>
     <span class="badge status-${esc(s.status)}"><span class="dot${s.status === 'ready' ? ' on' : active ? ' on pulse' : s.status === 'failed' ? ' bad' : ''}"></span>${esc(STATUS_LABEL[s.status] ?? s.status)}</span>`;
 }
 
@@ -840,13 +850,12 @@ function renderFilters() {
   const bar = $('#filters');
   if (!bar) return;
   const all = [...scenes.values()];
-  const count = (m: string) => all.filter((s) => s.mode === m).length;
+  const count = (k: string) => all.filter((s) => modeKind(s.mode) === k).length;
   const opts: [string, string, number][] = [
     ['all', 'All', all.length],
-    ['rentfree', 'Rent Free', count('rentfree')],
-    ['thirdwheel', 'Third Wheel', count('thirdwheel')],
+    ['photo', 'Photo', count('photo')],
+    ['video', 'Video', count('video')],
   ];
-  if (count('reconstruct')) opts.push(['reconstruct', 'Reconstruct', count('reconstruct')]);
   if (count('sample')) opts.push(['sample', 'Samples', count('sample')]);
   bar.innerHTML = opts
     .map(([k, label, n]) => `<button class="filter" type="button" data-filter="${k}" aria-pressed="${filter === k}">${label}<span class="n">${n}</span></button>`)
@@ -860,9 +869,9 @@ function renderGrid() {
   const list = ordered().filter(matches);
   if (!list.length) {
     grid.innerHTML = loaded
-      ? `<div class="empty"><h3>${scenes.size ? 'Nothing in this filter.' : 'Nothing here yet.'}</h3><p>${
-          scenes.size ? 'Try another one, or make something new.' : 'Your first world is one photo away.'
-        }</p><a class="btn btn-primary" href="/capture">Make one <span class="arrow">&rarr;</span></a></div>`
+      ? `<div class="empty"><h3>${scenes.size ? 'Nothing here in this filter.' : 'Nothing here yet.'}</h3><p>${
+          scenes.size ? 'Try another filter, or make something new.' : 'Your first world is one photo away.'
+        }</p><a class="btn btn-primary" href="/capture">Make a world <span class="arrow">&rarr;</span></a></div>`
       : grid.innerHTML;
     return;
   }
@@ -935,7 +944,8 @@ async function refreshScenes() {
   } catch (err) {
     loaded = true;
     if (banner) {
-      banner.textContent = `Can't load the gallery: ${err instanceof Error ? err.message : String(err)} Retrying…`;
+      const why = err instanceof ApiError || err instanceof Error ? errorText(err.message).headline : '';
+      banner.textContent = `Can't load the gallery right now.${why ? ` ${why}` : ''} Trying again…`;
       banner.classList.add('show');
     }
     if (!scenes.size) renderGrid();
@@ -969,10 +979,10 @@ function onGridClick(e: MouseEvent) {
     retryScene(id)
       .then((s) => {
         if (s) upsert(s);
-        toast('Retrying. Fingers crossed.');
+        toast('Trying that one again.');
       })
       .catch((err) => {
-        toast(err instanceof ApiError ? err.message : 'Retry failed');
+        toast(err instanceof ApiError ? errorText(err.message).headline : 'Could not retry. Try again in a moment.');
         if (btn) btn.disabled = false;
       });
   } else if (act === 'delete') {
@@ -998,7 +1008,7 @@ function onGridClick(e: MouseEvent) {
         removeScene(id);
         toast('Deleted. It never happened.');
       })
-      .catch((err) => toast(err instanceof ApiError ? err.message : 'Delete failed'));
+      .catch((err) => toast(err instanceof ApiError ? errorText(err.message).headline : 'Could not delete it. Try again in a moment.'));
   } else if (act === 'enter' && scene?.status !== 'ready') {
     e.preventDefault();
   }

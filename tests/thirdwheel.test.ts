@@ -1,4 +1,4 @@
-// Decoding math of the Third Wheel video layer (tw-pack-v1). The GLSL in
+// Decoding math of the video layer (tw-pack-v1). The GLSL in
 // web/src/viewer/thirdwheel.ts mirrors these helpers.
 
 import { describe, expect, test } from 'bun:test';
@@ -8,9 +8,11 @@ import {
   cellTriangle,
   decodeInverseDepth,
   encodeInverseDepth,
+  findHiddenAlong,
   gridDims,
   gridIndices,
   gridToPixel,
+  hiddenBehind,
   pack16,
   packLayout,
   packedSize,
@@ -242,5 +244,51 @@ describe('scene file URLs', () => {
     expect(resolveSceneFile('/data/scenes/a/', 'tw.mp4')).toBe('/data/scenes/a/tw.mp4');
     expect(resolveSceneFile('/data/scenes/a', './tw.mp4')).toBe('/data/scenes/a/tw.mp4');
     expect(resolveSceneFile('/data/scenes/a/', 'https://cdn.example/x.mp4')).toBe('https://cdn.example/x.mp4');
+  });
+});
+
+describe('back sheet: the person hidden behind an occluder', () => {
+  // inverse depths: a jar at 1.25 m, the cook at 1.9 m, the wall at 2.7 m
+  const JAR = 1 / 1.25, COOK = 1 / 1.9, WALL = 1 / 2.7;
+  const line = (cells: Array<[number, number]>) => ({ mask: cells.map((c) => c[0]), inv: cells.map((c) => c[1]) });
+  const none = line([]);
+  const jarThenCook = line([[1, JAR], [0, JAR], [1, JAR], [1, COOK], [1, COOK], [1, COOK]]);
+
+  test('walks past the occluder (and gaps in the mask) to the first farther person sample', () => {
+    const f = findHiddenAlong(jarThenCook, JAR / 1.12, 2)!;
+    expect(f).not.toBeNull();
+    expect(f.dist).toBe(8); // fourth sample, two cells per step
+    expect(f.inv).toBeCloseTo(COOK, 12);
+  });
+
+  test('averages only samples of the same surface', () => {
+    const f = findHiddenAlong(line([[1, COOK], [1, COOK * 1.05], [1, COOK * 1.5]]), JAR / 1.12)!;
+    expect(f.inv).toBeCloseTo((COOK + COOK * 1.05) / 2, 12);
+  });
+
+  test('a jar with the cook on both sides hides the cook', () => {
+    const inv = hiddenBehind(JAR, [jarThenCook, jarThenCook, none, none])!;
+    expect(inv).not.toBeNull();
+    expect(1 / inv).toBeCloseTo(1.9, 6);
+  });
+
+  test('a gap to the wall (farther than the person) hides nothing', () => {
+    const cook = line([[1, COOK]]);
+    expect(hiddenBehind(WALL, [cook, cook, cook, cook])).toBeNull();
+  });
+
+  test('the person on one side only is not enough', () => {
+    expect(hiddenBehind(JAR, [jarThenCook, none, jarThenCook, none])).toBeNull();
+  });
+
+  test('a hand and the torso at clearly different depths are not bridged', () => {
+    const hand = line([[1, 1 / 1.45]]);
+    const torso = line([[1, 1 / 2.1]]);
+    expect(hiddenBehind(JAR * 1.1, [hand, torso, none, none])).toBeNull();
+  });
+
+  test('both sides must lie within the span limit', () => {
+    const far = line([...Array.from({ length: 60 }, () => [1, JAR] as [number, number]), [1, COOK]]);
+    expect(hiddenBehind(JAR, [far, far, none, none])).toBeNull();
   });
 });

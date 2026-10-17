@@ -32,7 +32,12 @@ fingerprint() {
         cat "$REPO/pipeline/requirements-flashworld.txt" "$REPO/pipeline/requirements-anysplat.txt"
         cat "$REPO/pipeline/requirements-video-gpu.txt" 2>/dev/null || echo "no video requirements"
         ;;
-      weights) cat "$HERE/fetch_weights.py" ;;
+      weights)
+        # Re-run the stage when the weight list changes or when the video env appears (its prefetch adds weights).
+        cat "$HERE/fetch_weights.py"
+        cat "$REPO/pipeline/common/models.py" 2>/dev/null || echo "no models.py"
+        [[ -x "$TW_PY_VIDEO" ]] && echo "video env present" || echo "no video env"
+        ;;
       smoke) date +%s ;;  # always re-runs when asked
     esac
   } | sha256sum | cut -c1-16
@@ -231,10 +236,14 @@ stage_envs() {
 stage_weights() {
   tw_use_env flashworld || tw_die "run the envs stage first"
   # shellcheck disable=SC2086  # WEIGHTS is a space-separated list of groups
-  "$TW_PY_FLASHWORLD" "$HERE/fetch_weights.py" ${WEIGHTS:-flashworld wan captioner anysplat}
+  "$TW_PY_FLASHWORLD" "$HERE/fetch_weights.py" ${WEIGHTS:-flashworld wan captioner anysplat video}
   if [[ -x "$TW_PY_VIDEO" && -f "$REPO/pipeline/common/models.py" ]]; then
     tw_say "video pipeline weights (pipeline/common/models.py --prefetch)"
-    (cd "$REPO/pipeline" && "$TW_PY_VIDEO" common/models.py --prefetch) || tw_warn "video weight prefetch failed"
+    # A failed prefetch fails the stage: weights.ok switches jobs to HF_HUB_OFFLINE=1, and without these weights
+    # every video job would fail to load its depth model.
+    (cd "$REPO/pipeline" && "$TW_PY_VIDEO" common/models.py --prefetch) || tw_die "video weight prefetch failed"
+  else
+    tw_warn "no video env yet: the depth weights came from fetch_weights.py; re-run setup.sh after envs to prefetch the rest"
   fi
   du -sh "$HF_HOME" 2>/dev/null || true
 }

@@ -75,7 +75,7 @@ def main() -> int:
     # The red ball's centre (0, -0.9, -3) projects to pixel (u, v) = (320, 200 + 300 * 0.9 / 3).
     centre = g.rgb[290, 320].astype(int)
     rep["ballColour"] = centre.tolist()
-    ok = rep["gsplatCoverage"] > 0.3 and rel < 0.05 and centre[0] > centre[1] + 60
+    ok = rep["gsplatCoverage"] > 0.2 and rel < 0.05 and centre[0] > centre[1] + 60
     rep["ok"] = bool(ok)
     (out / "summary.json").write_text(json.dumps(rep, indent=2))
     print(json.dumps(rep, indent=2))

@@ -10,6 +10,56 @@ up in the headset) and powers the finale (2:00 to 2:25, the judge's own photo be
 
 ---
 
+## Update, Saturday early morning: Photon is out, a domain comes in
+
+This box wins over anything below it. Keep everything you have already built; this only moves time around.
+
+**What changed:** Photon is not a prize on the SwampHacks XII Devpost and the bot is not working, so it is dropped: it
+does not appear in the demo, the pitch or the Devpost write-up. The Devpost does list **MLH Best Domain Name from GoDaddy Registry**, and a
+domain fixes a real problem for the whole team, so that takes Photon's place.
+
+1. **Photon bot: stop.** No more time on it. Keep any code you wrote for demo mode (the SHA-256 table) and the upload
+   (4.2, 4.4): step 2 reuses both. Skip every Photon, iMessage and Telegram step in sections 2.4 and 4.
+2. **New, about 1.5 h: "Add a memory" in your DeepSpace app.** This is now the way a memory comes in, and it gives DeepSpace **storage** real work to do (one more feature for the DeepSpace judges).
+   - A big button on the gallery page, phone-first: take or pick a photo or video.
+   - Save the file in DeepSpace storage, then send it to Déjà View with the same upload as the bot (4.4: `POST
+     BASE/api/scenes`, `mode=photo` or `mode=video`, `name`, `files`), from your worker, never from the browser.
+   - **Demo mode carries over:** if the file's SHA-256 is in your demo table (4.2), link the pre-built scene id instead
+     of uploading.
+   - The new card shows up building live in your gallery, then ready with "Walk in" (`BASE/view?scene=<id>`).
+   - In the skit (0:00) you drop the game-night clip in from the table iPhone through this page; demo mode answers at
+     once. The finale ("now do it") uses it too: the judge snaps a photo on the table iPhone and it goes in here.
+   - Each ready memory gets a "Copy link" button, so anyone can paste the walk-in link into a group chat.
+3. **New, about 1 h: the domain (MLH Best Domain Name from GoDaddy Registry).**
+   - Why: today the public link is a quick tunnel whose address changes every time it restarts, so Roblox, the
+     headset, your app and the judges' phones all break at once. A domain makes one link that never changes. It goes
+     on the table card, the Devpost and the QR codes.
+   - Get the domain **free** with the MLH GoDaddy Registry offer (MLH prizes page or an MLH coach). **Do not pay for
+     anything.** Pick something short that says Déjà View; run the name past the team chat first.
+   - Free Cloudflare account → Add a site → your domain → set the domain's nameservers to the two Cloudflare gives you.
+   - Cloudflare Zero Trust → Networks → Tunnels → Create a tunnel (Cloudflared) → name it `dejaview`. Add a public
+     hostname: your domain (or `app.<domain>`), service `HTTP`, URL `localhost:8788`.
+   - Copy the **tunnel token** and send it to Ojasva **privately** (never in the team chat, never in a repo). He runs
+     the tunnel on the demo Mac with it.
+   - **Done** when `https://<your domain>/api/health` answers from your phone on cellular. Target: **Sat 12 PM**
+     (nameserver changes can take an hour or more, so start early).
+4. **DeepSpace write-up for the Devpost (15 min, by Sat 10 PM).** Their rules want the features you used and where
+   judges can see them. Five lines: sign-in (auth), notes and presence (data), the live map (real-time sync), "Add a
+   memory" (storage), and the live URL with how a judge signs in, without exposing any key.
+5. **Look: the Déjà View site is moving to a clean Apple style**, so your app should match it (this replaces 5.12):
+   - Type: `-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif`.
+   - Colours: text `#1D1D1F`, secondary text `#6E6E73`, background white, cards `#F5F5F7`, hairlines
+     `rgba(0,0,0,.1)`, buttons and links iMessage blue `#007AFF`, notes as gray message bubbles `#E9E9EB`.
+   - Shape: radii 12 to 20 px, generous spacing.
+   - Avoid: glowing or pulsing dots, neon, monospace labels. On the `/live` map the headset dot is a plain blue dot
+     with a view cone, and the "LIVE" chip is a small red pill with no pulse.
+6. **Capital One is still optional and still yours**, but it is the biggest sponsor cash prize on the Devpost ($1,000)
+   and the Photon time is now free. If you want it, it is worth a real try after the Sat 4 PM milestone. Nothing
+   depends on it.
+
+New order: (1) Vultr, (2) the DeepSpace app plus "Add a memory", (3) the domain, (4) Capital One if you want it. The
+milestones in section 10 stay, plus the domain by Sat 12 PM.
+
 ## 0. The short version
 
 You own these, in this priority order:
@@ -17,7 +67,7 @@ You own these, in this priority order:
 | # | What | Why it matters (what it causes) | Prize | Time budget |
 | --- | --- | --- | --- | --- |
 | 1 | **Vultr GPU access** (tonight) | A warm GPU worker is what makes the live finale possible. New accounts can be blocked from GPUs, so find out tonight | MLH Best Use of Vultr | 30 min tonight |
-| 2 | **Group-chat bot** (iMessage through Photon): **demo mode** + **live path** | It starts every memory: a clip dropped in the chat comes back as a walkable world, with links that fill the room | none listed (fact 1 below) | about 6 h |
+| 2 | ~~Group-chat bot (iMessage through Photon)~~ **Dropped: see the update above.** Its demo mode and upload move into "Add a memory" | | | 0 |
 | 3 | **DeepSpace app**: sign-in, gallery, **live presence map with trails**, **notes** (DeepSpace is where notes live), invites | It remembers who was there and what they said: the table-laptop screen at 1:40 | DeepSpace: 1st = $1,000 credits + $250 cash | the rest of Saturday |
 | 4 | Capital One Nessie side quest (section 12) | **Optional, your design.** Nothing depends on it; 15 s at 2:45 only if it is ready and good | Capital One Best Use of Nessie ($1,000 cash) | only after the Sat 4 PM milestone |
 
@@ -918,7 +968,7 @@ and delete test users afterwards (the free plan holds about 10).
 
 ### 5.12 Look
 
-Match the Déjà View site: background `#0b0b0d`, surfaces `#151519`, text `#f3f1ea`, muted `#a3a097`, accent **acid
+**Replaced by item 5 of the update at the top (Apple style).** The old version, for reference: match the Déjà View site: background `#0b0b0d`, surfaces `#151519`, text `#f3f1ea`, muted `#a3a097`, accent **acid
 lime `#C6FF3D`** (the team standard; lime is the only accent), danger `#ff6b5b`. Type: **Bricolage Grotesque** (700 to
 800 for headings, tight tracking) and **JetBrains Mono** for numbers and labels, both from Google Fonts. Big bold
 headings, generous spacing, 12 to 16 px radii, no gradients except the soft vignette on the map. Set `data-theme` in
@@ -1038,9 +1088,10 @@ the same fonts. Name everything "Déjà View" (the bot calls itself that in `hel
 | --- | --- |
 | **Tonight** | Vultr: A40 deploy proven and destroyed (or the exact blocker sent to Ojasva). DeepSpace account with referral credits, `auth login` works, app name chosen. Photon: project made, your phone, the table iPhone and teammates' phones registered, echo bot gets photo bytes, **group test done and the winning plan reported**. Telegram token saved |
 | **Sat 10 AM** | Text a photo → working world link on the LAN (A1 to A6). Demo mode answers the clip and `#dejaview gamenight` with a sample scene id. DeepSpace starter deployed once (B1, B2) |
+| **Sat 12 PM** | Domain live: `https://<your domain>/api/health` answers from a phone on cellular; tunnel token sent to Ojasva privately. "Add a memory" uploads a photo and the card builds live in your gallery |
 | Sat 2 PM (aim) | DeepSpace `/api/ingest` and `/api/notes` deployed; URL and `DS_KEY` handed to Ojasva. You prop the phone for the game-night filming |
 | **Sat 4 PM** | DeepSpace: sign-in, gallery with live building cards, live map with trails, notes working end to end into the headset (B3 to B9) on the deployed app. Ojasva's real pushes accepted |
-| Sat 8 PM | Bot running on the demo Mac (or the Plan B Mac) with the frozen scene ids in `demo.json` |
+| Sat 8 PM | "Add a memory" demo table (`demo.json`) holds the frozen scene ids |
 | **Sat 10 PM** | Full skit + finale run twice with a timer: the clip at 0:00 answered by demo mode, real headset + Roblox dots on `/live`, Brianna's note in the headset, the judge's photo at 2:00 built live and in the gallery at 2:25. Capital One decided |
 | **Sun 4 AM** | Feature freeze. Record 10 s clips: the clip in the chat and the reply; the gallery card going from building to ready; the live map with three dots and a note appearing |
 | **Sun 8 AM** | Submitted (Ojasva). You make sure the DeepSpace features list (5.1) and the live URL are in the Devpost write-up |

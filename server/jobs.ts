@@ -7,10 +7,12 @@
 import { appendFile, copyFile, link, mkdir, readdir, rename, rm, stat, unlink, constants as fsc } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { Backend, JobProgress, JobResult, Scene, SceneMode } from '../shared/types.ts';
+import { GENERIC_FAILURE, MODE_NAME, NOTHING_AVAILABLE, sentence, waitingInLine } from './copy.ts';
 import { safeJoin } from './files.ts';
 import { writeJsonAtomic, type SceneStore } from './store.ts';
 import {
   AbortedError,
+  ProductError,
   ResumeImpossible,
   type BackendDriver,
   type JobSpec,
@@ -29,8 +31,14 @@ export function parseBackendOrder(value: string | undefined): Backend[] {
   return names.length ? names : DEFAULT_ORDER;
 }
 
+interface Waiter {
+  wake: () => void;
+  /** Told the new number of jobs ahead whenever the line moves. */
+  onAhead?: (ahead: number) => void;
+}
+
 class Lane {
-  private waiters: Array<() => void> = [];
+  private waiters: Waiter[] = [];
   private busy = false;
 
   get isBusy(): boolean {
@@ -42,20 +50,24 @@ class Lane {
     return (this.busy ? 1 : 0) + this.waiters.length;
   }
 
-  async acquire(signal: AbortSignal): Promise<() => void> {
+  async acquire(signal: AbortSignal, onAhead?: (ahead: number) => void): Promise<() => void> {
     if (signal.aborted) throw new AbortedError();
     if (!this.busy) {
       this.busy = true;
       return this.releaser();
     }
     await new Promise<void>((resolve, reject) => {
-      const entry = () => {
-        signal.removeEventListener('abort', onAbort);
-        resolve();
+      const entry: Waiter = {
+        wake: () => {
+          signal.removeEventListener('abort', onAbort);
+          resolve();
+        },
+        onAhead,
       };
       const onAbort = () => {
         const i = this.waiters.indexOf(entry);
         if (i >= 0) this.waiters.splice(i, 1);
+        this.announce();
         reject(new AbortedError());
       };
       this.waiters.push(entry);
@@ -64,14 +76,20 @@ class Lane {
     return this.releaser();
   }
 
+  /** Tells every waiter its place: the running job plus those in front of it. */
+  private announce(): void {
+    this.waiters.forEach((w, i) => w.onAhead?.((this.busy ? 1 : 0) + i));
+  }
+
   private releaser(): () => void {
     let released = false;
     return () => {
       if (released) return;
       released = true;
       const next = this.waiters.shift();
-      if (next) next();
+      if (next) next.wake();
       else this.busy = false;
+      this.announce();
     };
   }
 }
@@ -86,6 +104,8 @@ class Reporter {
   private closed = false;
   private chain: Promise<unknown> = Promise.resolve();
   last: Partial<Scene> = {};
+  /** The last stage reported while the job was actually running, kept on the scene when it fails. */
+  workStage: string | undefined;
 
   constructor(
     private store: SceneStore,
@@ -103,6 +123,7 @@ class Reporter {
     if (typeof update.progress === 'number' && Number.isFinite(update.progress)) {
       patch.progress = Math.round(Math.min(1, Math.max(0, update.progress)) * 1000) / 1000;
     }
+    if (patch.stage && (patch.status ?? this.last.status) === 'running') this.workStage = patch.stage;
     const changed = (Object.keys(patch) as (keyof Scene)[]).some((k) => this.last[k] !== patch[k]);
     if (!changed) return;
     Object.assign(this.pending, patch);
@@ -153,21 +174,25 @@ export interface EnqueueOptions {
   only?: Backend;
 }
 
-interface Note {
+export interface Note {
+  /** Backend label, for the log. */
   label: string;
+  /** Technical reason, for the log. */
   reason: string;
+  /** Product sentence for the UI, when the failing step gave one. */
+  user?: string;
 }
 
-type AttemptOutcome = { kind: 'ok' } | { kind: 'aborted' } | { kind: 'resume-impossible' } | { kind: 'skipped'; reason: string } | { kind: 'failed'; reason: string };
+type AttemptOutcome =
+  | { kind: 'ok' }
+  | { kind: 'aborted' }
+  | { kind: 'resume-impossible' }
+  | { kind: 'skipped'; reason: string }
+  | { kind: 'failed'; reason: string; user?: string };
 
 function errMessage(e: unknown): string {
   const m = e instanceof Error ? e.message : String(e);
   return m.replace(/\s+$/g, '').slice(0, 1200) || 'unknown error';
-}
-
-function sentence(s: string): string {
-  const t = s.trim();
-  return /[.!?]$/.test(t) ? t : `${t}.`;
 }
 
 /** Groups identical reasons: "HiPerGator worker and HiPerGator batch: offline ...". */
@@ -177,6 +202,7 @@ function mergeNotes(notes: Note[]): string {
   return [...groups].map(([reason, labels]) => sentence(`${labels.join(' and ')}: ${reason}`)).join(' ');
 }
 
+/** The technical account of a failed job, for log.txt: every backend that failed or was skipped, and why. */
 export function composeError(failures: Note[], skipped: Note[]): string {
   if (failures.length) {
     let msg = failures.map((f) => sentence(`${f.label} failed: ${f.reason}`)).join(' ');
@@ -185,6 +211,20 @@ export function composeError(failures: Note[], skipped: Note[]): string {
   }
   if (skipped.length) return `No backend could run this job. ${mergeNotes(skipped)}`;
   return 'No backend could run this job.';
+}
+
+/**
+ * The one sentence a person sees for a failed job. The latest failure that came with product copy (the pipeline's
+ * own reason, a known cloud GPU condition) wins; otherwise a plain sentence for the mode.
+ */
+export function userError(mode: SceneMode, failures: Note[], skipped: Note[]): string {
+  for (let i = failures.length - 1; i >= 0; i--) {
+    const u = failures[i]!.user?.trim();
+    if (u) return sentence(u);
+  }
+  if (failures.length) return GENERIC_FAILURE[mode];
+  if (skipped.length) return NOTHING_AVAILABLE;
+  return GENERIC_FAILURE[mode];
 }
 
 const MODE_REQUIREMENT: Record<SceneMode, (r: JobResult) => string | null> = {
@@ -241,18 +281,25 @@ export class JobRunner {
     return true;
   }
 
-  /** Re-runs a failed (or finished) scene from scratch. */
-  async retry(sceneId: string, only?: Backend): Promise<Scene | null> {
+  /** Re-runs a failed (or finished) scene from scratch, optionally in another mode (the caller checked the inputs fit). */
+  async retry(sceneId: string, only?: Backend, mode?: SceneMode): Promise<Scene | null> {
     if (this.active.has(sceneId)) return this.opts.store.get(sceneId);
+    const before = await this.opts.store.get(sceneId);
+    if (!before) return null;
+    const switching = !!mode && mode !== before.mode && mode !== 'sample';
     const s = await this.opts.store.update(sceneId, {
       status: 'queued',
       stage: 'Queued',
       progress: 0,
       error: undefined,
+      ...(switching ? { mode, world: undefined, video: undefined, caption: undefined } : {}),
     });
     if (!s) return null;
     this.opts.emit(s);
-    await this.appendLog(sceneId, `retry requested${only ? ` (backend ${only})` : ''}`);
+    await this.appendLog(
+      sceneId,
+      `retry requested${only ? ` (backend ${only})` : ''}${switching ? ` (mode ${before.mode} -> ${mode})` : ''}`,
+    );
     this.enqueue(sceneId, { only });
     return s;
   }
@@ -275,7 +322,10 @@ export class JobRunner {
     const resumed: string[] = [];
     for (const s of await this.opts.store.list()) {
       if (s.mode === 'sample' || !ACTIVE_STATUSES.has(s.status)) continue;
-      if (this.enqueue(s.id, { resume: s.status !== 'queued' })) resumed.push(s.id);
+      // Keep the backend restriction the job was queued with (state.json survives the restart).
+      const state = await this.readState(this.jobDir(s.id));
+      const only = state?.only && (DEFAULT_ORDER as string[]).includes(state.only) ? state.only : undefined;
+      if (this.enqueue(s.id, { resume: s.status !== 'queued', only })) resumed.push(s.id);
     }
     return resumed;
   }
@@ -315,7 +365,7 @@ export class JobRunner {
   }
 
   /** Fresh job dir: job.json + input/ (hard links to the scene inputs) + out/. */
-  private async prepareJobDir(scene: Scene, prev: JobState | null): Promise<{ job: JobSpec; state: JobState }> {
+  private async prepareJobDir(scene: Scene, prev: JobState | null, only?: Backend): Promise<{ job: JobSpec; state: JobState }> {
     const jobDir = this.jobDir(scene.id);
     const sceneDir = this.opts.store.sceneDir(scene.id);
     await rm(jobDir, { recursive: true, force: true });
@@ -332,7 +382,7 @@ export class JobRunner {
       await link(src, dst).catch(() => copyFile(src, dst));
     }
     const attempt = (prev?.attempt ?? 0) + 1;
-    const state: JobState = { sceneId: scene.id, jobId: `${scene.id}-a${attempt}`, attempt };
+    const state: JobState = { sceneId: scene.id, jobId: `${scene.id}-a${attempt}`, attempt, ...(only ? { only } : {}) };
     const job: JobSpec = {
       id: state.jobId,
       mode: scene.mode,
@@ -366,15 +416,20 @@ export class JobRunner {
     const jobDir = this.jobDir(sceneId);
     const sceneDir = store.sceneDir(sceneId);
 
-    const fail = async (message: string) => {
-      log(`FAILED: ${message}`);
-      await reporter.final({ status: 'failed', stage: 'Failed', error: message });
+    /** `user` is the sentence on the scene; `detail` (technical) only goes to log.txt. */
+    const fail = async (user: string, detail = user) => {
+      log(`FAILED: ${detail}`);
+      // Keep the last real step ("Stopped at: Generating the world") rather than overwriting it with "Failed".
+      await reporter.final({ status: 'failed', stage: reporter.workStage ?? 'Failed', error: sentence(user) });
     };
 
     if (scene0.mode === 'sample') return;
     const drivers = this.driversFor(scene0.mode, opts.only);
     if (!drivers.length) {
-      await fail(opts.only ? `Backend ${opts.only} cannot run ${scene0.mode} jobs.` : `No backend is configured for ${scene0.mode} jobs.`);
+      await fail(
+        opts.only ? `That backend can't build ${MODE_NAME[scene0.mode]} scenes.` : `This server can't build ${MODE_NAME[scene0.mode]} scenes.`,
+        opts.only ? `Backend ${opts.only} cannot run ${scene0.mode} jobs.` : `No backend is configured for ${scene0.mode} jobs.`,
+      );
       return;
     }
 
@@ -419,7 +474,8 @@ export class JobRunner {
           const out = await this.attempt(d, makeCtx(true), reporter, true);
           if (out.kind === 'ok' || out.kind === 'aborted') return;
           if (out.kind === 'failed') {
-            failures.push({ label: d.label, reason: out.reason });
+            failures.push({ label: d.label, reason: out.reason, user: out.user });
+            log(`${d.label} failed: ${out.reason}`);
             startIndex = idx + 1;
           } else {
             log(`could not re-attach (${out.kind === 'skipped' ? out.reason : 'nothing to resume'}); starting over`);
@@ -431,14 +487,15 @@ export class JobRunner {
 
       if (!job || !state || startIndex === 0) {
         try {
-          ({ job, state } = await this.prepareJobDir(scene0, prevState));
+          ({ job, state } = await this.prepareJobDir(scene0, prevState, opts.only));
         } catch (e) {
-          await fail(`Could not prepare the job: ${errMessage(e)}`);
+          await fail("This scene's uploaded files are missing. Upload them again.", `Could not prepare the job: ${errMessage(e)}`);
           return;
         }
       }
 
-      for (const d of drivers.slice(startIndex)) {
+      const rest = drivers.slice(startIndex);
+      for (const [i, d] of rest.entries()) {
         if (signal.aborted) return;
         const avail = await d.available().catch((e) => ({ ok: false as const, reason: errMessage(e) }));
         if (!avail.ok) {
@@ -453,16 +510,17 @@ export class JobRunner {
           continue;
         }
         if (out.kind === 'failed') {
-          failures.push({ label: d.label, reason: out.reason });
+          failures.push({ label: d.label, reason: out.reason, user: out.user });
           log(`${d.label} failed: ${out.reason}`);
-          if (d !== drivers[drivers.length - 1]) reporter.set({ status: 'queued', stage: `${d.label} failed; trying the next backend`, progress: 0 });
+          const next = rest[i + 1];
+          if (next) reporter.set({ status: 'queued', stage: next.place ? `Trying again on ${next.place}` : 'Trying again', progress: 0 });
         }
       }
       if (signal.aborted) return;
-      await fail(composeError(failures, skipped));
+      await fail(userError(scene0.mode, failures, skipped), composeError(failures, skipped));
     } catch (e) {
       if (signal.aborted || e instanceof AbortedError) return;
-      await fail(`Internal error: ${errMessage(e)}`);
+      await fail(GENERIC_FAILURE[scene0.mode], `Internal error: ${errMessage(e)}`);
     }
   }
 
@@ -470,11 +528,11 @@ export class JobRunner {
     const lane = this.lane(d.lane);
     const waited = lane.isBusy;
     if (waited) {
-      reporter.set({ status: 'queued', stage: `Waiting for ${d.label} (${lane.ahead} ahead)` });
+      reporter.set({ status: 'queued', stage: waitingInLine(lane.ahead) });
     }
     let release: () => void;
     try {
-      release = await lane.acquire(ctx.signal);
+      release = await lane.acquire(ctx.signal, (ahead) => reporter.set({ status: 'queued', stage: waitingInLine(ahead) }));
     } catch {
       return { kind: 'aborted' };
     }
@@ -486,7 +544,7 @@ export class JobRunner {
       if (!resume) {
         await this.resetAttempt(ctx.jobDir, ctx.job, d.name);
         await ctx.saveState({ backend: d.name, startedAt: new Date().toISOString(), pid: undefined, remoteDir: undefined, slurmId: undefined });
-        reporter.set({ status: 'running', backend: d.name, stage: `Starting on ${d.label}`, progress: 0 });
+        reporter.set({ status: 'running', backend: d.name, stage: d.place ? `Starting on ${d.place}` : 'Starting', progress: 0 });
         ctx.log(`running on ${d.label} (job ${ctx.state.jobId})`);
       } else {
         reporter.set({ backend: d.name });
@@ -504,7 +562,7 @@ export class JobRunner {
     } catch (e) {
       if (ctx.signal.aborted || e instanceof AbortedError) return { kind: 'aborted' };
       if (e instanceof ResumeImpossible) return { kind: 'resume-impossible' };
-      return { kind: 'failed', reason: errMessage(e) };
+      return { kind: 'failed', reason: errMessage(e), ...(e instanceof ProductError ? { user: e.user } : {}) };
     } finally {
       release();
     }

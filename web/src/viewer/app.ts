@@ -1,22 +1,24 @@
 // Viewer boot: reads ?scene=<id>, fetches the Scene, builds renderer + Spark + world + physics +
-// controls + HUD + XR, and the Third Wheel video layer when the scene has one.
+// controls + HUD + XR, and the video layer when the scene has one.
 
 import * as THREE from 'three';
 import { SparkRenderer, isMobile, isOculus, type SplatMesh } from '@sparkjsdev/spark';
 import type { Scene, VideoLayer } from '../../../shared/types.ts';
-import { distanceOutside, expandBounds, type Bounds, type RGB } from './analysis.ts';
+import { distanceOutside, expandBounds, mixRgb, type Bounds, type RGB } from './analysis.ts';
+import { cameraEyeHeight, isCameraOnlyRoom, videoFrustum, type Frustum } from './camroom.ts';
 import { loadMeshCollider, type MeshCollider } from './collider.ts';
 import { makeVoxelView } from './debug.ts';
 import { DesktopControls, type DesktopAction } from './desktop.ts';
-import { easeOutCubic, HeadVeil, IntroMove, SkyDome, SplatFx, type CameraPose } from './effects.ts';
+import { easeOutCubic, GroundGlow, HeadVeil, IntroMove, SkyDome, SplatFx, type CameraPose } from './effects.ts';
 import { formatTime, Hud } from './hud.ts';
 import { DEFAULT_BODY, DEFAULT_GROUND, EMPTY_WORLD, type GroundOptions } from './physics.ts';
+import { FrameGovernor, XR_LEVELS } from './perf.ts';
 import { Player } from './player.ts';
-import { analyseWorld, applyTransform, loadSplatMesh, splatCount, type WorldAnalysis } from './world.ts';
+import { analyseWorld, applyTransform, loadSplatMesh, repairHiddenSplats, splatCount, type WorldAnalysis } from './world.ts';
 import type { CollisionWorld } from './voxels.ts';
 import { XrSystem } from './xr.ts';
 
-/** Contract of web/src/viewer/thirdwheel.ts (docs/ARCHITECTURE.md). */
+/** Contract of web/src/viewer/thirdwheel.ts, the video layer (docs/ARCHITECTURE.md). */
 interface VideoLayerHandle {
   object: THREE.Object3D;
   video: HTMLVideoElement;
@@ -76,6 +78,13 @@ class Viewer {
   readonly sky = new SkyDome();
   readonly veil = new HeadVeil();
   readonly fx = new SplatFx();
+  readonly floorGlow = new GroundGlow();
+  /**
+   * The video camera's view when the room was lifted from that one camera (no generated room
+   * around it). Such a room is shown from the camera's height, walking stays near the camera, and
+   * what the camera never saw fades into the sky.
+   */
+  readonly cameraRoom: Frustum | null;
   readonly player = new Player();
   readonly controls: DesktopControls;
   readonly xr: XrSystem;
@@ -107,9 +116,12 @@ class Viewer {
   private dprCap = 1;
   private dprAdaptive = true;
   private dprTimer = 0;
+  /** Steps splat cost down in the headset when frames drop (see perf.ts). */
+  private readonly xrGovernor = new FrameGovernor({ levels: XR_LEVELS.length });
 
   constructor(readonly data: Scene) {
     const mobile = isMobile();
+    this.cameraRoom = isCameraOnlyRoom(data) && data.video ? videoFrustum(data.video) : null;
     this.renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: 'high-performance' });
     const pinned = Number(params.get('dpr'));
     this.dprCap = Math.min(window.devicePixelRatio || 1, pinned || (mobile ? 1.5 : 2));
@@ -129,11 +141,10 @@ class Viewer {
 
     this.spark = new SparkRenderer({
       renderer: this.renderer,
-      // Quest 3S keeps a steady frame rate up to roughly a million splats
-      lodSplatCount: isOculus() ? 1_000_000 : undefined,
+      // level-of-detail budget: Spark's own per-platform default (500-750k splats in a headset)
       maxStdDev: isOculus() || mobile ? LIGHT_STD_DEV : FULL_STD_DEV,
     });
-    this.scene.add(this.sky.mesh, this.spark, this.rig, this.content);
+    this.scene.add(this.sky.mesh, this.floorGlow.mesh, this.spark, this.rig, this.content);
     this.content.add(this.flip);
 
     this.controls = new DesktopControls(this.renderer.domElement, hud);
@@ -155,6 +166,8 @@ class Viewer {
         body: DEFAULT_BODY,
         ground: () => this.ground,
         walkBounds: () => this.analysis?.walkBounds ?? null,
+        walkMargin: () => (this.activeCameraRoom ? 0.35 : 0.6),
+        eyeLevel: () => (this.activeCameraRoom ? this.player.eyeHeight : null),
         spawn: () => this.analysis?.spawn ?? { x: 0, y: 0, z: 0, yaw: 0 },
         startPose: () => ({ x: this.player.pos.x, y: this.player.pos.y, z: this.player.pos.z, yaw: this.player.yaw }),
         sceneName: () => this.data.name,
@@ -171,12 +184,15 @@ class Viewer {
         },
         onEnter: () => {
           this.intro = null;
-          this.spark.maxStdDev = LIGHT_STD_DEV;
+          this.xrGovernor.reset();
+          this.applyXrLevel(this.xrGovernor.level);
           this.controls.releaseLock();
           void this.playVideo();
         },
         onExit: (p) => {
           this.spark.maxStdDev = isOculus() || isMobile() ? LIGHT_STD_DEV : FULL_STD_DEV;
+          this.spark.lodSplatScale = 1;
+          this.spark.maxPixelRadius = 512;
           this.player.place(p.x, p.y, p.z, p.yaw, 0);
           this.syncRig();
         },
@@ -194,6 +210,11 @@ class Viewer {
     } catch {
       this.flipped = false;
     }
+  }
+
+  /** The camera-only room handling applies (not while the world is shown flipped). */
+  get activeCameraRoom(): Frustum | null {
+    return this.flipped ? null : this.cameraRoom;
   }
 
   get world(): CollisionWorld {
@@ -230,6 +251,15 @@ class Viewer {
     this.fx.setReveal(0.01);
     debug.info.splats = splatCount(mesh);
     debug.info.lod = !!mesh.packedSplats?.lodSplats;
+    if (this.cameraRoom) {
+      // what the camera never saw behind objects takes the colours of the surface behind them
+      try {
+        mesh.updateMatrix();
+        debug.info.hiddenRepaired = repairHiddenSplats(mesh, mesh.matrix, this.cameraRoom);
+      } catch (e) {
+        console.warn('hidden splat repair skipped', e);
+      }
+    }
 
     await this.analyse();
     debug.stats.analysisMs = performance.now() - t0 - debug.stats.downloadMs;
@@ -303,6 +333,7 @@ class Viewer {
     const a = await analyseWorld(mesh, toContent, {
       asset: this.data.world!,
       video: this.data.video,
+      cameraRoom: this.activeCameraRoom,
       flipped: this.flipped,
       yieldFrame: nextFrame,
       onStage: (s) => {
@@ -314,6 +345,10 @@ class Viewer {
     this.content.position.set(0, -a.floorY, 0);
     this.content.updateMatrixWorld(true);
     this.ground = { ...DEFAULT_GROUND, floorY: 0 };
+    const room = this.activeCameraRoom;
+    // a single-view room only lines up with the footage from about the camera's own height
+    this.player.eyeHeight = room ? cameraEyeHeight(room, a.floorY) : 1.6;
+    this.applyCameraRoom(a);
 
     this.sky.setPalette(a.palette);
     this.horizon = a.palette.horizon;
@@ -330,6 +365,8 @@ class Viewer {
       this.voxelView = makeVoxelView(a.grid);
       this.scene.add(this.voxelView);
     }
+    debug.info.eyeHeight = this.player.eyeHeight;
+    debug.info.walkBounds = a.walkBounds;
     debug.info.floorY = a.floorY;
     debug.info.floorEstimated = a.floorEstimated;
     debug.info.floorConfidence = a.floorConfidence;
@@ -338,6 +375,34 @@ class Viewer {
     debug.info.voxels = a.grid.stats();
     debug.info.timings = a.timings;
     debug.info.palette = a.palette;
+  }
+
+  /**
+   * Camera-only rooms: fade what the camera never saw (the guessed box around the room) into the
+   * sky and lay a soft floor under the walk area; everything else turns this off.
+   */
+  private applyCameraRoom(a: WorldAnalysis): void {
+    const room = this.activeCameraRoom;
+    if (!room) {
+      this.fx.setViewCone(null);
+      this.floorGlow.hide();
+      return;
+    }
+    const m = new THREE.Matrix4().multiplyMatrices(this.content.matrixWorld, this.flip.matrix);
+    const v = (p: readonly number[]) => new THREE.Vector3(p[0], p[1], p[2]);
+    this.fx.setViewCone({
+      position: v(room.position).applyMatrix4(m),
+      right: v(room.right).transformDirection(m),
+      up: v(room.up).transformDirection(m),
+      forward: v(room.forward).transformDirection(m),
+      tans: [room.tanLeft, room.tanRight, room.tanDown, room.tanUp],
+      soft: 0.3,
+      inset: 0.05,
+    });
+    const wb = a.walkBounds;
+    const cx = (wb.min[0] + wb.max[0]) / 2, cz = (wb.min[2] + wb.max[2]) / 2;
+    const reach = Math.max(2.6, Math.min(4.5, a.nearContent + 1.6));
+    this.floorGlow.set(cx, 0, cz, reach, mixRgb(a.palette.horizon, a.palette.bottom, 0.4));
   }
 
   private async setupVideo(layer: VideoLayer, base: string): Promise<void> {
@@ -357,13 +422,14 @@ class Viewer {
           hud.setTime(handle.currentTime, handle.duration || layer.duration);
         })
         .catch((e) => {
-          hud.toast('Video layer failed', errorMessage(e), 'error');
+          hud.toast('The video did not load', errorMessage(e), 'error');
           hud.showTransport(false);
         });
       debug.info.video = true;
     } catch (e) {
       this.video = null;
-      hud.toast('Third Wheel layer unavailable', `${errorMessage(e)}. The room still works.`, 'error');
+      hud.toast('The video could not be shown', 'The room still works without it. Reload the page to try again.', 'error');
+      console.error(e);
     }
   }
 
@@ -468,6 +534,13 @@ class Viewer {
     }
     const eye = new THREE.Vector3(a.spawn.x, a.spawn.y + this.player.eyeHeight, a.spawn.z);
     const back = new THREE.Vector3(Math.sin(a.spawn.yaw), 0, Math.cos(a.spawn.yaw));
+    if (this.activeCameraRoom) {
+      // a single-view room: a short push in along the camera's own line of sight
+      const from: CameraPose = { position: eye.clone().addScaledVector(back, 0.55).add(new THREE.Vector3(0, 0.04, 0)), yaw: a.spawn.yaw + 0.1, pitch: -0.03 };
+      this.intro = new IntroMove(from, { position: eye, yaw: a.spawn.yaw, pitch: 0 }, 2.6);
+      this.intro.step(0, this.introPose);
+      return;
+    }
     // pull back only through free space
     let d = 0;
     for (let s = 0.1; s <= 1.3; s += 0.1) {
@@ -490,15 +563,36 @@ class Viewer {
     this.camera.rotation.set(p.pitch, 0, 0);
   }
 
+  /** Applies one of the headset's splat cost levels. */
+  private applyXrLevel(level: number): void {
+    const l = XR_LEVELS[Math.max(0, Math.min(XR_LEVELS.length - 1, level))];
+    this.spark.maxStdDev = l.maxStdDev;
+    this.spark.lodSplatScale = l.lodSplatScale;
+    this.spark.maxPixelRadius = l.maxPixelRadius;
+    debug.info.xrPerf = level;
+  }
+
+  /** Headset only: watch for dropped frames and step the splat cost down (or back up). */
+  private governXr(intervalMs: number): void {
+    // the load reveal and teleport fades regenerate or hide splats: not representative frames
+    if (this.revealT >= 0 || this.xr.fadeLevel > 0) return;
+    const rate = (this.renderer.xr.getSession() as (XRSession & { frameRate?: number }) | null)?.frameRate;
+    const budget = 1000 / (rate && rate > 20 ? rate : 72);
+    const changed = this.xrGovernor.push(intervalMs, budget);
+    if (changed !== null) this.applyXrLevel(changed);
+  }
+
   private frame(_t: number, _frame?: XRFrame): void {
     const now = performance.now();
-    const dt = Math.min(0.1, (now - this.last) / 1000);
+    const interval = now - this.last;
+    const dt = Math.min(0.1, interval / 1000);
     this.last = now;
     this.frameTimes.push(dt * 1000);
     if (this.frameTimes.length > 120) this.frameTimes.shift();
     const presenting = this.renderer.xr.isPresenting;
 
     if (presenting) {
+      this.governXr(interval);
       this.xr.update(dt);
     } else if (debug.ready) {
       const look = this.controls.consumeLook();
@@ -515,8 +609,10 @@ class Viewer {
       if (!this.intro) {
         this.player.look(look.x, look.y);
         const fly = this.player.fly;
-        const wb = this.analysis ? (fly ? expandBounds(this.analysis.walkBounds, [2.5, 0, 2.5]) : this.analysis.walkBounds) : null;
-        this.player.update(dt, input, { world: this.world, ground: this.ground, walkBounds: wb, margin: fly ? 1.5 : 0.5 });
+        const room = !!this.activeCameraRoom;
+        const flyGrow = room ? 0.5 : 2.5;
+        const wb = this.analysis ? (fly ? expandBounds(this.analysis.walkBounds, [flyGrow, 0, flyGrow]) : this.analysis.walkBounds) : null;
+        this.player.update(dt, input, { world: this.world, ground: this.ground, walkBounds: wb, margin: fly ? (room ? 0.4 : 1.5) : room ? 0.3 : 0.5 });
         this.syncRig();
       } else {
         this.rig.position.copy(this.introPose.position);

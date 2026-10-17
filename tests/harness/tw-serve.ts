@@ -1,4 +1,4 @@
-// Test harness on :8791 for the front end and the Third Wheel video layer, independent of the
+// Test harness on :8791 for the front end and the video layer, independent of the
 // real server and viewer.
 //
 //   bun tests/harness/tw-serve.ts            serve http://localhost:8791
@@ -105,9 +105,9 @@ async function findScene(id: string): Promise<Scene | undefined> {
 }
 
 const STAGES: Record<string, string[]> = {
-  thirdwheel: ['Uploading to HiPerGator', 'Estimating video depth', 'Cutting out the cook', 'Generating the room', 'Lining up depth and room', 'Packing the RGBD video', 'Downloading results'],
-  rentfree: ['Uploading to HiPerGator', 'Picking the sharpest frame', 'Generating the world', 'Filling in the corners', 'Compressing splats', 'Downloading results'],
-  reconstruct: ['Uploading to HiPerGator', 'Estimating cameras', 'Fitting splats', 'Downloading results'],
+  thirdwheel: ['Uploading your video', 'Estimating video depth', 'Cutting out the people', 'Building the room', 'Lining up depth and room', 'Packing the 3D video', 'Downloading results'],
+  rentfree: ['Uploading your photo', 'Picking the sharpest frame', 'Building the world', 'Filling in the corners', 'Compressing the world', 'Downloading results'],
+  reconstruct: ['Uploading your photos', 'Estimating cameras', 'Fitting the world', 'Downloading results'],
 };
 
 function touch(m: MockScene, patch: Partial<Scene>) {
@@ -129,7 +129,7 @@ function simulate(m: MockScene) {
     if (m.failOnce && p >= 0.5) {
       clearInterval(m.timer);
       m.failOnce = false;
-      touch(m, { status: 'failed', error: 'FlashWorld Space ran out of free GPU minutes. Retry, or bring the HiPerGator worker online.' });
+      touch(m, { status: 'failed', error: 'No GPU was free to build this world. Try again in a minute.' });
       return;
     }
     if (p >= 1) {
@@ -317,7 +317,7 @@ async function createScene(req: Request): Promise<Response> {
   if (!name) return json({ error: 'Give it a name' }, 400);
   const videos = files.filter((f) => f.type.startsWith('video/'));
   const images = files.filter((f) => f.type.startsWith('image/'));
-  if (mode === 'thirdwheel' && (videos.length !== 1 || images.length)) return json({ error: 'Third Wheel needs exactly one video' }, 400);
+  if (mode === 'thirdwheel' && (videos.length !== 1 || images.length)) return json({ error: 'Video mode needs exactly one video clip.' }, 400);
   if (mode === 'rentfree' && !files.length && !prompt) return json({ error: 'Add a photo, a clip or a prompt' }, 400);
   if (mode === 'reconstruct' && images.length < 8 && videos.length !== 1) return json({ error: 'Reconstruct needs 8+ photos or a video' }, 400);
 
@@ -576,7 +576,7 @@ ready.catch((err) => status('error: ' + err.message));
 
 const VIEW_HTML = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Third Wheel layer harness</title>
+<title>Video layer harness</title>
 <style>
   html, body { margin: 0; height: 100%; background: #050506; overflow: hidden; font: 13px/1.4 ui-monospace, Menlo, monospace; color: #e8e6e1; }
   canvas { display: block; touch-action: none; }
@@ -777,7 +777,7 @@ async function runShots(base: string) {
       await phone.waitForTimeout(800);
       await shot(phone, 'capture-phone');
       await shot(phone, 'capture-phone-full', true);
-      // Third Wheel with a photo must be rejected, then accept the clip.
+      // Video mode with a photo must be rejected, then accept the clip.
       await phone.click('[data-mode="thirdwheel"]');
       await phone.setInputFiles('#pick-files', join(SCENES, 'test-thirdwheel', 'thumb.jpg'));
       await phone.waitForTimeout(400);
@@ -789,7 +789,7 @@ async function runShots(base: string) {
       const err2 = await phone.$eval('#capture-error', (e) => e.textContent?.trim() ?? '');
       console.log(`thirdwheel + one video validation: "${err2}"`);
       await shot(phone, 'capture-phone-thirdwheel', true);
-      // Rent Free with a photo: downscale, upload with progress, land on the gallery.
+      // Photo mode with a photo: downscale, upload with progress, land on the gallery.
       await phone.goto(base + '/capture?mode=rentfree', { waitUntil: 'networkidle' });
       await phone.setInputFiles('#pick-files', join(SCENES, 'test-thirdwheel', 'plate.jpg'));
       await phone.fill('#scene-name', 'Harness kitchen');

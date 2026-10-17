@@ -25,7 +25,7 @@ import type { JobResult, Vec3 } from '../../shared/types.ts';
 import { SPACE_ID } from '../config.ts';
 import type { SpaceStatus } from '../health.ts';
 import { exec, extractFrame, FFMPEG, imageSize, lastLines, laplacianVariance, execBytes, pickBestFrameTime, probeVideo, thumbFromImage } from '../media.ts';
-import { readProgress, sleep, throwIfAborted, type Availability, type BackendDriver, type RunContext } from './types.ts';
+import { ProductError, readProgress, sleep, throwIfAborted, type Availability, type BackendDriver, type RunContext } from './types.ts';
 
 export const NEUTRAL_PROMPT = 'A realistic, detailed, static 3D scene with consistent lighting.';
 /** Long-side field of view assumed when a photo has no 35 mm focal length (phone main camera). */
@@ -174,8 +174,11 @@ export async function readSpzHeader(path: string): Promise<SpzHeader> {
   };
 }
 
-/** Turns a Space error into one actionable sentence. */
-export function explainSpaceError(message: string, hasToken: boolean): { reason: string; kind: 'quota' | 'crash' | 'other' } {
+/**
+ * Turns a Space error into one actionable sentence for the log (`reason`) and, when there is something useful to
+ * say, a product sentence for the UI (`user`) that names no service.
+ */
+export function explainSpaceError(message: string, hasToken: boolean): { reason: string; kind: 'quota' | 'crash' | 'other'; user?: string } {
   const m = message
     .replace(/\s+/g, ' ')
     .trim()
@@ -186,13 +189,18 @@ export function explainSpaceError(message: string, hasToken: boolean): { reason:
     const detail = /\(([^()]*requested[^()]*)\)/.exec(m)?.[1] ?? m.split(/(?<=\.)\s/)[0];
     return {
       kind: 'quota',
+      user: 'The free cloud GPU is used up for now. Try again later.',
       reason: hasToken
         ? `the ZeroGPU quota of this Hugging Face account is used up (${detail}); wait for it to refill or log in to HiPerGator`
         : `the anonymous ZeroGPU quota is used up (${detail}); put a Hugging Face read token in .env as HF_TOKEN or log in to HiPerGator`,
     };
   }
   if (/CUDA|NVML|CUDACachingAllocator|out of memory|GPU task aborted|ZeroGPU worker error|No CUDA GPUs/i.test(m)) {
-    return { kind: 'crash', reason: `the public Space crashed on its GPU, a problem on its side (${m.slice(0, 160)}); try again later or use HiPerGator` };
+    return {
+      kind: 'crash',
+      user: 'The cloud GPU had a problem on its side. Try again in a minute.',
+      reason: `the public Space crashed on its GPU, a problem on its side (${m.slice(0, 160)}); try again later or use HiPerGator`,
+    };
   }
   if (/401|403|Unauthorized|invalid token|Invalid user token/i.test(m)) {
     return { kind: 'other', reason: `Hugging Face rejected the token (${m}); check HF_TOKEN in .env` };
@@ -340,14 +348,14 @@ export function spaceDriver(opts: SpaceDriverOptions): SpaceDriver {
   }
 
   async function generate(ctx: RunContext, req: FlashWorldRequest): Promise<{ client: Client; result: GenerateResult }> {
-    ctx.report({ status: 'uploading', stage: 'Connecting to the FlashWorld Space', progress: 0.05 });
+    ctx.report({ status: 'uploading', stage: 'Connecting to the cloud GPU', progress: 0.05 });
     const client = await withTimeout(
       Client.connect(spaceId, { ...(token ? { token: token as `hf_${string}` } : {}), events: ['data', 'status'] }),
       120_000,
       'connecting to the Space',
     );
     throwIfAborted(ctx.signal);
-    ctx.report({ status: 'uploading', stage: 'Sending the request to the FlashWorld Space', progress: 0.08 });
+    ctx.report({ status: 'uploading', stage: 'Sending the request to the cloud GPU', progress: 0.08 });
     const job = client.submit('/gradio_generate', { json_input: JSON.stringify(req) });
     const onAbort = () => void job.cancel().catch(() => {});
     ctx.signal.addEventListener('abort', onAbort, { once: true });
@@ -360,11 +368,11 @@ export function spaceDriver(opts: SpaceDriverOptions): SpaceDriver {
           if (m.type === 'status') {
             if (m.stage === 'error') throw new Error(typeof m.message === 'string' ? m.message : 'the Space reported an error');
             if (m.stage === 'pending' && m.queue && typeof m.position === 'number' && m.position > 0) {
-              ctx.report({ status: 'queued', stage: `Waiting in the FlashWorld Space queue (${m.position} ahead)` });
+              ctx.report({ status: 'queued', stage: `Waiting for the cloud GPU (${m.position} ahead)` });
             } else if (m.stage === 'pending' || m.stage === 'generating') {
               if (!gpuStart) {
                 gpuStart = Date.now();
-                ctx.report({ status: 'running', stage: 'Generating the world on the FlashWorld Space', progress: 0.1 });
+                ctx.report({ status: 'running', stage: 'Generating the world on the cloud GPU', progress: 0.1 });
                 ticker = setInterval(() => {
                   const p = 0.1 + 0.75 * (1 - Math.exp(-(Date.now() - gpuStart) / 40_000));
                   ctx.report({ progress: p });
@@ -377,7 +385,7 @@ export function spaceDriver(opts: SpaceDriverOptions): SpaceDriver {
         }
         throw new Error('the Space closed the connection without a result');
       })();
-      const data = await withTimeout(run, timeoutMs, 'the FlashWorld Space');
+      const data = await withTimeout(run, timeoutMs, 'the Space');
       const raw = data?.[0];
       let parsed: any;
       try {
@@ -427,7 +435,7 @@ export function spaceDriver(opts: SpaceDriverOptions): SpaceDriver {
         splatCount: header.numPoints,
       },
       ...(thumb ? { thumb } : {}),
-      caption: source ? 'FlashWorld imagined the rest of the room from one photo' : `FlashWorld world from the prompt "${prompt.slice(0, 80)}"`,
+      caption: source ? 'Generated from one photo: the rest of the room was imagined.' : 'Generated from your prompt.',
     };
     await Bun.write(join(ctx.outDir, 'scene.json'), JSON.stringify(result, null, 2));
   }
@@ -436,11 +444,11 @@ export function spaceDriver(opts: SpaceDriverOptions): SpaceDriver {
     const work = join(ctx.jobDir, 'space');
     await mkdir(work, { recursive: true });
     await mkdir(ctx.outDir, { recursive: true });
-    ctx.report({ status: 'running', stage: 'Preparing the FlashWorld request', progress: 0.01 });
+    ctx.report({ status: 'running', stage: 'Getting ready', progress: 0.01 });
 
     const source = await pickSource(ctx, work);
     const userPrompt = ctx.job.prompt?.trim() ?? '';
-    if (!source && !userPrompt) throw new Error('nothing to generate from: no photo, video frame or prompt');
+    if (!source && !userPrompt) throw new ProductError('Photo mode needs a photo, a video or a prompt.', 'nothing to generate from: no photo, video frame or prompt');
     const prompt = userPrompt || NEUTRAL_PROMPT;
     const req = await buildRequest(ctx, work, prompt, source);
     throwIfAborted(ctx.signal);
@@ -459,8 +467,8 @@ export function spaceDriver(opts: SpaceDriverOptions): SpaceDriver {
           quotaReason = ex.reason;
           opts.onBlocked?.();
         }
-        if (ex.kind !== 'crash' || attempt === 2) throw new Error(ex.reason);
-        ctx.report({ status: 'queued', stage: 'The Space hit a GPU error; trying once more', progress: 0.05 });
+        if (ex.kind !== 'crash' || attempt === 2) throw ex.user ? new ProductError(ex.user, ex.reason) : new Error(ex.reason);
+        ctx.report({ status: 'queued', stage: 'The cloud GPU hiccupped; trying once more', progress: 0.05 });
         await sleep(5000, ctx.signal);
       }
     }
@@ -488,6 +496,7 @@ export function spaceDriver(opts: SpaceDriverOptions): SpaceDriver {
   return {
     name: 'hf-space',
     label: 'FlashWorld Space',
+    place: 'the cloud GPU',
     lane: 'hf-space',
     canResume: false,
     supports: (m) => m === 'rentfree',

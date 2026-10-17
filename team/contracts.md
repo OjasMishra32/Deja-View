@@ -436,6 +436,9 @@ labels appear instantly next time. The three demo worlds are labelled once in re
 
 ## 9. Photon bot (Seb)
 
+**Dropped (Sat early morning):** Photon is not a Devpost prize and the bot did not work. The demo mode and live path
+below now run from Seb's DeepSpace "Add a memory" page (`seb.md`, the update at the top); read "bot" as that page.
+
 **Demo mode.** The bot keeps a table: SHA-256 of demo media → scene id, and keywords → scene id.
 
 ```json

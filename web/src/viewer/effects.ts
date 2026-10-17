@@ -50,10 +50,11 @@ export class SkyDome {
         void main() {
           vec3 d = normalize(vDir);
           float h = d.y;
-          vec3 col = h >= 0.0 ? mix(horizon, top, pow(clamp(h, 0.0, 1.0), 0.55))
-                              : mix(horizon, bottom, pow(clamp(-h, 0.0, 1.0), 0.4));
+          // eased at the horizon so there is no crease where the two halves meet
+          vec3 col = h >= 0.0 ? mix(horizon, top, pow(smoothstep(0.0, 1.0, h), 0.6))
+                              : mix(horizon, bottom, pow(smoothstep(0.0, 1.0, -h), 0.45));
           // soft light toward the front of the world
-          float g = pow(max(dot(d, normalize(glowDir)), 0.0), 6.0) * glow * (1.0 - abs(h));
+          float g = pow(max(dot(d, normalize(glowDir)), 0.0), 6.0) * glow * (1.0 - smoothstep(0.0, 1.0, abs(h)));
           col += g * (horizon + 0.15);
           // dither to avoid banding in dark gradients
           col += (hash(gl_FragCoord.xy) - 0.5) / 255.0;
@@ -126,7 +127,9 @@ export class HeadVeil {
         void main() {
           vec3 d = normalize(vDir);
           float ang = acos(clamp(-d.z, -1.0, 1.0));
-          float inner = mix(1.15, 0.45, vignette);
+          // the tunnel closes from ~63 deg (barely moving) to ~24 deg (walking) off the gaze, and is
+          // fully dark from ~47 deg at walking speed
+          float inner = mix(1.1, 0.42, vignette);
           float v = smoothstep(inner, inner + 0.4, ang) * smoothstep(0.0, 0.08, vignette);
           float a = max(v, fade);
           vec3 col = mix(vignetteColor, fadeColor, fade >= v ? 1.0 : fade / max(v, 1e-3));
@@ -151,10 +154,24 @@ export class HeadVeil {
   }
 }
 
+/** A camera's view in world space, for fading out what it never saw. */
+export interface ViewCone {
+  position: THREE.Vector3;
+  right: THREE.Vector3;
+  up: THREE.Vector3;
+  forward: THREE.Vector3;
+  /** Image edges as tangents: left, right, down, up (all positive). */
+  tans: [number, number, number, number];
+  /** Fade width past the frame edge, in tangent units. */
+  soft: number;
+  /** The fade starts this far inside the frame (tangent units), so the picture has no hard edge. */
+  inset: number;
+}
+
 /**
- * GPU splat modifier: a reveal front that grows from the spawn on load, and a soft alpha falloff
- * for splats outside the world bounds so the world dissolves into the sky instead of ending in
- * hard junk.
+ * GPU splat modifier: a reveal front that grows from the spawn on load, a soft alpha falloff for
+ * splats outside the world bounds so the world dissolves into the sky instead of ending in hard
+ * junk, and (for rooms lifted from one camera) a soft fade of everything outside that camera's view.
  */
 export class SplatFx {
   readonly reveal = dyno.dynoFloat(1e5);
@@ -163,6 +180,13 @@ export class SplatFx {
   readonly boxMax = dyno.dynoVec3(new THREE.Vector3(1e4, 1e4, 1e4));
   readonly edge = dyno.dynoFloat(2.5);
   readonly glow = dyno.dynoFloat(0.35);
+  readonly conePos = dyno.dynoVec3(new THREE.Vector3());
+  readonly coneRight = dyno.dynoVec3(new THREE.Vector3(1, 0, 0));
+  readonly coneUp = dyno.dynoVec3(new THREE.Vector3(0, 1, 0));
+  readonly coneFwd = dyno.dynoVec3(new THREE.Vector3(0, 0, -1));
+  readonly coneTans = dyno.dynoVec4(new THREE.Vector4(1e3, 1e3, 1e3, 1e3));
+  /** x: fade width (tangent units), y: 1 when the view fade is on. */
+  readonly coneSoft = dyno.dynoVec4(new THREE.Vector4(0.3, 0, 0, 0));
   private mesh: SplatMesh | null = null;
 
   attach(mesh: SplatMesh): void {
@@ -170,9 +194,15 @@ export class SplatFx {
     const self = this;
     mesh.worldModifier = dyno.dynoBlock({ gsplat: dyno.Gsplat }, { gsplat: dyno.Gsplat }, ({ gsplat }) => {
       const fx = new dyno.Dyno({
-        inTypes: { gsplat: dyno.Gsplat, reveal: 'float', origin: 'vec3', bmin: 'vec3', bmax: 'vec3', edge: 'float', glow: 'float' },
+        inTypes: {
+          gsplat: dyno.Gsplat, reveal: 'float', origin: 'vec3', bmin: 'vec3', bmax: 'vec3', edge: 'float', glow: 'float',
+          cpos: 'vec3', cright: 'vec3', cup: 'vec3', cfwd: 'vec3', ctans: 'vec4', csoft: 'vec4',
+        },
         outTypes: { gsplat: dyno.Gsplat },
-        inputs: { gsplat, reveal: self.reveal, origin: self.origin, bmin: self.boxMin, bmax: self.boxMax, edge: self.edge, glow: self.glow },
+        inputs: {
+          gsplat, reveal: self.reveal, origin: self.origin, bmin: self.boxMin, bmax: self.boxMax, edge: self.edge, glow: self.glow,
+          cpos: self.conePos, cright: self.coneRight, cup: self.coneUp, cfwd: self.coneFwd, ctans: self.coneTans, csoft: self.coneSoft,
+        },
         statements: ({ inputs, outputs }) => [
           `${outputs.gsplat} = ${inputs.gsplat};`,
           `{`,
@@ -183,6 +213,19 @@ export class SplatFx {
           `  float front = ${inputs.reveal};`,
           `  float shown = 1.0 - smoothstep(front - 0.8, front, r);`,
           `  float band = smoothstep(front - 0.8, front - 0.35, r) * shown;`,
+          // outside the camera's view: fade by how far past the frame edge the splat lies
+          `  if (${inputs.csoft}.y > 0.5) {`,
+          `    vec3 dc = c - ${inputs.cpos};`,
+          `    float dz = dot(dc, ${inputs.cfwd});`,
+          `    float tx = dot(dc, ${inputs.cright}) / max(dz, 1e-3);`,
+          `    float ty = dot(dc, ${inputs.cup}) / max(dz, 1e-3);`,
+          // signed distance to the frame edge in tangent units (negative inside the frame)
+          `    float sx = max(-${inputs.ctans}.x - tx, tx - ${inputs.ctans}.y);`,
+          `    float sy = max(-${inputs.ctans}.z - ty, ty - ${inputs.ctans}.w);`,
+          `    float out_ = length(max(vec2(sx, sy), 0.0)) + min(max(sx, sy), 0.0);`,
+          `    if (dz <= 0.02) out_ = 10.0;`,
+          `    keep *= 1.0 - smoothstep(-${inputs.csoft}.z, ${inputs.csoft}.x, out_);`,
+          `  }`,
           `  ${outputs.gsplat}.rgba.a *= keep * shown;`,
           `  ${outputs.gsplat}.rgba.rgb += band * ${inputs.glow} * vec3(1.0, 0.82, 0.55);`,
           `}`,
@@ -200,6 +243,21 @@ export class SplatFx {
     this.touch();
   }
 
+  /** Fades out splats the given camera never saw (null turns the fade off). */
+  setViewCone(cone: ViewCone | null): void {
+    if (cone) {
+      this.conePos.value.copy(cone.position);
+      this.coneRight.value.copy(cone.right);
+      this.coneUp.value.copy(cone.up);
+      this.coneFwd.value.copy(cone.forward);
+      this.coneTans.value.set(...cone.tans);
+      this.coneSoft.value.set(cone.soft, 1, cone.inset, 0);
+    } else {
+      this.coneSoft.value.set(0.3, 0, 0, 0);
+    }
+    this.touch();
+  }
+
   setReveal(radius: number, origin?: THREE.Vector3): void {
     this.reveal.value = radius;
     if (origin) this.origin.value.copy(origin);
@@ -209,6 +267,73 @@ export class SplatFx {
   /** Tells Spark the modifier inputs changed so the splats are regenerated. */
   touch(): void {
     this.mesh?.updateVersion();
+  }
+}
+
+/**
+ * A soft pool of floor under the walk area, for rooms that have no floor of their own where you
+ * stand (a room lifted from one camera never saw the floor at your feet). Fades into the sky.
+ */
+export class GroundGlow {
+  readonly mesh: THREE.Mesh;
+  private readonly u: { color: { value: THREE.Vector3 }; inner: { value: number }; outer: { value: number }; strength: { value: number } };
+
+  constructor() {
+    this.u = {
+      color: { value: new THREE.Vector3(0.2, 0.19, 0.18) },
+      inner: { value: 0.2 },
+      outer: { value: 1 },
+      strength: { value: 0.92 },
+    };
+    const material = new THREE.ShaderMaterial({
+      uniforms: this.u,
+      transparent: true,
+      depthWrite: false,
+      depthTest: true,
+      vertexShader: /* glsl */ `
+        varying vec2 vXZ;
+        void main() {
+          vXZ = position.xy;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: /* glsl */ `
+        uniform vec3 color;
+        uniform float inner;
+        uniform float outer;
+        uniform float strength;
+        varying vec2 vXZ;
+        float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+        void main() {
+          float r = length(vXZ);
+          float a = (1.0 - smoothstep(inner, outer, r)) * strength;
+          // a touch lighter in the middle, like light falling on the floor where you stand
+          vec3 col = color * (1.0 + 0.18 * (1.0 - smoothstep(0.0, outer, r)));
+          col += (hash(gl_FragCoord.xy) - 0.5) / 255.0;
+          gl_FragColor = vec4(col, a);
+        }`,
+    });
+    this.mesh = new THREE.Mesh(new THREE.CircleGeometry(1, 64), material);
+    this.mesh.name = 'ground-glow';
+    this.mesh.rotation.x = -Math.PI / 2;
+    // before the splats (transparent pass) so everything in the room draws over it
+    this.mesh.renderOrder = -500;
+    this.mesh.frustumCulled = false;
+    this.mesh.visible = false;
+  }
+
+  /** Places the pool (floor at y) and sets its radius and colour. */
+  set(x: number, y: number, z: number, radius: number, color: RGB): void {
+    this.mesh.position.set(x, y + 0.003, z);
+    // the disc is a unit circle scaled to the radius, so the falloff is in disc units
+    this.mesh.scale.setScalar(radius);
+    this.u.outer.value = 1;
+    this.u.inner.value = 0.2;
+    this.u.color.value.copy(v3(color));
+    this.mesh.visible = true;
+  }
+
+  hide(): void {
+    this.mesh.visible = false;
   }
 }
 

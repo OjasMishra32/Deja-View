@@ -23,6 +23,8 @@ export interface JobState {
   remoteDir?: string;
   /** hpg-batch: Slurm job id. */
   slurmId?: string;
+  /** Backend restriction the job was queued with (?backend=...), kept across restarts. */
+  only?: Backend;
 }
 
 export type ActiveStatus = 'queued' | 'uploading' | 'running' | 'downloading';
@@ -57,8 +59,10 @@ export type Availability = { ok: true; note?: string } | { ok: false; reason: st
 
 export interface BackendDriver {
   name: Backend;
-  /** Human label used in stages and errors, e.g. "HiPerGator worker". */
+  /** Label for log lines, e.g. "HiPerGator worker". Never shown in the UI. */
   label: string;
+  /** Where the job runs, as product copy for stage lines: "the HiPerGator GPU", "this computer". */
+  place?: string;
   /** Jobs that share a lane run one at a time. */
   lane: string;
   supports(mode: SceneMode): boolean;
@@ -66,6 +70,20 @@ export interface BackendDriver {
   run(ctx: RunContext): Promise<void>;
   /** Whether run(ctx) with ctx.resume can re-attach to work started before a restart. */
   canResume: boolean;
+}
+
+/**
+ * A failure that carries a short product sentence for the UI (`user`) next to the technical detail (`message`),
+ * which only goes to log.txt. Backends throw it when they know what went wrong in words a person can act on.
+ */
+export class ProductError extends Error {
+  constructor(
+    readonly user: string,
+    detail?: string,
+  ) {
+    super(detail || user);
+    this.name = 'ProductError';
+  }
 }
 
 /** Thrown by run() when asked to resume but there is nothing to attach to; the runner starts over. */

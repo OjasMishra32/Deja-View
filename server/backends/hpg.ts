@@ -24,7 +24,7 @@ import {
   type WorkerStatus,
 } from '../hpg.ts';
 import { lastLines } from '../media.ts';
-import { ResumeImpossible, sleep, throwIfAborted, type Availability, type BackendDriver, type RunContext } from './types.ts';
+import { ProductError, ResumeImpossible, sleep, throwIfAborted, type Availability, type BackendDriver, type RunContext } from './types.ts';
 
 export interface HpgProbe {
   online(): Promise<{ online: boolean; reason?: string }>;
@@ -37,6 +37,10 @@ export interface HpgDriverOptions {
   pollMs?: number;
   /** Worker: how long a queued job may wait to be claimed. */
   claimTimeoutMs?: number;
+  /** Worker: how long a queued job may wait while the worker is still loading its models (heartbeat status). */
+  loadingTimeoutMs?: number;
+  /** Worker: how long to wait for the worker to move a finished job from running/ to done/. */
+  settleMs?: number;
   /** Worker: how long a claimed job may go without a fresh heartbeat. */
   workerStaleMs?: number;
   /** Total wall time for one job. */
@@ -72,12 +76,20 @@ async function withRetries<T>(fn: () => Promise<T>, signal: AbortSignal, what: s
   throw new Error(`lost the connection to HiPerGator while ${what}: ${(last as Error)?.message ?? last}`);
 }
 
-function failureFrom(p: { failText?: string; progress?: { error?: string }; logTail?: string }, fallback: string): string {
-  if (p.progress?.error) return p.progress.error;
-  if (p.failText) return lastLines(p.failText, 6);
-  if (p.logTail) return `${fallback}: ${lastLines(p.logTail, 4)}`;
-  return fallback;
+/** The job's failure: the pipeline's product sentence (progress.json `error`) when there is one, else technical text. */
+function failureFrom(p: { failText?: string; progress?: { error?: string; detail?: string }; logTail?: string }, fallback: string): Error {
+  const err = p.progress?.error;
+  if (err) {
+    const detail = typeof p.progress?.detail === 'string' && p.progress.detail.trim() ? `${err} (${p.progress.detail.trim()})` : err;
+    return new ProductError(err, detail);
+  }
+  if (p.failText) return new Error(lastLines(p.failText, 6));
+  if (p.logTail) return new Error(`${fallback}: ${lastLines(p.logTail, 4)}`);
+  return new Error(fallback);
 }
+
+/** Heartbeat states in which the worker is alive but cannot claim jobs yet. */
+const WARMING = new Set(['starting', 'loading']);
 
 async function onlineOrReason(probe: HpgProbe): Promise<Availability> {
   const o = await probe.online();
@@ -88,6 +100,8 @@ export function hpgWorkerDriver(opts: HpgDriverOptions): BackendDriver {
   const cfgOf = opts.cfg ?? (() => hpgConfig());
   const pollMs = opts.pollMs ?? 2000;
   const claimTimeout = opts.claimTimeoutMs ?? 3 * 60_000;
+  const loadingTimeout = opts.loadingTimeoutMs ?? 12 * 60_000;
+  const settleMs = opts.settleMs ?? 20_000;
   const staleMs = opts.workerStaleMs ?? 3 * 60_000;
   const maxJob = opts.maxJobMs ?? 45 * 60_000;
 
@@ -106,7 +120,7 @@ export function hpgWorkerDriver(opts: HpgDriverOptions): BackendDriver {
     if (ctx.resume) {
       if (!ctx.state.remoteDir) throw new ResumeImpossible('the job never reached HiPerGator');
     } else {
-      ctx.report({ status: 'uploading', stage: 'Sending to HiPerGator', progress: 0 });
+      ctx.report({ status: 'uploading', stage: 'Sending to the GPU cluster', progress: 0 });
       await withRetries(() => syncRepoThrottled(cfg), ctx.signal, 'syncing the pipeline');
       await withRetries(() => runOk(`mkdir -p ${shq(`${jr}/incoming`)}`, 'mkdir', { cfg }), ctx.signal, 'preparing the job');
       await withRetries(
@@ -123,8 +137,11 @@ export function hpgWorkerDriver(opts: HpgDriverOptions): BackendDriver {
     let lastFresh = Date.now();
     let sawJob = false;
     let missing = 0;
+    /** Queue time that counts against the claim timeout: time spent while the worker was warming up does not. */
+    let claimClock = Date.now();
+    let doneSince: number | null = null;
     let p: WorkerPoll;
-    ctx.report({ status: 'queued', stage: 'Waiting for the HiPerGator worker' });
+    ctx.report({ status: 'queued', stage: 'Waiting for a GPU' });
     const cancel = async () => {
       // Unclaimed: take it back. Claimed: leave a CANCEL marker the worker can honour.
       await run(
@@ -144,19 +161,33 @@ export function hpgWorkerDriver(opts: HpgDriverOptions): BackendDriver {
           const dir = `${jr}/${p.where}/${jobId}`;
           if (dir !== ctx.state.remoteDir) await ctx.saveState({ remoteDir: dir });
         }
-        if (p.failed) throw new Error(failureFrom(p, 'the GPU job failed'));
-        if (p.done) break;
+        if (p.failed) throw failureFrom(p, 'the GPU job failed');
+        if (p.done) {
+          // The worker writes DONE inside running/<id>/ and moves the folder to done/ right after. Downloading from
+          // running/ in that window loses the result, so wait for the move (bounded, in case the worker died).
+          if (p.where !== 'running') break;
+          doneSince ??= Date.now();
+          if (Date.now() - doneSince > settleMs) break;
+          await sleep(Math.min(pollMs, 500), ctx.signal);
+          continue;
+        }
         if (p.where === 'queue') {
-          ctx.report({ status: 'queued', stage: 'Waiting for the HiPerGator worker' });
-          if (Date.now() - t0 > claimTimeout) {
+          const warming = WARMING.has(p.worker.status ?? '');
+          ctx.report({ status: 'queued', stage: warming ? 'Waiting for the GPU to warm up' : 'Waiting for a GPU' });
+          if (warming && Date.now() - t0 < loadingTimeout) claimClock = Date.now();
+          if (Date.now() - claimClock > claimTimeout) {
             await cancel();
-            throw new Error(`the worker did not pick up the job within ${Math.round(claimTimeout / 60_000)} min`);
+            throw new Error(
+              warming
+                ? `the worker was still loading its models after ${Math.round(loadingTimeout / 60_000)} min`
+                : `the worker did not pick up the job within ${Math.round(claimTimeout / 60_000)} min`,
+            );
           }
         } else if (p.where === 'running') {
           if (p.progress) {
             ctx.report({ status: 'running' });
             ctx.reportProgress(p.progress);
-          } else ctx.report({ status: 'running', stage: 'Running on the HiPerGator GPU' });
+          } else ctx.report({ status: 'running', stage: 'Running on the GPU cluster' });
         }
         if (Date.now() - lastFresh > staleMs) {
           throw new Error(`the HiPerGator worker stopped sending heartbeats (${Math.round((Date.now() - lastFresh) / 1000)} s)`);
@@ -174,14 +205,27 @@ export function hpgWorkerDriver(opts: HpgDriverOptions): BackendDriver {
 
     ctx.report({ status: 'downloading', stage: 'Downloading the world', progress: 1 });
     await mkdir(ctx.outDir, { recursive: true });
-    const remoteOut = `${jr}/${p.where === 'missing' ? 'done' : p.where}/${jobId}/out`;
-    await withRetries(() => rsyncDown(remoteOut, ctx.outDir, { cfg }), ctx.signal, 'downloading the result');
+    let where = p.where === 'missing' ? 'done' : p.where;
+    for (let i = 0; ; i++) {
+      try {
+        await withRetries(() => rsyncDown(`${jr}/${where}/${jobId}/out`, ctx.outDir, { cfg }), ctx.signal, 'downloading the result');
+        break;
+      } catch (e) {
+        // The folder may have moved (running/ -> done/) between the last poll and rsync: find it and try again.
+        if (i >= 2 || ctx.signal.aborted) throw e;
+        const again = await withRetries(() => pollWorkerJob(jobId, cfg), ctx.signal, 'finding the result');
+        if (again.where === 'missing' || again.where === where) throw e;
+        ctx.log(`the finished job moved to ${again.where}/; downloading from there`);
+        where = again.where;
+      }
+    }
     if (p.logTail) ctx.logRaw(p.logTail);
   }
 
   return {
     name: 'hpg-worker',
     label: 'HiPerGator worker',
+    place: 'the GPU cluster',
     lane: 'hpg',
     canResume: true,
     supports: (m) => ALL_MODES.includes(m),
@@ -194,13 +238,13 @@ export function hpgWorkerDriver(opts: HpgDriverOptions): BackendDriver {
 export function batchStage(p: BatchPoll): string {
   if (p.state === 'PENDING' || p.state === 'CONFIGURING') {
     const r = p.reason;
-    if (!r || r === 'None') return 'Waiting for a HiPerGator GPU';
-    if (/Priority|Resources/i.test(r)) return `Waiting for a HiPerGator GPU (${r === 'Priority' ? 'other jobs first' : 'GPUs busy'})`;
-    if (/QOS|Assoc/i.test(r)) return `Waiting for a HiPerGator GPU (group limit: ${r})`;
-    return `Waiting for a HiPerGator GPU (${r})`;
+    if (!r || r === 'None') return 'Waiting for a GPU';
+    if (/Priority|Resources/i.test(r)) return `Waiting for a GPU (${r === 'Priority' ? 'other jobs first' : 'all busy'})`;
+    if (/QOS|Assoc/i.test(r)) return 'Waiting for a GPU (group limit reached)';
+    return 'Waiting for a GPU';
   }
-  if (p.state === 'RUNNING' || p.state === 'COMPLETING') return 'Running on the HiPerGator GPU';
-  return `HiPerGator job ${p.state.toLowerCase()}`;
+  if (p.state === 'RUNNING' || p.state === 'COMPLETING') return 'Running on the GPU cluster';
+  return 'Finishing up on the GPU cluster';
 }
 
 export function hpgBatchDriver(opts: HpgDriverOptions): BackendDriver {
@@ -219,7 +263,7 @@ export function hpgBatchDriver(opts: HpgDriverOptions): BackendDriver {
       ctx.log(`re-attached to Slurm job ${slurmId}`);
     } else {
       remoteDir = batchJobDir(cfg, jobId);
-      ctx.report({ status: 'uploading', stage: 'Sending to HiPerGator', progress: 0 });
+      ctx.report({ status: 'uploading', stage: 'Sending to the GPU cluster', progress: 0 });
       await withRetries(() => syncRepoThrottled(cfg, true), ctx.signal, 'syncing the pipeline');
       await withRetries(() => rsyncUp(ctx.jobDir, remoteDir!, { cfg, exclude: UPLOAD_EXCLUDES }), ctx.signal, 'uploading the inputs');
       throwIfAborted(ctx.signal);
@@ -244,7 +288,8 @@ export function hpgBatchDriver(opts: HpgDriverOptions): BackendDriver {
           pendingSince ??= Date.now();
           if (Date.now() - pendingSince > pendingTimeout) {
             await cancelBatch(slurmId!, cfg);
-            throw new Error(
+            throw new ProductError(
+              'No GPU became free in time. Try again in a few minutes.',
               `no HiPerGator GPU became free within ${Math.round(pendingTimeout / 60_000)} min (Slurm: ${p.reason ?? 'pending'}); the request was cancelled`,
             );
           }
@@ -253,11 +298,11 @@ export function hpgBatchDriver(opts: HpgDriverOptions): BackendDriver {
           if (p.progress) ctx.reportProgress(p.progress);
           else ctx.report({ stage: batchStage(p) });
         }
-        if (p.failed) throw new Error(failureFrom(p, `the GPU job failed (Slurm ${p.state})`));
+        if (p.failed) throw failureFrom(p, `the GPU job failed (Slurm ${p.state})`);
         if (p.terminal) {
           if (p.state === 'COMPLETED' && p.done) break;
           const why = p.state === 'TIMEOUT' ? 'hit its time limit' : p.state === 'OUT_OF_MEMORY' ? 'ran out of memory' : `ended as ${p.state}`;
-          throw new Error(failureFrom(p, `Slurm job ${slurmId} ${why}${p.exitCode ? ` (exit ${p.exitCode})` : ''}`));
+          throw failureFrom(p, `Slurm job ${slurmId} ${why}${p.exitCode ? ` (exit ${p.exitCode})` : ''}`);
         }
         if (p.done && p.state === 'UNKNOWN') break;
         if (Date.now() - t0 > maxJob) {
@@ -280,6 +325,7 @@ export function hpgBatchDriver(opts: HpgDriverOptions): BackendDriver {
   return {
     name: 'hpg-batch',
     label: 'HiPerGator batch',
+    place: 'the GPU cluster',
     lane: 'hpg',
     canResume: true,
     supports: (m) => ALL_MODES.includes(m),

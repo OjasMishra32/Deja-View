@@ -13,7 +13,7 @@ import pytest
 
 import flashworld_run as fw
 import splat_io as sio
-from conftest import SAMPLES
+from gpu_helpers import SAMPLES
 
 torch = pytest.importorskip("torch")
 BEDROOM = SAMPLES / "sample-painted-bedroom" / "world.spz"

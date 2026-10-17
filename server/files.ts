@@ -44,9 +44,13 @@ export function mimeFor(path: string): string {
   return MIME[extname(path).toLowerCase()] ?? 'application/octet-stream';
 }
 
+/**
+ * CORS for reads only (scene assets, the scene list, health): any origin may GET them. Requests that change things
+ * (POST, DELETE) never get these headers; server/guard.ts decides who may make them.
+ */
 export const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, HEAD, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
   'Access-Control-Allow-Headers': 'Range, Content-Type, If-None-Match, If-Range, If-Modified-Since',
   'Access-Control-Expose-Headers': 'Content-Range, Accept-Ranges, Content-Length, Content-Type, ETag',
   'Access-Control-Max-Age': '86400',
@@ -168,6 +172,6 @@ export async function serveFile(req: Request, path: string, opts: ServeOptions =
   return new Response(body, { status: 200, headers });
 }
 
-export function notFound(message = 'Not found'): Response {
+export function notFound(message = 'Not found.'): Response {
   return Response.json({ error: message }, { status: 404, headers: CORS_HEADERS });
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Downloads the model weights into the Hugging Face cache ($HF_HOME = $HPG_ROOT/models). Idempotent.
 
-  python hpg/fetch_weights.py [flashworld] [wan] [captioner] [anysplat]     (default: all)
+  python hpg/fetch_weights.py [flashworld] [wan] [captioner] [anysplat] [video]     (default: all)
 
 Run it on a compute node (hpg/setup.sh weights does). Retries each repo a few times.
 """
@@ -25,6 +25,11 @@ GROUPS: dict[str, list[tuple[str, dict]]] = {
     # AnySplat and the VGGT backbone its constructor loads (2.9 + 5.0 GB).
     "anysplat": [("lhjiang/anysplat", {"allow_patterns": ["config.json", "model.safetensors"]}),
                  ("facebook/VGGT-1B", {"allow_patterns": ["config.json", "model.safetensors"]})],
+    # The video pipeline's depth models (pipeline/common/models.py DEFAULT_FRAME_DEPTH and DEFAULT_PLATE_DEPTH; keep
+    # these repo ids in sync). Fetched here too, so the weights stage never stamps weights.ok (which switches jobs to
+    # HF_HUB_OFFLINE=1) without them, even when the video env does not exist yet (0.1 + 0.4 GB).
+    "video": [("depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf", {"allow_patterns": ["*.json", "*.safetensors", "*.txt"]}),
+              ("depth-anything/Depth-Anything-V2-Metric-Indoor-Base-hf", {"allow_patterns": ["*.json", "*.safetensors", "*.txt"]})],
 }
 
 

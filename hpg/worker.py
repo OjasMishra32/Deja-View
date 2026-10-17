@@ -39,7 +39,16 @@ DEFAULT_PIPELINE = REPO / "pipeline"
 HEARTBEAT_SECONDS = 30.0
 SETTLE_SECONDS = 2.0
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".bmp", ".tif", ".tiff", ".avif"}
-VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".3gp", ".mts"}
+VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".3gp", ".mts", ".m2ts", ".ts", ".mpg", ".mpeg", ".flv", ".wmv"}
+# Product sentences the app shows (progress.json `error`); the technical cause goes to `detail` and log.txt.
+GENERIC_FAILURE = {
+    "rentfree": "We couldn't build this world. Try again in a minute.",
+    "thirdwheel": "We couldn't turn this video into a room. Try again in a minute.",
+    "reconstruct": "We couldn't reconstruct this place. Try again in a minute.",
+}
+CANCELLED = "Cancelled."
+TOO_LONG = "This took too long on the GPU and was stopped. Try a shorter clip."
+UNSUPPORTED = "This kind of scene isn't supported."
 
 
 def now_iso() -> str:
@@ -266,9 +275,12 @@ class MiniJob:
         write_json_atomic(self.dir / "progress.json", {"stage": stage, "progress": 1.0, "done": True})
         (self.dir / "DONE").write_text(time.strftime("%Y-%m-%dT%H:%M:%S%z") + "\n")
 
-    def finish_failed(self, error: str) -> None:
-        write_json_atomic(self.dir / "progress.json", {**self._last, "error": error, "done": True})
-        (self.dir / "FAILED").write_text(error.strip() + "\n")
+    def finish_failed(self, error: str, detail: str | None = None) -> None:
+        prog = {**self._last, "error": error, "done": True}
+        if detail and detail.strip() != error.strip():
+            prog["detail"] = detail.strip()[:4000]
+        write_json_atomic(self.dir / "progress.json", prog)
+        (self.dir / "FAILED").write_text(error.strip() + (f"\n{detail.strip()}" if "detail" in prog else "") + "\n")
 
 
 def open_job(jobdir: Path):
@@ -422,35 +434,38 @@ class Worker:
             for m in ("DONE", "FAILED"):
                 (run_dir / m).unlink(missing_ok=True)
             if (run_dir / "CANCEL").exists():
-                self._fail(run_dir, "Cancelled before it started")
+                self._fail(run_dir, CANCELLED, "Cancelled before it started")
             elif mode == "rentfree" and self.rentfree_inprocess and self.model_error is None:
                 self.run_rentfree(run_dir)
             elif mode in ("rentfree", "thirdwheel", "reconstruct"):
                 requeued = self.run_subprocess(run_dir, mode)
             else:
-                self._fail(run_dir, f"Unknown job mode {mode!r}")
+                self._fail(run_dir, UNSUPPORTED, f"Unknown job mode {mode!r}")
         except Exception as e:
             traceback.print_exc()
-            self._fail(run_dir, f"Worker error: {type(e).__name__}: {e}")
+            self._fail(run_dir, GENERIC_FAILURE.get(mode, GENERIC_FAILURE["rentfree"]), f"Worker error: {type(e).__name__}: {e}")
         finally:
             if requeued:
                 log(f"{job_id} returned to the queue")
             else:
                 if not ((run_dir / "DONE").exists() or (run_dir / "FAILED").exists()):
-                    self._fail(run_dir, "The job ended without a result")
+                    self._fail(run_dir, GENERIC_FAILURE.get(mode, GENERIC_FAILURE["rentfree"]), "The job ended without a result")
                 self.dirs.finish(run_dir)
                 self.jobs_done += 1
                 ok = (self.dirs.done / job_id / "DONE").exists()
                 log(f"{job_id} {'done' if ok else 'failed'} in {time.time() - t0:.1f}s")
 
     @staticmethod
-    def _fail(run_dir: Path, error: str) -> None:
+    def _fail(run_dir: Path, error: str, detail: str | None = None) -> None:
+        """`error` is the product sentence the app shows; `detail` is the technical cause (log and progress.json)."""
         prog = read_json(run_dir / "progress.json", {}) or {}
-        write_json_atomic(run_dir / "progress.json", {"stage": prog.get("stage", "Failed"), "progress": prog.get("progress", 0.0),
-                                                       "error": error, "done": True})
-        (run_dir / "FAILED").write_text(error.strip() + "\n")
+        out = {"stage": prog.get("stage", "Failed"), "progress": prog.get("progress", 0.0), "error": error, "done": True}
+        if detail and detail.strip() != error.strip():
+            out["detail"] = detail.strip()[:4000]
+        write_json_atomic(run_dir / "progress.json", out)
+        (run_dir / "FAILED").write_text(error.strip() + (f"\n{detail.strip()}" if "detail" in out else "") + "\n")
         with open(run_dir / "log.txt", "a") as f:
-            f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] FAILED: {error}\n")
+            f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] FAILED: {detail or error}\n")
 
     def run_rentfree(self, run_dir: Path) -> None:
         """Runs a Rent Free job in this process with the warm model."""
@@ -458,7 +473,7 @@ class Worker:
         job = open_job(run_dir)
         job.clear_markers()
         try:
-            job.stage("Starting on the HiPerGator GPU", 0.01)
+            job.stage("Starting on the GPU", 0.01)
             images, videos = job.input_images(), job.input_videos()
             image = None
             if images:
@@ -470,12 +485,15 @@ class Worker:
                 job.log(f"input frame from {videos[0].name}")
             prompt = job.prompt
             if image is None and not prompt:
-                raise ValueError("No photo, video or prompt in the job")
+                raise _ProductError("Photo mode needs a photo, a video or a prompt.", "No photo, video or prompt in the job")
             kw = fw.kwargs_from_params(job.params)
             if "seed" not in kw:
                 kw["seed"] = int(job.params.get("attempt") or 0)
             prog = fw.sio.Progress(lambda stage, value: job.progress(stage, value))
             result = fw.generate(image, prompt, job.out_dir, prog, **kw)
+            if not images and videos:  # a frame of a clip, not a photo: say so in the gallery caption
+                result["caption"] = "Generated from the sharpest frame of your clip: the rest of the room was imagined."
+                write_json_atomic(job.out_dir / "scene.json", result)
             diag = read_json(job.out_dir / "flashworld.json", {}) or {}
             job.log(f"world: {result['world']['splatCount']} splats, floor {'found' if result['world']['floorY'] is not None else 'not found'}, "
                     f"generation {diag.get('generateSeconds')}s, total {diag.get('totalSeconds')}s")
@@ -483,7 +501,11 @@ class Worker:
         except Exception as e:
             traceback.print_exc()
             job.log(traceback.format_exc())
-            job.finish_failed(_user_error(e))
+            user, detail = _explain(e, "rentfree")
+            try:
+                job.finish_failed(user, detail)
+            except TypeError:  # an older Job without a detail argument
+                job.finish_failed(f"{user}\n{detail}")
 
     def python_for(self, mode: str) -> str:
         env = {"thirdwheel": "TW_PY_VIDEO", "reconstruct": "TW_PY_ANYSPLAT", "rentfree": "TW_PY_FLASHWORLD"}.get(mode)
@@ -494,7 +516,7 @@ class Worker:
         """Runs pipeline/run_job.py for the job. Returns True if the job was put back in the queue."""
         script = self.pipeline_dir / "run_job.py"
         if not script.exists():
-            self._fail(run_dir, f"{script} is missing on HiPerGator (sync the repo)")
+            self._fail(run_dir, GENERIC_FAILURE.get(mode, GENERIC_FAILURE["rentfree"]), f"{script} is missing on HiPerGator (sync the repo)")
             return False
         cmd = [self.python_for(mode), "-u", str(script), str(run_dir)]
         env = dict(os.environ, PYTHONUNBUFFERED="1", TW_FW_REQUESTS=str(self.dirs.fw_requests))
@@ -504,6 +526,7 @@ class Worker:
                                 start_new_session=True)
         t0 = time.time()
         reason = None
+        user = GENERIC_FAILURE.get(mode, GENERIC_FAILURE["rentfree"])
         try:
             while proc.poll() is None:
                 self.serve_fw_requests()
@@ -511,6 +534,7 @@ class Worker:
                     reason = "Cancelled"
                 elif time.time() - t0 > self.job_timeout:
                     reason = f"Timed out after {self.job_timeout / 60:.0f} min on the worker"
+                    user = TOO_LONG
                 elif self.stopping:
                     reason = "requeue"
                 if reason:
@@ -523,11 +547,12 @@ class Worker:
             self.dirs.requeue(run_dir)
             return True
         if reason:
-            self._fail(run_dir, reason)
+            self._fail(run_dir, CANCELLED if reason == "Cancelled" else user, reason)
             return False
         if not ((run_dir / "DONE").exists() or (run_dir / "FAILED").exists()):
             tail = _tail(run_dir / "console.txt", 12)
-            self._fail(run_dir, f"run_job.py exited with code {proc.returncode} without a result\n{tail}")
+            self._fail(run_dir, GENERIC_FAILURE.get(mode, GENERIC_FAILURE["rentfree"]),
+                       f"run_job.py exited with code {proc.returncode} without a result\n{tail}")
         return False
 
     # ---- room requests from other pipelines ---------------------------------------------------------------------
@@ -567,6 +592,28 @@ class Worker:
             finally:
                 self.heartbeat.update(status=prev, request=None)
         return n
+
+
+class _ProductError(RuntimeError):
+    """A failure with a product sentence (`user`) for the app and a technical message for the log."""
+
+    def __init__(self, user: str, detail: str):
+        super().__init__(detail)
+        self.user = user
+
+
+def _explain(e: BaseException, mode: str) -> tuple[str, str]:
+    """(product sentence, technical detail) of a failure; the pipeline's own explain_failure when importable."""
+    try:
+        from common.jobio import explain_failure  # pipeline/ is on sys.path
+
+        return explain_failure(e, mode)
+    except ImportError:
+        detail = str(e).strip() or type(e).__name__
+        user = getattr(e, "user", None)
+        if "out of memory" in detail.lower():
+            user = "This one needed more memory than we had. Try a shorter clip or a smaller photo."
+        return (user or GENERIC_FAILURE.get(mode, GENERIC_FAILURE["rentfree"])), detail
 
 
 def _user_error(e: BaseException) -> str:

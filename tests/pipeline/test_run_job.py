@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from conftest import ROOT, make_clip, requires_ffmpeg
+from pipeline_helpers import ROOT, make_clip, requires_ffmpeg
 
 from common.media import save_jpg
 from common.frame_pick import best_photo, best_video_frame
@@ -36,6 +36,17 @@ def _run(jd: Path, **env) -> subprocess.CompletedProcess:
 
 def _check_vec(v, n):
     assert isinstance(v, list) and len(v) == n and all(isinstance(x, (int, float)) for x in v)
+
+
+# Words that must never reach the app (progress.json `error`/`stage`, result `caption`): tools, models, services, jargon.
+FORBIDDEN = ("FlashWorld", "AnySplat", "Depth Anything", "Hugging Face", "HiPerGator", "Space", "CUDA", "Traceback",
+             "local fallback", "no GPU world model", "plate", "Rent Free", "Third Wheel", "ThirdWheel", "/")
+
+
+def assert_product_copy(text: str) -> None:
+    assert text and text.strip() == text and text[-1] in ".!?", text
+    for word in FORBIDDEN:
+        assert word not in text, f"{word!r} in {text!r}"
 
 
 def check_job_result(res: dict) -> None:
@@ -73,7 +84,8 @@ def test_unknown_mode_fails_cleanly(tmp_path):
     assert r.returncode == 1
     assert (jd / "FAILED").exists() and not (jd / "DONE").exists()
     prog = json.loads((jd / "progress.json").read_text())
-    assert prog["done"] is True and "unknown mode" in prog["error"]
+    assert prog["done"] is True and prog["error"] == "This kind of scene isn't supported."
+    assert "unknown mode" in prog["detail"]  # the technical cause stays next to it, for the log
 
 
 def test_missing_job_json(tmp_path):
@@ -81,6 +93,9 @@ def test_missing_job_json(tmp_path):
     jd.mkdir()
     r = _run(jd)
     assert r.returncode == 2 and (jd / "FAILED").exists()
+    prog = json.loads((jd / "progress.json").read_text())
+    assert_product_copy(prog["error"])
+    assert "job.json" in prog["detail"]
 
 
 def test_rentfree_without_gpu_says_gpu_backend_required(tmp_path):
@@ -93,8 +108,11 @@ def test_rentfree_without_gpu_says_gpu_backend_required(tmp_path):
     r = _run(jd)
     assert r.returncode == 1
     err = (jd / "FAILED").read_text()
-    assert "GPU backend" in err
-    assert "GPU backend" in json.loads((jd / "progress.json").read_text())["error"]
+    assert "GPU backend" in err  # FAILED keeps the technical cause for the log
+    prog = json.loads((jd / "progress.json").read_text())
+    assert prog["error"] == "No GPU is free to build this world right now. Try again in a few minutes."
+    assert_product_copy(prog["error"])
+    assert "GPU backend" in prog["detail"]
     assert (jd / "work" / "input.jpg").exists()  # the input was still picked and normalised to JPEG
 
 
@@ -103,6 +121,9 @@ def test_rentfree_prompt_only_without_gpu(tmp_path):
     (jd / "input" / "meta.json").write_text("{}")  # the server's metadata file is not an input
     r = _run(jd)
     assert r.returncode == 1 and "GPU backend" in (jd / "FAILED").read_text()
+    prog = json.loads((jd / "progress.json").read_text())
+    assert prog["error"].startswith("Worlds from a prompt alone need a GPU")
+    assert_product_copy(prog["error"])
 
 
 def test_reconstruct_without_gpu(tmp_path):
@@ -119,6 +140,62 @@ def test_thirdwheel_without_video(tmp_path):
     jd = _job(tmp_path, "thirdwheel", {"00.jpg": img})
     r = _run(jd)
     assert r.returncode == 1 and "needs one video" in (jd / "FAILED").read_text()
+    prog = json.loads((jd / "progress.json").read_text())
+    assert prog["error"] == "Video mode needs one video, filmed from a still, propped-up phone."
+
+
+def test_tiny_photo_is_refused_with_a_clear_message(tmp_path):
+    from PIL import Image
+
+    img = tmp_path / "dot.png"
+    Image.new("RGB", (1, 1), (200, 30, 30)).save(img)
+    jd = _job(tmp_path, "rentfree", {"00.png": img}, params={"localFallback": True})
+    r = _run(jd)
+    assert r.returncode == 1
+    prog = json.loads((jd / "progress.json").read_text())
+    assert prog["error"] == "This photo is too small (1x1). Use one at least 320 px on the short side."
+    assert "ZeroDivision" not in (jd / "log.txt").read_text()
+
+
+@requires_ffmpeg
+def test_transport_stream_clips_are_accepted_as_videos(tmp_path):
+    clip = make_clip(tmp_path / "c.mp4", seconds=1.0, audio=False)
+    ts = tmp_path / "video.ts"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(clip), "-c", "copy", "-f", "mpegts", str(ts)], check=True)
+    import sys as _sys
+
+    _sys.path.insert(0, str(ROOT / "pipeline"))
+    from common.jobio import Job
+
+    jd = _job(tmp_path, "thirdwheel", {"video.ts": ts})
+    assert [p.name for p in Job(jd, echo=False).input_videos()] == ["video.ts"]
+
+
+@requires_ffmpeg
+def test_frames_can_be_picked_by_time_from_a_transport_stream(tmp_path):
+    """MPEG-TS has no seek index: an input-side seek into a clip with one keyframe decoded nothing."""
+    from common.frame_pick import best_video_frame
+    from common.media import iter_frames
+
+    ts = tmp_path / "game.ts"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=320x240:d=3:r=25", "-c:v", "libx264",
+                    "-g", "250", "-pix_fmt", "yuv420p", "-f", "mpegts", str(ts)], check=True)
+    for t in (0.0, 1.5, 2.5):
+        frames = list(iter_frames(ts, (320, 240), start=t, max_frames=1))
+        assert len(frames) == 1 and frames[0].shape == (240, 320, 3), t
+    pick = best_video_frame(ts)
+    assert pick.image.shape == (240, 320, 3)
+
+
+def test_world_params_seed_defaults_to_the_attempt(tmp_path):
+    import run_job
+    from common.jobio import Job
+
+    jd = _job(tmp_path, "rentfree", params={"attempt": 3, "trajectory": "orbit360"})
+    params = run_job.world_params(Job(jd, echo=False))
+    assert params == {"seed": 3, "trajectory": "orbit360"}
+    jd2 = _job(tmp_path / "b", "rentfree", params={"attempt": 3, "seed": 9})
+    assert run_job.world_params(Job(jd2, echo=False))["seed"] == 9
 
 
 def test_best_photo_prefers_sharp(tmp_path):
@@ -168,6 +245,8 @@ def test_thirdwheel_end_to_end_with_stand_in_models(tmp_path, synthetic_clip):
     assert rep["mask"]["coverageMean"] > 0.05  # the moving block is foreground
     log = (jd / "log.txt").read_text()
     assert "camera is steady" in log
+    assert res["caption"] == "The room is built from the background of your clip. 2 seconds of video with sound."
+    assert_product_copy(res["caption"])
     # work arrays are cleaned up unless keepWork
     assert not (jd / "work" / "depth_raw.npy").exists()
 
@@ -182,6 +261,9 @@ def test_thirdwheel_warns_when_camera_moves(tmp_path):
     assert "WARNING: the camera moved" in log
     res = json.loads((jd / "out" / "scene.json").read_text())
     assert res["video"]["hasAudio"] is False
+    # The warning reaches the person through the caption, as a product sentence.
+    assert "The phone moved" in res["caption"] and "no sound" in res["caption"]
+    assert_product_copy(res["caption"])
 
 
 @requires_ffmpeg
@@ -226,6 +308,8 @@ def test_thirdwheel_generated_room_branch(tmp_path, synthetic_clip, monkeypatch)
     res = json.loads((jd / "out" / "scene.json").read_text())
     check_job_result(res)
     assert res["world"]["source"] == "flashworld" and (jd / "out" / "world.spz").exists()
+    assert res["caption"].startswith("The room was imagined from the space behind the people in your clip.")
+    assert_product_copy(res["caption"])
     assert (jd / "out" / "input_camera.json").exists() and (jd / "out" / "input_depth.npy").exists()
     assert calls["prompt"] == "a small kitchen" and "intrinsics" in calls["params"] and calls["params"]["cameraHeight"] > 0
     v = res["video"]
@@ -235,3 +319,27 @@ def test_thirdwheel_generated_room_branch(tmp_path, synthetic_clip, monkeypatch)
     assert "room alignment: scale 1.5" in log, log[-2000:]
     # near/far were scaled by the alignment (video metres -> world units)
     assert stats["frames"] > 0 and v["depth"]["far"] > v["depth"]["near"]
+
+
+@requires_ffmpeg
+def test_thirdwheel_tells_the_person_when_nobody_moves(tmp_path):
+    """A clip of an empty room still becomes a scene, and the caption says why nothing moves."""
+    w, h, fps, n = 320, 240, 15, 30
+    rng = np.random.default_rng(5)
+    bg = np.zeros((h, w, 3), np.uint8)
+    bg[:] = (150, 120, 100)
+    bg[: h // 2] = (90, 110, 140)
+    for _ in range(60):
+        x, y = rng.integers(0, w - 12), rng.integers(0, h - 12)
+        bg[y : y + 10, x : x + 10] = rng.integers(0, 255, 3)
+    raw = tmp_path / "empty.rgb"
+    raw.write_bytes(bg.tobytes() * n)
+    clip = tmp_path / "empty.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{w}x{h}", "-framerate", str(fps),
+                    "-i", str(raw), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "16", str(clip)], check=True)
+    jd = _job(tmp_path, "thirdwheel", {"video.mp4": clip}, params={"maxSplats": 30000})
+    r = _run(jd, TW_FAKE_MODELS="1", TW_DEVICE="cpu")
+    assert r.returncode == 0, (jd / "log.txt").read_text()[-3000:]
+    res = json.loads((jd / "out" / "scene.json").read_text())
+    assert "We didn't find anyone moving in this clip" in res["caption"], res["caption"]
+    assert_product_copy(res["caption"])

@@ -79,12 +79,15 @@ describe('errors from the Space', () => {
     );
     expect(quota).toEqual({
       kind: 'quota',
+      // What the app shows names no service; the log keeps the actionable detail.
+      user: 'The free cloud GPU is used up for now. Try again later.',
       reason: 'the anonymous ZeroGPU quota is used up (90s requested vs. 0s left); put a Hugging Face read token in .env as HF_TOKEN or log in to HiPerGator',
     });
     expect(explainSpaceError('You have exceeded your GPU quota', true).reason).toContain('this Hugging Face account');
     const crash = explainSpaceError('Processing error: NVML_SUCCESS == r INTERNAL ASSERT FAILED at "/pytorch/c10/cuda/CUDACachingAllocator.cpp":1165', false);
     expect(crash.kind).toBe('crash');
     expect(crash.reason).toContain('try again later or use HiPerGator');
+    expect(crash.user).toBe('The cloud GPU had a problem on its side. Try again in a minute.');
     expect(explainSpaceError('401 Unauthorized', true).reason).toContain('check HF_TOKEN');
     expect(explainSpaceError('Image decode error', false)).toEqual({ kind: 'other', reason: 'Image decode error' });
   });
