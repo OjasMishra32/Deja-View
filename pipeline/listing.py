@@ -133,6 +133,22 @@ def shared_overlay(images: list[np.ndarray]) -> np.ndarray | None:
     return _clean_mask(_clear_ring(m))
 
 
+CARRY_SHARE = 0.5  # a photo carries a shared mark when it has a strong edge on at least this share of the mark
+
+
+def carriers(images: list[np.ndarray], mark: np.ndarray) -> list[bool]:
+    """Which photos carry `mark` (a WORK-size mask from shared_overlay): the ones with a crisp edge on most of it.
+    The mark is only removed from those, so a photo without it (a floor plan, an unstamped shot) is never touched."""
+    if mark is None or not mark.any():
+        return [False] * len(images)
+    H, W = mark.shape
+    out = []
+    for im in images:
+        e = edge_map(_resize(_gray(im), W, H))
+        out.append(bool((e[mark] > EDGE_T * 0.6).mean() >= CARRY_SHARE))
+    return out
+
+
 def size_groups(images: list[np.ndarray], tol: float = 0.02) -> list[list[int]]:
     """Indices of the photos of the same size (each side within `tol`). The overlay sits in the same place only on
     photos of one size, so each group is compared on its own: one portrait photo, or one at another resolution, in
@@ -187,9 +203,10 @@ def detect(images: list[np.ndarray]) -> list[Overlay]:
     """One Overlay per photo (an empty mask where there is nothing to remove)."""
     shared_of: list[np.ndarray | None] = [None] * len(images)
     for g in size_groups(images):
-        found = shared_overlay([images[i] for i in g])
-        for i in g:
-            shared_of[i] = found
+        group = [images[i] for i in g]
+        found = shared_overlay(group)
+        for i, carries in zip(g, carriers(group, found)):
+            shared_of[i] = found if carries else None
     out = []
     for im, shared in zip(images, shared_of):
         h, w = im.shape[:2]

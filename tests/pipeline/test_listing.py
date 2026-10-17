@@ -327,3 +327,12 @@ def test_listing_flag_missing_is_off():
     import run_job
 
     assert run_job.param_on({}.get("listing")) is False
+
+
+def test_carriers_names_the_photos_that_have_the_shared_mark():
+    stamped = [stamp(room_photo(s), "ACME REALTY  MLS# 4421907", "center", alpha=0.6, scale=4)[0] for s in range(4)]
+    mark = L.shared_overlay(stamped)
+    assert mark is not None and mark.any()
+    assert L.carriers(stamped, mark) == [True] * 4
+    assert L.carriers([room_photo(77)], mark) == [False]  # a clean photo of the same size never carries it
+    assert L.carriers(stamped, np.zeros_like(mark)) == [False] * 4
