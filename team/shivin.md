@@ -8,6 +8,9 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Order of work:** the Devpost video below first (hard deadline 8 AM Sunday), then the headset QA, then Seb's
+> reconstruction loop (`team/shivin-reconstruction-loop.md`) as Seb directs it.
+
 > **Update 17 (Sat ~1:30 PM): your new jobs, in this order.** All three need you, not Studio. The live link (BASE) is
 > `https://highlighted-filter-surf-other.trycloudflare.com` (Ojasva posts a new one if the tunnel restarts).
 >
