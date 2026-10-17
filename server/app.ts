@@ -286,7 +286,11 @@ export function createApp(deps: AppDeps) {
         return s ? json(publicScene(s)) : error(404, MESSAGES.noSuchScene);
       }
       if (!isValidId(id)) return privateError(404, MESSAGES.noSuchScene);
-      if (method === 'DELETE') return deleteScene(id, url);
+      // Worlds are never deleted through the website; THIRDWHEEL_ALLOW_DELETE=1 turns it back on for local cleanup.
+      if (method === 'DELETE') {
+        if (process.env.THIRDWHEEL_ALLOW_DELETE !== '1') return privateError(403, 'Worlds cannot be deleted here.');
+        return deleteScene(id, url);
+      }
       return privateError(405, MESSAGES.methodNotAllowed);
     }
 

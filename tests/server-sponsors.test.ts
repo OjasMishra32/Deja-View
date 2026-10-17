@@ -61,6 +61,7 @@ async function boot(extra: Record<string, string>): Promise<Proc> {
       DS_URL: '',
       GUIDE_URL: '',
       DV_KEY: DVKEY,
+      THIRDWHEEL_ALLOW_DELETE: '1',
       THIRDWHEEL_API_TOKEN: TOKEN,
       SOLANA_SCOREBOARD: '',
       SOLANA_RPC_URL: '',
