@@ -4,6 +4,7 @@ local HttpService = game:GetService("HttpService")
 local ServerStorage = game:GetService("ServerStorage")
 local Players = game:GetService("Players")
 local Config = require(script.Parent.Config)
+local ProxyRoom = require(script.Parent.ProxyRoom)
 local Backend = require(script.Parent.Backend)
 local MapBuilder = require(script.Parent.MapBuilder)
 local ObjectLayer = require(script.Parent.ObjectLayer)
@@ -510,6 +511,9 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 		end
 		if visual then
 			local placed = MapBuilder.attachModel(visual, box, stored ~= nil)
+			if placed and ProxyRoom.has(sceneId) then
+				ProxyRoom.build(sceneId, workspace:FindFirstChild("Room") or workspace, skyImage)
+			end
 			if placed and Config.SPHERE_ROOMS[sceneId] then
 				-- photo-sphere room: the sky shows the place; the thin scan would only cut through it
 				for _, d in placed:GetDescendants() do
