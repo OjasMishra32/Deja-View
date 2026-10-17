@@ -2,6 +2,14 @@
 """Turns a scene's splat world into a textured Roblox model: one .glb of chunked, textured meshes in studs.
 
   python pipeline/roblox_mesh.py --scene data/scenes/<id> [--out DIR] [--triangles N] [--texture PX] [--key K]
+  python pipeline/roblox_mesh.py --v2 --scene data/scenes/<id> --photos <reconstruction work folder> [--out DIR]
+         [--triangles 600000] [--near-margin 1.5] [--max-parts N] [--no-sky]
+
+v2 (a reconstructed world with cameras.json and its photos/frames; see "v2" below build_model) meshes only the
+walkable area (world.bounds + a margin) at a finer voxel, textures it from the real photos (colour-matched to the
+splats, people masked, depth-tested against the mesh), writes roblox.glb, roblox-2.glb ... (each under 20 MB) and a
+six-face skybox of everything farther (sky-front.png ... in Roblox's Sky face convention). The sidecar lists `parts`
+and `sky`; server/social/roblox-model.ts uploads them. What follows describes v1.
 
 Writes (into the scene directory unless --out):
 
@@ -192,10 +200,27 @@ def load_room(scene_dir: Path | str, log: Callable[[str], None] = _log_noop) -> 
 @dataclass
 class View:
     c2w: np.ndarray  # 4x4 OpenGL camera-to-world (looks down -Z, +Y up), room frame metres
-    f: float  # focal length in pixels (square pixels, principal point at the centre)
+    f: float  # focal length in pixels (x); square pixels and the principal point at the centre unless given below
     size: int
-    kind: str  # "cube" or "overview"
+    kind: str  # "cube", "overview" or "photo" (a training camera, rendered from the splats)
     position: int = -1  # index of the standing position (cube faces)
+    w: int = 0  # image width and height (default: size x size)
+    h: int = 0
+    fy: float = 0.0  # focal length in pixels (y; default f)
+    cx: float = -1.0  # principal point (default: the image centre)
+    cy: float = -1.0
+
+    def __post_init__(self) -> None:
+        if not self.w:
+            self.w = self.size
+        if not self.h:
+            self.h = self.size
+        if not self.fy:
+            self.fy = self.f
+        if self.cx < 0:
+            self.cx = self.w / 2.0
+        if self.cy < 0:
+            self.cy = self.h / 2.0
 
 
 CUBE_FACES = [(0.0, 0.0), (90.0, 0.0), (180.0, 0.0), (270.0, 0.0), (0.0, 90.0), (0.0, -90.0)]  # (yaw, pitch) degrees
@@ -300,6 +325,8 @@ class Shot:
     depth: Any  # torch [H, W] z-depth in metres, 0 = nothing
     valid: Any  # torch [H, W] bool: solid, not on a depth edge, within MAX_DEPTH_M
     coverage: float
+    alpha: Any = None  # torch [H, W] accumulated opacity (v2 keeps it: a faint ceiling is still a ceiling)
+    ed: Any = None  # torch [H, W] expected depth in metres wherever alpha > 0 (depth above is zeroed below alpha 0.5)
 
 
 class Renderer:
@@ -310,6 +337,7 @@ class Renderer:
 
         self.room = room
         self.device = device
+        self.keep_alpha = False
         self.gpu = device.type == "cuda" and sio.gsplat_available()
         self.t: dict = {}
         if self.gpu:
@@ -332,16 +360,17 @@ class Renderer:
 
         if not views:
             return []
-        size = views[0].size
+        W0, H0 = views[0].w, views[0].h
+        assert all(v.w == W0 and v.h == H0 for v in views), "one batch renders one image size"
         if self.gpu:
             from gsplat import rasterization
 
             vm = np.stack([sio.c2w_gl_to_cv_w2c(self.file_c2w(v.c2w)) for v in views]).astype(np.float32)
-            K = np.stack([np.array([[v.f, 0, v.size / 2], [0, v.f, v.size / 2], [0, 0, 1]], np.float32) for v in views])
+            K = np.stack([np.array([[v.f, 0, v.cx], [0, v.fy, v.cy], [0, 0, 1]], np.float32) for v in views])
             with torch.no_grad():
                 out, alpha, _ = rasterization(
                     self.t["means"], self.t["quats"], self.t["scales"], self.t["opac"], self.t["sh"],
-                    torch.from_numpy(vm).to(self.device), torch.from_numpy(K).to(self.device), size, size,
+                    torch.from_numpy(vm).to(self.device), torch.from_numpy(K).to(self.device), W0, H0,
                     sh_degree=self.room.splats.sh_degree, render_mode="RGB+ED", near_plane=0.01, far_plane=1e4,
                     backgrounds=torch.zeros(len(views), 3, device=self.device),
                 )
@@ -352,10 +381,10 @@ class Renderer:
             rgbs, depths, alphas = [], [], []
             for v in views:
                 try:
-                    r = sio.render_points(self.room.splats, self.file_c2w(v.c2w), v.f, v.f, v.size / 2, v.size / 2, v.size, v.size)
+                    r = sio.render_points(self.room.splats, self.file_c2w(v.c2w), v.f, v.fy, v.cx, v.cy, v.w, v.h)
                 except ValueError:  # nothing in view at all
-                    r = sio.Render(np.zeros((v.size, v.size, 3), np.uint8), np.zeros((v.size, v.size), np.float32),
-                                   np.zeros((v.size, v.size), np.float32), "points")
+                    r = sio.Render(np.zeros((v.h, v.w, 3), np.uint8), np.zeros((v.h, v.w), np.float32),
+                                   np.zeros((v.h, v.w), np.float32), "points")
                 rgbs.append(torch.from_numpy(r.rgb.astype(np.float32) / 255.0))
                 depths.append(torch.from_numpy(r.depth * self.room.scale))
                 alphas.append(torch.from_numpy(r.alpha))
@@ -366,7 +395,9 @@ class Renderer:
             a = alphas[k].float()
             d = torch.where(a >= 0.5, d, torch.zeros_like(d))
             valid = (a >= MIN_ALPHA) & (d > 0.05) & (d < MAX_DEPTH_M) & ~depth_edges(d)
-            shots.append(Shot(v, rgbs[k].float().contiguous(), d.contiguous(), valid, float((a >= 0.5).float().mean())))
+            shots.append(Shot(v, rgbs[k].float().contiguous(), d.contiguous(), valid, float((a >= 0.5).float().mean()),
+                              a.contiguous() if self.keep_alpha else None,
+                              depths[k].float().contiguous() if self.keep_alpha else None))
         return shots
 
 
@@ -432,8 +463,7 @@ def backproject(shot: Shot, stride: int = 2) -> Any:
     u = us[ok].float() * stride + stride / 2.0
     vv = vs[ok].float() * stride + stride / 2.0
     z = d[ok]
-    c = v.size / 2.0
-    pc = torch.stack([(u - c) / v.f * z, -(vv - c) / v.f * z, -z], dim=1)
+    pc = torch.stack([(u - v.cx) / v.f * z, -(vv - v.cy) / v.fy * z, -z], dim=1)
     R = torch.as_tensor(v.c2w[:3, :3], dtype=torch.float32, device=dev)
     t = torch.as_tensor(v.c2w[:3, 3], dtype=torch.float32, device=dev)
     return pc @ R.T + t
@@ -448,8 +478,7 @@ def project(P: Any, view: View) -> tuple[Any, Any, Any]:
     pc = (P - t) @ R
     z = -pc[:, 2]
     zs = torch.where(z > 1e-3, z, torch.ones_like(z))
-    c = view.size / 2.0
-    return c + view.f * pc[:, 0] / zs, c - view.f * pc[:, 1] / zs, z
+    return view.cx + view.f * pc[:, 0] / zs, view.cy - view.fy * pc[:, 1] / zs, z
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -750,9 +779,12 @@ def compact(V: np.ndarray, F: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 
 def drop_small_components(V: np.ndarray, F: np.ndarray, min_area: float,
-                          airborne_m2: float = AIRBORNE_MAX_M2) -> tuple[np.ndarray, np.ndarray, int]:
+                          airborne_m2: float = AIRBORNE_MAX_M2, keep_m2: float | None = None,
+                          keep_below_y: float = 1.2) -> tuple[np.ndarray, np.ndarray, int]:
     """Drops connected pieces smaller than `min_area`, and airborne ones (entirely above AIRBORNE_MIN_Y and smaller
-    than `airborne_m2`): bits of a splat sky, floaters. Returns the mesh and how many pieces went."""
+    than `airborne_m2`): bits of a splat sky, floaters. With `keep_m2`, a smaller piece of at least keep_m2 that
+    reaches below keep_below_y stays (a chair leg, a table frame: thin things standing on the floor fall apart into
+    small pieces). Returns the mesh and how many pieces went."""
     from scipy.sparse import coo_matrix
     from scipy.sparse.csgraph import connected_components
 
@@ -765,7 +797,10 @@ def drop_small_components(V: np.ndarray, F: np.ndarray, min_area: float,
     comp_area = np.bincount(fl, weights=area, minlength=ncomp)
     low = np.full(ncomp, np.inf)
     np.minimum.at(low, lab, V[:, 1])
-    bad = (comp_area < min_area) | ((low > AIRBORNE_MIN_Y) & (comp_area < airborne_m2))
+    small = comp_area < min_area
+    if keep_m2 is not None:
+        small &= ~((comp_area >= keep_m2) & (low < keep_below_y))
+    bad = small | ((low > AIRBORNE_MIN_Y) & (comp_area < airborne_m2))
     V2, F2 = compact(V, F[~bad[fl]])
     return V2, F2, int(bad.sum())
 
@@ -1267,9 +1302,10 @@ def encode_jpeg(img: np.ndarray, quality: int = 85) -> bytes:
 
 
 def glb_bytes(chunks: list[Chunk], centres: list[np.ndarray], extras: dict, jpeg_quality: int = 85,
-              vertex_colours: list[np.ndarray] | None = None) -> bytes:
+              vertex_colours: list[np.ndarray] | None = None, jpegs: list[bytes] | None = None) -> bytes:
     """A glTF 2.0 binary with one node + mesh + material per chunk. Positions are relative to the node translation
-    (studs); a chunk without an image is drawn with vertex colours (COLOR_0) instead of a texture."""
+    (studs); a chunk without an image is drawn with vertex colours (COLOR_0) instead of a texture. `jpegs` (one per
+    chunk) are already encoded textures, used instead of encoding the chunks' images again."""
     S = STUDS_PER_METER
     bin_parts: list[bytes] = []
     offset = 0
@@ -1306,7 +1342,8 @@ def glb_bytes(chunks: list[Chunk], centres: list[np.ndarray], extras: dict, jpeg
         mat: dict[str, Any] = {"name": ch.name, "pbrMetallicRoughness": {"metallicFactor": 0.0, "roughnessFactor": 1.0}}
         if ch.image is not None:
             attrs["TEXCOORD_0"] = add_accessor(ch.UV.astype(np.float32), 5126, "VEC2", 34962)
-            images.append({"bufferView": add_view(encode_jpeg(ch.image, jpeg_quality)), "mimeType": "image/jpeg", "name": ch.name})
+            data = jpegs[k] if jpegs is not None else encode_jpeg(ch.image, jpeg_quality)
+            images.append({"bufferView": add_view(data), "mimeType": "image/jpeg", "name": ch.name})
             textures.append({"sampler": 0, "source": len(images) - 1})
             mat["pbrMetallicRoughness"]["baseColorTexture"] = {"index": len(textures) - 1}
         elif vertex_colours is not None:
@@ -1641,6 +1678,1371 @@ def write_sheet(shots: list[Shot], path: Path, cols: int = 6, size: int = 192) -
 
 
 # --------------------------------------------------------------------------------------------------------------
+# v2: a reconstructed world (photos + clips with known cameras) -> the walkable area as a photo-textured mesh, in
+# several .glb parts, and everything farther as a six-face skybox
+# --------------------------------------------------------------------------------------------------------------
+#
+# What changes against v1 (build_model):
+#  - geometry only inside the walkable area (world.bounds) plus a margin; the TSDF also takes depth rendered from the
+#    splats at every training camera (where the splats are most accurate), at a finer voxel, and big planes (floor,
+#    walls, ceiling, table tops) are snapped flat before decimating to a bigger budget (600k triangles by default);
+#  - chunks are cut by triangles AND area, so a big floor gets as many texels per metre as a cluttered corner;
+#  - textures come from the real photos and frames: each one undistorted, people masked out, its colours matched to
+#    the splat render from the same camera (so the room has the splat viewer's exposure), projected onto the mesh with
+#    a depth test against the mesh itself (a z-buffer of the final triangles) and blended per texel by how well it
+#    sees the texel (resolution x obliquity x sharpness x distance from the image or mask edge, raised to a power: the
+#    best view dominates, neighbours fade in across seams). Only texels no photo sees fall back to splat renders;
+#  - beyond the margin there is no geometry: six cube faces rendered from the splats outside the walkable box, from
+#    the spawn at standing eye height, in Roblox's Sky face convention (sky-front.png ... sky-down.png);
+#  - the model is written as several .glb files of at most PART_MAX_BYTES each (Open Cloud takes 20 MB per asset):
+#    roblox.glb holds the chunks nearest the spawn, roblox-2.glb ... the rest, all in the same frame.
+#
+# Roblox Sky faces (Creator Hub, Environment > Skyboxes: the six SkyboxBk/Dn/Ft/Lf/Rt/Up properties and the net in
+# which, seen from inside, Left, Back, Right and Front follow each other turning right), in the room frame (= Roblox
+# world frame of the model: Y up, -Z forward). Checked against Roblox's own default sky (the sky512_*.tex faces the
+# Sky properties default to, shipped with the Roblox app): it folds seamlessly in exactly this layout (Lf to the right
+# of Ft, Up's top edge on Lf, Dn's top edge on Rt; every other side order or Up/Dn rotation leaves seams 8-20x the
+# in-face gradient). Ft looking -Z (NormalId.Front) is from Roblox capture scripts; seams cannot show the absolute yaw.
+# Look direction and image-up of each face:
+SKY_FACES = {
+    "front": ((0.0, 0.0, -1.0), (0.0, 1.0, 0.0)),  # SkyboxFt
+    "left": ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),  # SkyboxLf (to the RIGHT of front, per the official net)
+    "back": ((0.0, 0.0, 1.0), (0.0, 1.0, 0.0)),  # SkyboxBk
+    "right": ((-1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),  # SkyboxRt
+    "up": ((0.0, 1.0, 0.0), (1.0, 0.0, 0.0)),  # SkyboxUp: image top toward +X (the left face)
+    "down": ((0.0, -1.0, 0.0), (-1.0, 0.0, 0.0)),  # SkyboxDn: image top toward -X (the right face)
+}
+SKY_PROPERTY = {"front": "SkyboxFt", "back": "SkyboxBk", "left": "SkyboxLf", "right": "SkyboxRt", "up": "SkyboxUp",
+                "down": "SkyboxDn"}
+
+V2_VERSION = 2
+V2_TRIANGLES = 600_000
+V2_MAX_TRIANGLES = 1_200_000
+V2_VOXEL_MIN_M = 0.015
+V2_SURFACE_CELLS = 12_000_000
+V2_POSITIONS = 24  # standing cube maps (the training cameras do most of the work now)
+NEAR_MARGIN_M = 1.5  # geometry this far around world.bounds; beyond it the skybox
+CHUNK_AREA_M2 = 20.0  # at most this much surface per 1024 px chunk (about 6 mm per texel)
+PART_MAX_BYTES = 19_500_000  # per .glb (Open Cloud: 20 MB per asset)
+PHOTO_DEPTH_SCALE = 0.5  # training cameras are rendered (and z-buffered) at this fraction of their size
+PHOTO_POWER = 8.0  # blend weight = (score / best score) ** power
+PHOTO_MIN_COS = 0.2
+FEATHER_FRAC = 0.04  # scores fade to 0 within this fraction of the image width of the image or mask edge
+MASK_GROW_FRAC = 0.006  # people masks grow by this fraction of the width (motion blur, hair)
+SKY_SIZE = 1024
+SKY_EYE_M = 1.6
+PLANE_TOL_M = 0.025
+PLANE_MIN_M2 = 1.5
+KEEP_PIECE_M2 = 0.015  # small pieces this big that reach below 1.2 m stay (chair and table legs)
+CEILING_MIN_M2 = 4.0  # a ceiling fill needs at least this much down-facing surface at one height
+WALL_CELL_M2 = 0.25  # a 25 cm cell holds a wall when this much vertical surface stands in it under the ceiling
+WALL_MIN_CELLS = 8  # ... in a run of at least this many cells (2 m) that reaches the fused ceiling (not a tree trunk)
+
+
+def near_box(room: Room, margin: float = NEAR_MARGIN_M) -> tuple[np.ndarray, np.ndarray, str]:
+    """The box the mesh covers (room frame metres): the scene's walkable bounds (world.bounds, the camera coverage of
+    a reconstruction) grown by `margin` sideways and a little in height; v1's room box when there are no bounds."""
+    b = (room.scene.get("world") or {}).get("bounds")
+    try:
+        lo = np.array([float(x) for x in b["min"]], np.float64)
+        hi = np.array([float(x) for x in b["max"]], np.float64)
+        if lo.shape != (3,) or hi.shape != (3,) or not np.all(hi > lo):
+            raise ValueError
+    except (TypeError, KeyError, ValueError):
+        return room.lo.copy(), room.hi.copy(), "room box"
+    lo[1] -= room.floor_y
+    hi[1] -= room.floor_y
+    lo = np.array([lo[0] - margin, -0.3, lo[2] - margin])
+    hi = np.array([hi[0] + margin, max(hi[1] + 0.3, 2.5), hi[2] + margin])
+    return lo, hi, "world.bounds"
+
+
+# ---------------------------------------------------------------- the training cameras and their images
+
+
+@dataclass
+class PhotoCam:
+    name: str
+    group: str
+    c2w: np.ndarray  # room frame, OpenGL (looks down -Z)
+    fx: float
+    fy: float
+    cx: float
+    cy: float
+    w: int
+    h: int
+    dist: dict  # radial distortion of the source image (k1, k2), undone before projecting
+    image: Path
+    mask: Path | None  # 255 = use, 0 = a person (COLMAP mask naming: <image>.png)
+
+
+def load_photo_cams(scene_dir: Path, photos: Path, floor_y: float, log: Callable[[str], None]) -> list[PhotoCam]:
+    """The scene's cameras.json (every solved photo and clip frame, viewer frame) with the images of the
+    reconstruction's work folder (images/<group>/<name>, masks/<group>/<name>.png)."""
+    js = json.loads((scene_dir / "cameras.json").read_text())
+    out, missing = [], 0
+    for c in js.get("cameras", []):
+        img = photos / "images" / c["name"]
+        if not img.exists():
+            missing += 1
+            continue
+        m = photos / "masks" / f"{c['name']}.png"
+        c2w = np.asarray(c["c2w"], np.float64).copy()
+        c2w[1, 3] -= floor_y
+        k = c["intrinsics"]
+        out.append(PhotoCam(str(c["name"]), str(c.get("group", "")), c2w, float(k["fx"]), float(k["fy"]), float(k["cx"]),
+                            float(k["cy"]), int(k["width"]), int(k["height"]), dict(c.get("distortion") or {}), img,
+                            m if m.exists() else None))
+    groups: dict[str, int] = {}
+    for c in out:
+        groups[c.group] = groups.get(c.group, 0) + 1
+    log(f"training cameras: {len(out)} with images ({groups}), {missing} without; "
+        f"{sum(1 for c in out if c.mask)} with people masks")
+    return out
+
+
+def photo_views(cams: list[PhotoCam], scale: float = PHOTO_DEPTH_SCALE) -> list[View]:
+    views = []
+    for k, c in enumerate(cams):
+        w, h = int(round(c.w * scale)), int(round(c.h * scale))
+        views.append(View(c.c2w, c.fx * scale, max(w, h), "photo", k, w=w, h=h, fy=c.fy * scale, cx=c.cx * scale,
+                          cy=c.cy * scale))
+    return views
+
+
+def render_photo_shots(renderer: Renderer, views: list[View], log: Callable[[str], None], batch: int = 6) -> list[Shot]:
+    """Splat renders (RGB + depth) from every training camera, in batches of one image size."""
+    shots: list[Shot] = []
+    by_size: dict[tuple[int, int], list[View]] = {}
+    for v in views:
+        by_size.setdefault((v.w, v.h), []).append(v)
+    for group in by_size.values():
+        for i in range(0, len(group), batch):
+            shots += renderer.render(group[i:i + batch])
+    valid = float(np.mean([float(s.valid.float().mean()) for s in shots])) if shots else 0.0
+    log(f"rendered the splats from {len(shots)} training cameras; {valid * 100:.0f}% of their pixels give depth")
+    return shots
+
+
+def undistort_maps(c: PhotoCam) -> tuple[np.ndarray, np.ndarray] | None:
+    """cv2.remap maps from a pinhole image (same size and intrinsics) into the source image (radial k1, k2), or None
+    when the camera has no distortion. Pixel centres at +0.5 (COLMAP)."""
+    k1 = float(c.dist.get("k1", 0.0) or 0.0)
+    k2 = float(c.dist.get("k2", 0.0) or 0.0)
+    if abs(k1) < 1e-9 and abs(k2) < 1e-9:
+        return None
+    u, v = np.meshgrid(np.arange(c.w, dtype=np.float64) + 0.5, np.arange(c.h, dtype=np.float64) + 0.5)
+    x, y = (u - c.cx) / c.fx, (v - c.cy) / c.fy
+    r2 = x * x + y * y
+    f = 1.0 + k1 * r2 + k2 * r2 * r2
+    return (c.fx * x * f + c.cx - 0.5).astype(np.float32), (c.fy * y * f + c.cy - 0.5).astype(np.float32)
+
+
+def read_photo(c: PhotoCam) -> tuple[np.ndarray, np.ndarray]:
+    """(sRGB uint8 [h, w, 3] undistorted, usable mask [h, w] bool): people (grown a little) and pixels the
+    undistortion pulls from outside the image are not usable."""
+    import cv2
+
+    img = cv2.imread(str(c.image), cv2.IMREAD_COLOR)
+    if img is None:
+        raise MeshError(f"cannot read {c.image}")
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    if img.shape[0] != c.h or img.shape[1] != c.w:
+        img = cv2.resize(img, (c.w, c.h), interpolation=cv2.INTER_AREA)
+    if c.mask is not None:
+        m = cv2.imread(str(c.mask), cv2.IMREAD_GRAYSCALE)
+        m = cv2.resize(m, (c.w, c.h), interpolation=cv2.INTER_NEAREST) if m.shape != (c.h, c.w) else m
+        ok = m > 127
+        r = max(2, int(round(MASK_GROW_FRAC * c.w)))
+        if not ok.all():
+            ok = cv2.erode(ok.astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1))) > 0
+    else:
+        ok = np.ones((c.h, c.w), bool)
+    maps = undistort_maps(c)
+    if maps is not None:
+        mx, my = maps
+        img = cv2.remap(img, mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+        inside = (mx >= 0) & (mx <= c.w - 1) & (my >= 0) & (my <= c.h - 1)
+        ok = (cv2.remap(ok.astype(np.uint8), mx, my, cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=0) > 0) & inside
+    return img, ok
+
+
+def colour_match(photo_lin: np.ndarray, ok: np.ndarray, target_lin: np.ndarray, target_ok: np.ndarray,
+                 ridge: float = 0.02) -> tuple[np.ndarray, dict]:
+    """A 4x3 affine colour transform (linear RGB, rows: r, g, b, 1) taking the photo to the splat render from the same
+    camera, fitted on pixels both trust (twice, dropping the worst fifth the second time), pulled toward a per-channel
+    gain so it stays plausible where the fit has little to go on. Identity when too few pixels agree."""
+    m = ok & target_ok & (photo_lin.max(axis=2) < 0.95) & (photo_lin.max(axis=2) > 0.002)
+    n = int(m.sum())
+    if n < 2000:
+        return np.vstack([np.eye(3), np.zeros((1, 3))]), {"pixels": n, "fit": False}
+    X = np.concatenate([photo_lin[m], np.ones((n, 1))], axis=1).astype(np.float64)
+    Y = target_lin[m].astype(np.float64)
+    keep = np.ones(n, bool)
+    A = None
+    for _ in range(2):
+        Xk, Yk = X[keep], Y[keep]
+        g = (Yk.mean(axis=0) + 1e-4) / (Xk[:, :3].mean(axis=0) + 1e-4)
+        A0 = np.vstack([np.diag(np.clip(g, 0.2, 5.0)), np.zeros((1, 3))])
+        lam = ridge * float(np.trace(Xk.T @ Xk)) / 4.0
+        A = np.linalg.solve(Xk.T @ Xk + lam * np.eye(4), Xk.T @ Yk + lam * A0)
+        res = np.abs(X @ A - Y).sum(axis=1)
+        keep = res <= np.quantile(res, 0.8)
+    err0 = float(np.abs(X[:, :3] - Y).mean())
+    err1 = float(np.abs(X @ A - Y)[keep].mean())
+    return A, {"pixels": n, "fit": True, "gain": [round(float(A[i, i]), 3) for i in range(3)],
+               "errBefore": round(err0, 4), "errAfter": round(err1, 4)}
+
+
+def sharpness(gray: np.ndarray, ok: np.ndarray) -> float:
+    """Variance of the Laplacian over the usable pixels (any scale; compared between a photo and its splat render)."""
+    import cv2
+
+    lap = cv2.Laplacian(gray.astype(np.float32), cv2.CV_32F, ksize=3)
+    okm = cv2.erode(ok.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
+    return float(lap[okm].var()) if okm.sum() > 100 else 0.0
+
+
+# ---------------------------------------------------------------- a z-buffer of the mesh itself
+
+
+def zbuffer(T: Any, c2w: np.ndarray, fx: float, fy: float, cx: float, cy: float, W: int, H: int,
+            near: float = 0.05, box: int = 8, max_levels: int = 12) -> Any:
+    """Z-depth of the nearest triangle at each pixel centre (flattened [H * W], inf where nothing), perspective
+    correct, for triangles T [m, 3, 3] (room frame) seen by an OpenGL camera. Triangles that cover more than box x box
+    pixels, or cross the near plane, are split in four (in 3D) until they do not."""
+    import torch
+
+    dev = T.device
+    R = torch.as_tensor(c2w[:3, :3], dtype=torch.float32, device=dev)
+    t = torch.as_tensor(c2w[:3, 3], dtype=torch.float32, device=dev)
+    zb = torch.full((H * W,), float("inf"), device=dev)
+    ar = torch.arange(box, device=dev)
+    oy, ox = torch.meshgrid(ar, ar, indexing="ij")
+    ox, oy = ox.reshape(-1), oy.reshape(-1)
+    tris = T
+    for _ in range(max_levels):
+        if tris.shape[0] == 0:
+            break
+        pc = (tris - t) @ R
+        z = -pc[..., 2]
+        front = (z > near).all(dim=1)
+        anyf = (z > near).any(dim=1)
+        zs = z.clamp(min=1e-6)
+        u = cx + fx * pc[..., 0] / zs
+        v = cy - fy * pc[..., 1] / zs
+        umin, umax = u.min(dim=1).values, u.max(dim=1).values
+        vmin, vmax = v.min(dim=1).values, v.max(dim=1).values
+        on = (umax >= 0) & (umin <= W) & (vmax >= 0) & (vmin <= H)
+        i0 = torch.ceil(umin - 0.5)
+        j0 = torch.ceil(vmin - 0.5)
+        bw = torch.floor(umax - 0.5) - i0 + 1
+        bh = torch.floor(vmax - 0.5) - j0 + 1
+        ok = front & on
+        small = ok & (bw <= box) & (bh <= box)
+        e = torch.stack([(tris[:, 1] - tris[:, 0]).norm(dim=1), (tris[:, 2] - tris[:, 1]).norm(dim=1),
+                         (tris[:, 0] - tris[:, 2]).norm(dim=1)], dim=1).max(dim=1).values
+        split = (ok & ~small) | (anyf & ~front & on & (e > 0.02))
+        sel = torch.nonzero(small & (bw > 0) & (bh > 0)).squeeze(1)
+        for s0 in range(0, sel.numel(), 200_000):
+            k = sel[s0:s0 + 200_000]
+            px = (i0[k, None] + ox[None]).long()
+            py = (j0[k, None] + oy[None]).long()
+            pu, pv = px.float() + 0.5, py.float() + 0.5
+            u0, u1, u2 = u[k, 0, None], u[k, 1, None], u[k, 2, None]
+            v0, v1, v2 = v[k, 0, None], v[k, 1, None], v[k, 2, None]
+            area = (u1 - u0) * (v2 - v0) - (u2 - u0) * (v1 - v0)
+            area = torch.where(area.abs() < 1e-9, torch.full_like(area, 1e-9), area)
+            b1 = ((pu - u0) * (v2 - v0) - (u2 - u0) * (pv - v0)) / area
+            b2 = ((u1 - u0) * (pv - v0) - (pu - u0) * (v1 - v0)) / area
+            b0 = 1.0 - b1 - b2
+            eps = -1e-4
+            inside = (b0 >= eps) & (b1 >= eps) & (b2 >= eps) & (px >= 0) & (px < W) & (py >= 0) & (py < H)
+            iz = b0 / z[k, 0, None] + b1 / z[k, 1, None] + b2 / z[k, 2, None]
+            zp = 1.0 / iz.clamp(min=1e-9)
+            pix = (py * W + px)[inside]
+            zb.scatter_reduce_(0, pix, zp[inside], reduce="amin")
+        if not bool(split.any()):
+            break
+        s = tris[split]
+        a, b, c = s[:, 0], s[:, 1], s[:, 2]
+        ab, bc, ca = (a + b) / 2, (b + c) / 2, (c + a) / 2
+        tris = torch.cat([torch.stack([a, ab, ca], 1), torch.stack([ab, b, bc], 1), torch.stack([ca, bc, c], 1),
+                          torch.stack([ab, bc, ca], 1)])
+        if tris.shape[0] > 40_000_000:  # a pathological view; what is left stays out of the z-buffer
+            break
+    return zb
+
+
+# ---------------------------------------------------------------- planes and chunks
+
+
+def snap_planes(V: np.ndarray, F: np.ndarray, log: Callable[[str], None], tol: float = PLANE_TOL_M,
+                min_area: float = PLANE_MIN_M2) -> tuple[np.ndarray, dict]:
+    """Flattens the big planes the fused surface wobbles around (the floor, walls, ceiling, table tops): horizontal
+    planes from the height histogram of up- and down-facing faces, vertical ones from the azimuth histogram of
+    upright faces and then their offsets. Every vertex of a face lying on a plane (normal within 25 degrees, within
+    `tol`) moves onto it; a vertex on two planes ends on both (their edge). Returns the vertices and what was found."""
+    fn, area = face_normals(V, F)
+    c = V[F].mean(axis=1)
+    planes: list[tuple[np.ndarray, float, float]] = []
+
+    def peaks(x: np.ndarray, w: np.ndarray, step: float, need: float, spread: int = 2) -> list[float]:
+        if len(x) == 0:
+            return []
+        bins = np.arange(x.min() - step, x.max() + 2 * step, step)
+        hist, _ = np.histogram(x, bins, weights=w)
+        win = np.convolve(hist, np.ones(2 * spread + 1), mode="same")
+        out, taken = [], np.zeros(len(win), bool)
+        for i in np.argsort(-win):
+            if win[i] < need:
+                break
+            if taken[max(0, i - 3 * spread):i + 3 * spread + 1].any():
+                continue
+            taken[i] = True
+            centre = bins[i] + step / 2
+            near = np.abs(x - centre) < (spread + 0.5) * step
+            if w[near].sum() > 0:
+                o = np.argsort(x[near])
+                cw = np.cumsum(w[near][o])
+                out.append(float(x[near][o][np.searchsorted(cw, cw[-1] / 2)]))  # weighted median
+        return out
+
+    for sign in (1.0, -1.0):
+        sel = fn[:, 1] * sign > 0.9
+        for y0 in peaks(c[sel, 1], area[sel], 0.01, min_area):
+            n = np.array([0.0, sign, 0.0])
+            planes.append((n, sign * y0, 0.0))
+    up = np.abs(fn[:, 1]) < 0.15
+    if up.any():
+        az = np.degrees(np.arctan2(fn[up, 2], fn[up, 0])) % 360.0
+        a_up, c_up = area[up], c[up]
+        for th in peaks(az, a_up, 1.0, 2 * min_area, spread=2):
+            n = np.array([math.cos(math.radians(th)), 0.0, math.sin(math.radians(th))])
+            dd = (az - th + 180.0) % 360.0 - 180.0
+            on = np.abs(dd) < 6.0
+            for d0 in peaks(c_up[on] @ n, a_up[on], 0.01, min_area):
+                planes.append((n, d0, th))
+    Vn = V.copy()
+    moved = 0
+    used = []
+    for n, d, th in planes:
+        fsel = (fn @ n > 0.9) & (np.abs(c @ n - d) < tol)
+        a = float(area[fsel].sum())
+        if a < min_area:
+            continue
+        # refit the plane to its faces (area-weighted): the histograms only find it to a degree and a centimetre
+        w = area[fsel] / a
+        mu = (c[fsel] * w[:, None]).sum(axis=0)
+        X = (c[fsel] - mu) * np.sqrt(w)[:, None]
+        n2 = np.linalg.svd(X, full_matrices=False)[2][-1]
+        n2 = n2 if n2 @ n > 0 else -n2
+        if n2 @ n > 0.995:  # within about 6 degrees: keep the refit
+            n, d = n2, float(n2 @ mu)
+            fsel = (fn @ n > 0.9) & (np.abs(c @ n - d) < tol)
+        vids = np.unique(F[fsel])
+        dist = Vn[vids] @ n - d
+        ok = np.abs(dist) < 2 * tol
+        Vn[vids[ok]] -= dist[ok, None] * n[None]
+        moved += int(ok.sum())
+        used.append({"normal": [round(float(x), 3) for x in n], "offset": round(float(d), 3), "m2": round(a, 1)})
+    log(f"planes: {len(used)} snapped flat ({sum(p['m2'] for p in used):.0f} m2, {moved} vertices moved)")
+    return Vn, {"planes": used, "verticesMoved": moved}
+
+
+def ceiling_fill(V: np.ndarray, F: np.ndarray, room: Room, log: Callable[[str], None],
+                 cell: float = FLOOR_CELL_M, shots: list[Shot] | None = None) -> tuple[np.ndarray, np.ndarray, float | None, float]:
+    """Tiles (at most 1 m square, facing down) a few centimetres above a ceiling wherever the mesh's own ceiling is
+    open inside its outline: the height where down-facing surfaces above 2 m add up to the most area, the cells they
+    cover there, closed and with their holes filled. A ceiling is seen by few cameras (they look ahead, not up), so
+    it fuses torn, and through a tear a player would see the sky. Returns (vertices, faces, height, open m2)."""
+    from scipy import ndimage
+
+    empty = (np.zeros((0, 3)), np.zeros((0, 3), np.int64), None, 0.0)
+    n, area = face_normals(V, F)
+    c = V[F].mean(axis=1)
+    down = (n[:, 1] < -0.7) & (c[:, 1] > 2.0) & (c[:, 1] < float(room.hi[1]))
+    if area[down].sum() < CEILING_MIN_M2:
+        return empty
+    bins = np.arange(2.0, float(room.hi[1]) + 0.05, 0.05)
+    hist, _ = np.histogram(c[down, 1], bins, weights=area[down])
+    win = np.convolve(hist, np.ones(3), mode="same")
+    k = int(np.argmax(win))
+    if win[k] < CEILING_MIN_M2:
+        return empty
+    h = float(bins[k] + 0.025)
+    at = down & (np.abs(c[:, 1] - h) < 0.15)
+    ox, oz = float(room.lo[0]), float(room.lo[2])
+    nx = max(1, int(math.ceil((room.hi[0] - ox) / cell)))
+    nz = max(1, int(math.ceil((room.hi[2] - oz) / cell)))
+    ix = np.clip(np.floor((c[at, 0] - ox) / cell).astype(np.int64), 0, nx - 1)
+    iz = np.clip(np.floor((c[at, 2] - oz) / cell).astype(np.int64), 0, nz - 1)
+    cover = np.bincount(iz * nx + ix, weights=area[at], minlength=nz * nx).reshape(nz, nx)
+    covered = cover > 0.2 * cell * cell
+    # where the splats have something at that height too (a ceiling seen by few cameras may be a few big splats the
+    # fusion missed), as long as it joins the fused ceiling: a tree canopy elsewhere is not part of it
+    sp = np.abs(room.pos[:, 1] - h) < 0.3
+    sx = np.floor((room.pos[sp, 0] - ox) / cell).astype(np.int64)
+    sz = np.floor((room.pos[sp, 2] - oz) / cell).astype(np.int64)
+    inb = (sx >= 0) & (sx < nx) & (sz >= 0) & (sz < nz)
+    Ws = np.bincount(sz[inb] * nx + sx[inb], weights=room.w[sp][inb], minlength=nz * nx).reshape(nz, nx)
+    splat_cells = Ws > (0.1 * float(np.median(Ws[Ws > 0])) if (Ws > 0).any() else np.inf)
+    union = ndimage.binary_closing(covered | splat_cells, structure=np.ones((3, 3), bool), iterations=2)
+    lab, nlab = ndimage.label(union)
+    keep = np.unique(lab[covered & (lab > 0)])
+    outline = ndimage.binary_fill_holes(np.isin(lab, keep) & (lab > 0))
+    # the room the ceiling belongs to: the convex hull of the fused ceiling and the walls that run into it. Under a
+    # ceiling the cameras looked ahead, not up, so a ceiling fuses in a band along the walls they faced and stays
+    # open over the rest of the room; the renders cannot confirm it there either (a faint ceiling, glare above it).
+    room_cells, planes = ceiling_room(V, F, covered, h, ox, oz, cell, nx, nz)
+    missing = (outline | room_cells) & (cover < 0.7 * cell * cell)
+    n_outline = int(missing.sum())
+    if shots and (missing & ~room_cells).any():
+        missing &= room_cells | ceiling_seen(missing & ~room_cells, ox, oz, cell, h, shots)
+    if not missing.any():
+        return empty
+    y = h + 0.03  # above the real ceiling: where both exist, the real one is what a player sees
+    kk = max(1, int(round(1.0 / cell)))
+    verts, faces = [], []
+    filled = {"room": 0.0, "seen": 0.0}
+    # tiles of at most 1 m; inside the walls each is cut to the room's outline, so its edge runs along the walls
+    # (a room at 45 degrees gets a straight edge, not a staircase of cells)
+    for key, cells, clip in (("room", missing & room_cells, planes), ("seen", missing & ~room_cells, None)):
+        for x0, z0, x1, z1, _lab in rmap.greedy_rects_2d(np.where(cells, 0, -1).astype(np.int32)):
+            for a in range(x0, x1, kk):
+                for b in range(z0, z1, kk):
+                    xa, xb = ox + a * cell, ox + min(a + kk, x1) * cell
+                    za, zb = oz + b * cell, oz + min(b + kk, z1) * cell
+                    poly = [(xa, za), (xa, zb), (xb, zb), (xb, za)]
+                    if clip is not None:
+                        poly = _clip_convex(poly, clip)
+                    if len(poly) < 3:
+                        continue
+                    xs, zs = np.array([q[0] for q in poly]), np.array([q[1] for q in poly])
+                    area2 = float(np.dot(xs, np.roll(zs, -1)) - np.dot(zs, np.roll(xs, -1)))  # twice the signed area
+                    if abs(area2) < 1e-6:
+                        continue
+                    if area2 < 0:  # wound so the fan below faces down (clockwise seen from above)
+                        poly = poly[::-1]
+                    n0 = len(verts)
+                    verts += [(px, y, pz) for px, pz in poly]
+                    faces += [(n0, n0 + k, n0 + k + 1) for k in range(1, len(poly) - 1)]
+                    filled[key] += abs(area2) / 2
+    open_m2 = filled["room"] + filled["seen"]
+    log(f"ceiling at {h:.2f} m: {float(outline.sum()) * cell * cell:.1f} m2 outline, room under it (walls) "
+        f"{float(room_cells.sum()) * cell * cell:.1f} m2, {n_outline * cell * cell:.1f} m2 open, {open_m2:.1f} m2 filled "
+        f"({filled['room']:.1f} m2 inside the walls, {filled['seen']:.1f} m2 where the splats have a surface at that "
+        f"height) -> {len(faces)} fill triangles")
+    return np.asarray(verts, np.float64).reshape(-1, 3), np.asarray(faces, np.int64).reshape(-1, 3), h, open_m2
+
+
+def _clip_convex(poly: list[tuple[float, float]], planes: np.ndarray) -> list[tuple[float, float]]:
+    """A polygon (x, z) cut to the half-planes a*x + b*z + c <= 0 (rows of `planes`), Sutherland-Hodgman."""
+    for a, b, c in planes:
+        out = []
+        for i in range(len(poly)):
+            p, q = poly[i], poly[(i + 1) % len(poly)]
+            fp, fq = a * p[0] + b * p[1] + c, a * q[0] + b * q[1] + c
+            if fp <= 1e-9:
+                out.append(p)
+            if (fp <= 1e-9) != (fq <= 1e-9):
+                t = fp / (fp - fq)
+                out.append((p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1])))
+        poly = out
+        if len(poly) < 3:
+            return []
+    return poly
+
+
+def ceiling_room(V: np.ndarray, F: np.ndarray, covered: np.ndarray, h: float, ox: float, oz: float, cell: float,
+                 nx: int, nz: int) -> tuple[np.ndarray, np.ndarray | None]:
+    """The room under a ceiling at height h: the convex hull of the fused ceiling's cells and of the walls that reach
+    it (vertical surface between 0.8 m and the ceiling, WALL_CELL_M2 per cell, runs of at least WALL_MIN_CELLS cells
+    that touch the ceiling's cells grown by 50 cm; a tree trunk on a patio is too short or too far), through the cell
+    centres. Returns the [z, x] cells that overlap it and its half-planes in metres (rows a, b, c: a*x + b*z + c <= 0
+    inside), or no cells and None when no wall reaches the ceiling: an open roof edge is not a room."""
+    from scipy import ndimage
+    from scipy.spatial import ConvexHull, QhullError
+
+    none = (np.zeros((nz, nx), bool), None)
+    n, area = face_normals(V, F)
+    c = V[F].mean(axis=1)
+    w = (np.abs(n[:, 1]) < 0.3) & (c[:, 1] > 0.8) & (c[:, 1] < h - 0.3)
+    if not w.any() or not covered.any():
+        return none
+    ix = np.clip(np.floor((c[w, 0] - ox) / cell).astype(np.int64), 0, nx - 1)
+    iz = np.clip(np.floor((c[w, 2] - oz) / cell).astype(np.int64), 0, nz - 1)
+    wa = np.bincount(iz * nx + ix, weights=area[w], minlength=nz * nx).reshape(nz, nx)
+    walls = wa > WALL_CELL_M2 * (cell / 0.25) ** 2
+    lab, nlab = ndimage.label(walls, structure=np.ones((3, 3), bool))
+    if nlab == 0:
+        return none
+    near = ndimage.binary_dilation(covered, structure=np.ones((3, 3), bool), iterations=max(1, int(round(0.5 / cell))))
+    sizes = np.bincount(lab.ravel(), minlength=nlab + 1)
+    touch = np.unique(lab[near & (lab > 0)])
+    keep = touch[sizes[touch] >= WALL_MIN_CELLS]
+    if len(keep) == 0:
+        return none
+    zi, xi = np.nonzero(covered | np.isin(lab, keep))
+    pts = np.stack([ox + (xi + 0.5) * cell, oz + (zi + 0.5) * cell], axis=1)
+    try:
+        hull = ConvexHull(pts)
+    except QhullError:
+        return none
+    planes = hull.equations  # rows (a, b, c) with a*x + b*z + c <= 0 inside, metres
+    # a cell overlaps the hull when its centre or a corner is inside
+    gx = ox + np.arange(nx + 1) * cell
+    gz = oz + np.arange(nz + 1) * cell
+    X, Z = np.meshgrid(gx, gz)
+    corner_in = np.all(np.stack([X.ravel(), Z.ravel()], 1) @ planes[:, :2].T + planes[:, 2] <= 1e-9, axis=1).reshape(nz + 1, nx + 1)
+    Xc, Zc = np.meshgrid(gx[:-1] + cell / 2, gz[:-1] + cell / 2)
+    centre_in = np.all(np.stack([Xc.ravel(), Zc.ravel()], 1) @ planes[:, :2].T + planes[:, 2] <= 1e-9, axis=1).reshape(nz, nx)
+    overlap = centre_in | corner_in[:-1, :-1] | corner_in[1:, :-1] | corner_in[:-1, 1:] | corner_in[1:, 1:]
+    return overlap, planes
+
+
+def ceiling_seen(cells: np.ndarray, ox: float, oz: float, cell: float, h: float, shots: list[Shot]) -> np.ndarray:
+    """[z, x] cells where the splat renders put a surface at the ceiling height: views that see the cell's centre at
+    height h with a valid depth there vote for it when that depth lands within 15 cm (or 5%) of it, and against it
+    when they see nothing there or clearly past it (sky, a tree beyond the roof's edge). A cell needs more votes for
+    than against."""
+    import torch
+
+    zi, xi = np.nonzero(cells)
+    pts = np.stack([ox + (xi + 0.5) * cell, np.full(len(xi), h), oz + (zi + 0.5) * cell], axis=1)
+    dev = shots[0].depth.device
+    P = torch.as_tensor(pts, dtype=torch.float32, device=dev)
+    yes = torch.zeros(len(P), device=dev)
+    no = torch.zeros(len(P), device=dev)
+    for s in shots:
+        u, v, z = project(P, s.view)
+        H, W = s.depth.shape
+        ui, vi = torch.floor(u).long(), torch.floor(v).long()
+        inb = (z > 0.2) & (ui >= 0) & (ui < W) & (vi >= 0) & (vi < H)
+        k = torch.nonzero(inb).squeeze(1)
+        if k.numel() == 0:
+            continue
+        pix = vi[k] * W + ui[k]
+        zz = z[k]
+        tol = torch.clamp(0.05 * zz, min=0.15)
+        if s.alpha is not None and s.ed is not None:
+            a = s.alpha.reshape(-1)[pix]
+            d = s.ed.reshape(-1)[pix]
+            yes[k] += ((a > 0.2) & ((d - zz).abs() < tol)).float()
+            no[k] += ((a < 0.05) | ((a > 0.2) & (d > zz + 2 * tol))).float()
+        else:
+            d = s.depth.reshape(-1)[pix]
+            yes[k] += ((d > 0) & ((d - zz).abs() < tol)).float()
+            no[k] += ((d <= 0) | (d > zz + 2 * tol)).float()
+    ok = (yes > no).cpu().numpy()
+    out = np.zeros_like(cells)
+    out[zi[ok], xi[ok]] = True
+    return out
+
+
+def kd_chunks_area(V: np.ndarray, F: np.ndarray, max_tris: int = CHUNK_TRIANGLES, max_area: float = CHUNK_AREA_M2,
+                   min_chunks: int = 1) -> list[np.ndarray]:
+    """Like kd_chunks, but a chunk is also split while it holds more than `max_area` m2 (each chunk is one texture of
+    the same size, so this keeps the texel density even), along the longest axis at the weighted median."""
+    if len(F) == 0:
+        return []
+    c = V[F].mean(axis=1)
+    _, a = face_normals(V, F)
+    wt = 1.0 / max_tris + a / max_area
+    out = [np.arange(len(F))]
+
+    def load(idx: np.ndarray) -> float:
+        return max(len(idx) / max_tris, float(a[idx].sum()) / max_area)
+
+    loads = [load(out[0])]
+    while True:
+        k = int(np.argmax(loads))
+        idx = out[k]
+        if len(idx) < 2 or (loads[k] <= 1.0 and len(out) >= min_chunks):
+            break
+        cc = c[idx]
+        ax = int(np.argmax(cc.max(axis=0) - cc.min(axis=0)))
+        order = np.argsort(cc[:, ax], kind="stable")
+        cw = np.cumsum(wt[idx][order])
+        half = int(np.clip(np.searchsorted(cw, cw[-1] / 2), 1, len(idx) - 1))
+        lo_i, hi_i = idx[order[:half]], idx[order[half:]]
+        out[k:k + 1] = [lo_i, hi_i]
+        loads[k:k + 1] = [load(lo_i), load(hi_i)]
+    out.sort(key=lambda i: (round(float(c[i, 2].mean()), 3), round(float(c[i, 0].mean()), 3)))
+    return out
+
+
+# ---------------------------------------------------------------- the photo bake
+
+
+def _splat_fill(P: Any, Nn: Any, shots: list[Shot], tol_abs: float) -> tuple[Any, Any]:
+    """v1's splat-render bake for some texels: (linear colour [n, 3], seen [n]) from the views within half of each
+    texel's best (f cos / distance)^2, depth-tested against the splat depth."""
+    import torch
+    import torch.nn.functional as F
+
+    dev = P.device
+    M = len(P)
+
+    def weights(s: Shot) -> tuple[Any, Any, Any, Any]:
+        v = s.view
+        u, vv, z = project(P, v)
+        H, W = s.depth.shape
+        ui, vi = torch.floor(u).long(), torch.floor(vv).long()
+        inb = (z > 0.05) & (ui >= 0) & (ui < W) & (vi >= 0) & (vi < H)
+        sel = torch.nonzero(inb).squeeze(1)
+        pix = vi[sel] * W + ui[sel]
+        ok = s.valid.reshape(-1)[pix]
+        d = s.depth.reshape(-1)[pix]
+        zz = z[sel]
+        ok &= (zz - d).abs() < torch.clamp(0.03 * d, min=tol_abs)
+        eye = torch.as_tensor(v.c2w[:3, 3], dtype=torch.float32, device=dev)
+        to_eye = eye - P[sel]
+        dist = to_eye.norm(dim=1).clamp(min=1e-6)
+        cos = (Nn[sel] * to_eye).sum(dim=1) / dist
+        ok &= cos > 0.15
+        sel, cos, dist = sel[ok], cos[ok], dist[ok]
+        return sel, (v.f * cos / dist.clamp(min=0.3)) ** 2, u[sel], vv[sel]
+
+    best = torch.zeros(M, device=dev)
+    for s in shots:
+        sel, w, _, _ = weights(s)
+        best[sel] = torch.maximum(best[sel], w)
+    acc = torch.zeros(M, 3, device=dev)
+    wsum = torch.zeros(M, device=dev)
+    for s in shots:
+        sel, w, u, vv = weights(s)
+        good = w >= 0.5 * best[sel]
+        sel, w, u, vv = sel[good], w[good], u[good], vv[good]
+        if sel.numel() == 0:
+            continue
+        H, W = s.depth.shape
+        grid = torch.stack([u / W * 2 - 1, vv / H * 2 - 1], dim=1)[None, None]
+        img = srgb_to_linear_t(s.rgb.float()).permute(2, 0, 1)[None]
+        col = F.grid_sample(img, grid, mode="bilinear", padding_mode="border", align_corners=False)[0, :, 0].T
+        acc[sel] += col * w[:, None]
+        wsum[sel] += w
+    return acc / wsum.clamp(min=1e-9)[:, None], wsum > 0
+
+
+def _splat_mesh_fill(P: Any, Nn: Any, T: Any, shots: list[Shot], power: float) -> tuple[Any, Any]:
+    """Splat renders as a fallback texture source, with the same visibility test as the photos (the mesh's own
+    z-buffer) and the same best-view blend: (linear colour [n, 3], seen [n])."""
+    import torch
+    import torch.nn.functional as F
+
+    dev = P.device
+    M = len(P)
+    best = torch.zeros(M, device=dev)
+    acc = torch.zeros(M, 3, device=dev)
+    wsum = torch.zeros(M, device=dev)
+    for s in shots:
+        v = s.view
+        W, H = v.w, v.h
+        zb = zbuffer(T, v.c2w, v.f, v.fy, v.cx, v.cy, W, H)
+        R = torch.as_tensor(v.c2w[:3, :3], dtype=torch.float32, device=dev)
+        t = torch.as_tensor(v.c2w[:3, 3], dtype=torch.float32, device=dev)
+        pc = (P - t) @ R
+        z = -pc[:, 2]
+        zsafe = torch.where(z > 1e-3, z, torch.ones_like(z))
+        u = v.cx + v.f * pc[:, 0] / zsafe
+        vv = v.cy - v.fy * pc[:, 1] / zsafe
+        inb = (z > 0.05) & (u >= 0) & (u < W) & (vv >= 0) & (vv < H)
+        sel = torch.nonzero(inb).squeeze(1)
+        if sel.numel() == 0:
+            continue
+        us, vs, zz = u[sel], vv[sel], z[sel]
+        to_eye = t - P[sel]
+        dd = to_eye.norm(dim=1).clamp(min=1e-6)
+        cos = (Nn[sel] * to_eye).sum(dim=1) / dd
+        pix = torch.floor(vs).long().clamp(0, H - 1) * W + torch.floor(us).long().clamp(0, W - 1)
+        tol = 0.015 + 2.0 * zz / v.f / cos.clamp(min=0.15) + 0.004 * zz
+        ok = (zz <= zb[pix] + tol) & (cos > PHOTO_MIN_COS) & s.valid.reshape(-1)[pix]
+        sel, us, vs, cos, dd = sel[ok], us[ok], vs[ok], cos[ok], dd[ok]
+        if sel.numel() == 0:
+            continue
+        score = (v.f / dd) * cos.pow(1.5)
+        img = srgb_to_linear_t(s.rgb.float()).permute(2, 0, 1)[None]
+        g = torch.stack([us / W * 2 - 1, vs / H * 2 - 1], dim=1)[None, None]
+        col = F.grid_sample(img, g, mode="bilinear", padding_mode="border", align_corners=False)[0, :, 0].T
+        old = best[sel]
+        newb = torch.maximum(old, score)
+        r_old = torch.where(old > 0, (old / newb).pow(power), torch.zeros_like(old))
+        r_new = (score / newb).pow(power)
+        acc[sel] = acc[sel] * r_old[:, None] + col * r_new[:, None]
+        wsum[sel] = wsum[sel] * r_old + r_new
+        best[sel] = newb
+    return acc / wsum.clamp(min=1e-9)[:, None], wsum > 0
+
+
+def bake_photos(chunks: list[Chunk], cams: list[PhotoCam], photo_shots: list[Shot], fill_shots: list[Shot],
+                tsdf: Tsdf, room: Room, log: Callable[[str], None], power: float = PHOTO_POWER,
+                splat_only: set[str] | None = None) -> dict:
+    """Fills each chunk's image from the real photos and frames (see the v2 notes above). Texels no photo sees take
+    the splat renders (fill_shots), then the fused voxel colour, then (on the floor) the floor colour painted in.
+    Chunks named in `splat_only` (the ceiling fill: tiles where the fusion found no surface, so a photo may well show
+    what lies beyond them) take the splat renders only."""
+    import cv2
+    import torch
+    import torch.nn.functional as F
+
+    dev = tsdf.device
+    parts = [texels(ch) for ch in chunks]
+    P = torch.as_tensor(np.concatenate([p[2] for p in parts]), dtype=torch.float32, device=dev)
+    Nn = torch.as_tensor(np.concatenate([p[3] for p in parts]), dtype=torch.float32, device=dev)
+    M = len(P)
+    photo_ok = torch.as_tensor(np.concatenate([np.full(len(p[0]), ch.name not in (splat_only or set()))
+                                               for ch, p in zip(chunks, parts)]), device=dev)
+    # texel size in metres, per chunk (surface area / covered texels)
+    tsz = []
+    for ch, p in zip(chunks, parts):
+        _, a = face_normals(ch.V, ch.F)
+        tsz.append(np.full(len(p[0]), math.sqrt(float(a.sum()) / max(1, len(p[0]))), np.float32))
+    tsz_t = torch.as_tensor(np.concatenate(tsz), device=dev)
+    T = torch.as_tensor(np.concatenate([ch.V[ch.F] for ch in chunks]).astype(np.float32), device=dev)
+
+    # pass 1: colour transforms (photo -> splat render from the same camera) and sharpness against that render
+    shot_of = {s.view.position: s for s in photo_shots}
+    fits, sharp = [], []
+    for k, c in enumerate(cams):
+        s = shot_of.get(k)
+        try:
+            img, ok = read_photo(c)
+        except MeshError as e:
+            log(str(e))
+            fits.append(None)
+            sharp.append(0.0)
+            continue
+        if s is None:
+            fits.append((np.vstack([np.eye(3), np.zeros((1, 3))]), {"fit": False}))
+            sharp.append(1.0)
+            continue
+        h, w = s.depth.shape
+        small = cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA)
+        ok_s = cv2.resize(ok.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST) > 0
+        tgt = s.rgb.float().clamp(0, 1).cpu().numpy()
+        tvalid = s.valid.cpu().numpy()
+        A, st = colour_match(rmap.srgb_to_linear(small.astype(np.float64) / 255.0), ok_s,
+                             rmap.srgb_to_linear(tgt.astype(np.float64)), tvalid)
+        g_p = cv2.cvtColor(small, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
+        g_r = cv2.cvtColor((tgt * 255).astype(np.uint8), cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
+        both = ok_s & tvalid
+        sp, sr = sharpness(g_p, both), sharpness(g_r, both)
+        st["sharpness"] = round(sp / max(sr, 1e-9), 3) if sr > 0 else None
+        fits.append((A, st))
+        sharp.append(sp / max(sr, 1e-9) if sr > 0 else 1.0)
+    sh = np.array(sharp, np.float64)
+    ref = float(np.median(sh[sh > 0])) if (sh > 0).any() else 1.0
+    sharp_w = np.clip(sh / max(ref, 1e-9), 0.4, 1.6)
+    log(f"colour transforms fitted for {sum(1 for f in fits if f and f[1].get('fit'))}/{len(cams)} cameras; sharpness "
+        f"(photo / splat render) median {ref:.2f}, range {sh.min():.2f}..{sh.max():.2f}")
+
+    # pass 2: project
+    best = torch.zeros(M, device=dev)
+    acc = torch.zeros(M, 3, device=dev)
+    wsum = torch.zeros(M, device=dev)
+    winner = torch.full((M,), -1, dtype=torch.int32, device=dev)
+    per_cam = []
+    for k, c in enumerate(cams):
+        if fits[k] is None:
+            continue
+        A, _ = fits[k]
+        img, ok = read_photo(c)
+        At = torch.as_tensor(A, dtype=torch.float32, device=dev)
+        lin_t = srgb_to_linear_t(torch.as_tensor(img, device=dev).float() / 255.0)
+        lin_t = (lin_t.reshape(-1, 3) @ At[:3] + At[3]).clamp(0.0, 1.0).reshape(lin_t.shape)
+        # usable-pixel feather: distance to the image border or a mask edge, at half size
+        hw, hh = max(1, c.w // 2), max(1, c.h // 2)
+        okh = cv2.resize(ok.astype(np.uint8), (hw, hh), interpolation=cv2.INTER_NEAREST)
+        okh[0, :] = okh[-1, :] = 0
+        okh[:, 0] = okh[:, -1] = 0
+        dist = cv2.distanceTransform(okh, cv2.DIST_L2, 5)
+        feather = torch.as_tensor(np.clip(dist / max(1.0, FEATHER_FRAC * hw), 0.0, 1.0), device=dev).reshape(-1)
+        okt = torch.as_tensor(ok, device=dev).reshape(-1)
+        # z-buffer of the mesh at half size
+        zs = 0.5
+        zb = zbuffer(T, c.c2w, c.fx * zs, c.fy * zs, c.cx * zs, c.cy * zs, hw, hh)
+        R = torch.as_tensor(c.c2w[:3, :3], dtype=torch.float32, device=dev)
+        t = torch.as_tensor(c.c2w[:3, 3], dtype=torch.float32, device=dev)
+        pc = (P - t) @ R
+        z = -pc[:, 2]
+        zsafe = torch.where(z > 1e-3, z, torch.ones_like(z))
+        u = c.cx + c.fx * pc[:, 0] / zsafe
+        v = c.cy - c.fy * pc[:, 1] / zsafe
+        inb = (z > 0.05) & (u >= 0) & (u < c.w) & (v >= 0) & (v < c.h)
+        sel = torch.nonzero(inb).squeeze(1)
+        if sel.numel() == 0:
+            per_cam.append({"name": c.name, "texels": 0})
+            continue
+        us, vs, zz = u[sel], v[sel], z[sel]
+        to_eye = t - P[sel]
+        dd = to_eye.norm(dim=1).clamp(min=1e-6)
+        cos = (Nn[sel] * to_eye).sum(dim=1) / dd
+        hp = (torch.floor(vs * zs).long().clamp(0, hh - 1) * hw + torch.floor(us * zs).long().clamp(0, hw - 1))
+        tol = 0.015 + 2.0 * zz / (c.fx * zs) / cos.clamp(min=0.15) + 0.004 * zz
+        vis = (zz <= zb[hp] + tol) & (cos > PHOTO_MIN_COS)
+        fp = torch.floor(vs).long() * c.w + torch.floor(us).long()
+        vis &= okt[fp] & photo_ok[sel]
+        fe = feather[hp]
+        vis &= fe > 0
+        sel, us, vs, zz, cos, dd, fe = sel[vis], us[vis], vs[vis], zz[vis], cos[vis], dd[vis], fe[vis]
+        if sel.numel() == 0:
+            per_cam.append({"name": c.name, "texels": 0})
+            continue
+        score = (c.fx / dd) * cos.pow(1.5) * float(sharp_w[k]) * fe
+        # sample: a pyramid level matched to the texel footprint (no aliasing from a far photo)
+        img_t = lin_t.permute(2, 0, 1)[None]
+        pyr = [img_t]
+        for _ in range(3):
+            pyr.append(F.avg_pool2d(pyr[-1], 2, ceil_mode=True))
+        foot = tsz_t[sel] * c.fx / zz.clamp(min=1e-3)
+        lvl = torch.clamp(torch.floor(torch.log2(foot.clamp(min=1e-6))), 0, 3).long()
+        col = torch.zeros(len(sel), 3, device=dev)
+        for L in range(4):
+            m = lvl == L
+            if not bool(m.any()):
+                continue
+            g = torch.stack([us[m] / c.w * 2 - 1, vs[m] / c.h * 2 - 1], dim=1)[None, None]
+            col[m] = F.grid_sample(pyr[L], g, mode="bilinear", padding_mode="border", align_corners=False)[0, :, 0].T
+        old = best[sel]
+        newb = torch.maximum(old, score)
+        r_old = torch.where(old > 0, (old / newb).pow(power), torch.zeros_like(old))
+        r_new = (score / newb).pow(power)
+        acc[sel] = acc[sel] * r_old[:, None] + col * r_new[:, None]
+        wsum[sel] = wsum[sel] * r_old + r_new
+        best[sel] = newb
+        won = score >= newb
+        winner[sel[won]] = k
+        per_cam.append({"name": c.name, "texels": int(sel.numel())})
+        del img_t, pyr, zb, lin_t
+    from_photos = wsum > 0
+    lin = acc / wsum.clamp(min=1e-9)[:, None]
+    n_photo = int(from_photos.sum())
+    # texels no photo saw: splat renders (mesh visibility, then splat-depth visibility), voxel colours, the floor map
+    miss = torch.nonzero(~from_photos).squeeze(1)
+    n_splat = 0
+    seen = from_photos.clone()
+    if miss.numel() and fill_shots:
+        for s0 in range(0, miss.numel(), 8_000_000):
+            mm = miss[s0:s0 + 8_000_000]
+            col, got = _splat_mesh_fill(P[mm], Nn[mm], T, fill_shots, power)
+            lin[mm[got]] = col[got]
+            seen[mm[got]] = True
+            n_splat += int(got.sum())
+        miss = torch.nonzero(~seen).squeeze(1)
+        for s0 in range(0, miss.numel(), 4_000_000):
+            mm = miss[s0:s0 + 4_000_000]
+            col, got = _splat_fill(P[mm], Nn[mm], fill_shots, 3.0 * tsdf.v)
+            lin[mm[got]] = col[got]
+            seen[mm[got]] = True
+            n_splat += int(got.sum())
+    miss = torch.nonzero(~seen).squeeze(1)
+    n_vox = 0
+    if miss.numel():
+        fill = torch.full((miss.numel(), 3), float("nan"), device=dev)
+        for off in (0.0, 1.0, -1.0, 2.0):
+            todo = torch.isnan(fill[:, 0])
+            if not bool(todo.any()):
+                break
+            q = P[miss[todo]] + Nn[miss[todo]] * (off * tsdf.v)
+            _, _, cv = tsdf.lookup(q)
+            fill[todo] = cv
+        got = ~torch.isnan(fill[:, 0])
+        lin[miss[got]] = fill[got]
+        seen[miss[got]] = True
+        n_vox = int(got.sum())
+    flo = seen & (P[:, 1].abs() < 0.15) & (Nn[:, 1] > 0.5)
+    if int(flo.sum()) >= 200:
+        fimg, ox, oz, cell = paint_floor_map(P[flo].cpu().numpy(), lin[flo].cpu().numpy(), np.ones(int(flo.sum())), room)
+    else:
+        fimg, ox, oz, cell = floor_colours(room)
+    miss = torch.nonzero(~seen & (P[:, 1] < 0.15) & (P[:, 1] > FLOOR_BACKSTOP_Y - 0.05) & (Nn[:, 1] > 0.5)).squeeze(1)
+    n_floor = int(miss.numel())
+    if n_floor:
+        fm = torch.as_tensor(fimg, dtype=torch.float32, device=dev).permute(2, 0, 1)[None]
+        h, w = fimg.shape[:2]
+        gx = (P[miss, 0] - ox) / (cell * w) * 2 - 1
+        gz = (P[miss, 2] - oz) / (cell * h) * 2 - 1
+        lin[miss] = F.grid_sample(fm, torch.stack([gx, gz], dim=1)[None, None], mode="bilinear", padding_mode="border",
+                                  align_corners=False)[0, :, 0].T
+        seen[miss] = True
+    lin_np, seen_np, fp_np = lin.cpu().numpy(), seen.cpu().numpy(), from_photos.cpu().numpy()
+    o = 0
+    for ch, (rows, cols, _, _) in zip(chunks, parts):
+        n = len(rows)
+        T_ = ch.size
+        im = np.zeros((T_, T_, 3), np.float32)
+        have = np.zeros((T_, T_), bool)
+        ok = seen_np[o:o + n]
+        im[rows[ok], cols[ok]] = lin_np[o:o + n][ok]
+        have[rows[ok], cols[ok]] = True
+        ch.stats.update({"texels": int(n), "fromPhotos": round(float(fp_np[o:o + n].mean()) if n else 0.0, 3)})
+        ch.image = finish_image(im, have)
+        o += n
+    wins = torch.bincount(winner[winner >= 0].long(), minlength=len(cams)).cpu().numpy()
+    by_group: dict[str, int] = {}
+    for k, c in enumerate(cams):
+        by_group[c.group] = by_group.get(c.group, 0) + int(wins[k])
+    log(f"baked {M} texels: {n_photo / max(M, 1) * 100:.1f}% from photos/frames (best view by group {by_group}), "
+        f"{n_splat / max(M, 1) * 100:.1f}% from splat renders, {n_vox / max(M, 1) * 100:.1f}% from voxel colours, "
+        f"{n_floor / max(M, 1) * 100:.1f}% from the floor map")
+    fit_stats = [f[1] for f in fits if f is not None]
+    return {"texels": M, "fromPhotos": round(n_photo / max(M, 1), 4), "fromSplatRenders": round(n_splat / max(M, 1), 4),
+            "fromVoxels": round(n_vox / max(M, 1), 4), "fromFloorMap": round(n_floor / max(M, 1), 4),
+            "bestViewByGroup": by_group, "cameras": len(cams), "power": power,
+            "colourFit": {"fitted": sum(1 for f in fit_stats if f.get("fit")),
+                          "meanErrBefore": round(float(np.mean([f["errBefore"] for f in fit_stats if f.get("fit")] or [0])), 4),
+                          "meanErrAfter": round(float(np.mean([f["errAfter"] for f in fit_stats if f.get("fit")] or [0])), 4)},
+            "sharpnessMedian": round(ref, 3)}
+
+
+# ---------------------------------------------------------------- the skybox
+
+
+def sky_c2w(face: str, eye: np.ndarray) -> np.ndarray:
+    fwd, up = (np.asarray(x, np.float64) for x in SKY_FACES[face])
+    right = np.cross(fwd, up)
+    return sio.pose_matrix(np.stack([right, up, -fwd], axis=1), eye)
+
+
+def render_skybox(room: Room, lo: np.ndarray, hi: np.ndarray, eye: np.ndarray, size: int, out_dir: Path,
+                  device: Any, log: Callable[[str], None]) -> dict:
+    """Six cube faces (Roblox's Sky convention, SKY_FACES) from `eye` (room frame), of the splats OUTSIDE the mesh box
+    [lo, hi] only: the near room is geometry, everything farther is drawn at infinity. Where no far splat covers a
+    pixel, the sky is the colour the far splats have at that elevation (a seamless fill). Writes sky-<face>.png."""
+    import torch
+    from PIL import Image
+
+    import dataclasses
+
+    s = room.splats
+    P = sio.apply_transform(s.means, room.transform)
+    P[:, 1] -= room.floor_y
+    # beyond the walkable box sideways: what lies above it (glare a splat world puts behind its ceiling lights, tree
+    # tops overhead) or below it (mirror images in a glossy floor) is either hidden by the mesh or not real
+    far = ~((P[:, 0] >= lo[0]) & (P[:, 0] <= hi[0]) & (P[:, 2] >= lo[2]) & (P[:, 2] <= hi[2]))
+    sub = s.subset(np.nonzero(far)[0])
+    renderer = Renderer(dataclasses.replace(room, splats=sub), device)
+    names = list(SKY_FACES)
+    views = [View(sky_c2w(n, eye), size / 2.0, size, "sky") for n in names]
+    imgs, alphas = [], []
+    if renderer.gpu:
+        from gsplat import rasterization
+
+        vm = np.stack([sio.c2w_gl_to_cv_w2c(renderer.file_c2w(v.c2w)) for v in views]).astype(np.float32)
+        K = np.stack([np.array([[v.f, 0, v.cx], [0, v.fy, v.cy], [0, 0, 1]], np.float32) for v in views])
+        with torch.no_grad():
+            out, alpha, _ = rasterization(
+                renderer.t["means"], renderer.t["quats"], renderer.t["scales"], renderer.t["opac"], renderer.t["sh"],
+                torch.from_numpy(vm).to(device), torch.from_numpy(K).to(device), size, size, sh_degree=sub.sh_degree,
+                render_mode="RGB", near_plane=0.01, far_plane=1e5, backgrounds=torch.zeros(len(views), 3, device=device))
+        rgb = out[..., :3].clamp(0, 1).cpu().numpy()
+        al = alpha[..., 0].clamp(0, 1).cpu().numpy()
+    else:
+        rgb, al = [], []
+        for v in views:
+            r = sio.render_points(sub, renderer.file_c2w(v.c2w), v.f, v.f, v.cx, v.cy, size, size)
+            rgb.append(r.rgb.astype(np.float32) / 255.0)
+            al.append(r.alpha)
+        rgb, al = np.stack(rgb), np.stack(al)
+    # elevation of every pixel's ray
+    uu, vv = np.meshgrid(np.arange(size) + 0.5, np.arange(size) + 0.5)
+    x, y = (uu - size / 2) / (size / 2), -(vv - size / 2) / (size / 2)
+    elev = []
+    for v in views:
+        d = np.stack([x, y, -np.ones_like(x)], axis=-1) @ v.c2w[:3, :3].T
+        elev.append(np.degrees(np.arcsin(np.clip(d[..., 1] / np.linalg.norm(d, axis=-1), -1, 1))))
+    elev = np.stack(elev)
+    # the fill: alpha-weighted mean colour (of covered pixels, un-premultiplied) per degree of elevation
+    bins = np.clip(np.floor(elev + 90).astype(np.int64), 0, 179)
+    covered = al > 0.6
+    wts = al[covered]
+    col = rgb[covered] / np.maximum(al[covered], 1e-3)[:, None]
+    lin = rmap.srgb_to_linear(np.clip(col, 0, 1))
+    Wb = np.bincount(bins[covered], weights=wts, minlength=180)
+    Cb = np.stack([np.bincount(bins[covered], weights=wts * lin[:, i], minlength=180) for i in range(3)], axis=1)
+    have = Wb > 50
+    prof = np.zeros((180, 3))
+    if have.any():
+        prof[have] = Cb[have] / Wb[have, None]
+        idx = np.arange(180)
+        for i in range(3):
+            prof[:, i] = np.interp(idx, idx[have], prof[have, i])
+        k = np.ones(7) / 7
+        prof = np.stack([np.convolve(np.pad(prof[:, i], 3, mode="edge"), k, mode="valid") for i in range(3)], axis=1)
+    else:
+        prof[:] = 0.02
+    fill = linear_to_srgb_np(prof)  # sRGB per elevation degree
+    files = {}
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stats = {}
+    for i, n in enumerate(names):
+        e = np.clip(elev[i] + 90, 0, 179.999)
+        f0 = np.floor(e).astype(np.int64)
+        t = (e - f0)[..., None]
+        bg = fill[f0] * (1 - t) + fill[np.minimum(f0 + 1, 179)] * t
+        img = rgb[i] + (1.0 - al[i])[..., None] * bg
+        u8 = np.clip(np.round(img * 255), 0, 255).astype(np.uint8)
+        buf = io.BytesIO()
+        Image.fromarray(u8).save(buf, format="PNG", optimize=True)
+        data = buf.getvalue()
+        fname = f"sky-{n}.png"
+        write_atomic(out_dir / fname, data)
+        files[n] = {"file": fname, "sha1": hashlib.sha1(data).hexdigest(), "bytes": len(data),
+                    "property": SKY_PROPERTY[n]}
+        stats[n] = round(float((al[i] > 0.6).mean()), 3)
+    log(f"skybox: {int(far.sum())} far splats (of {len(s)}), 6 faces of {size} px from ({eye[0]:.2f}, {eye[1]:.2f}, "
+        f"{eye[2]:.2f}); covered by splats: {stats}")
+    return {"faces": files, "coverage": stats, "farSplats": int(far.sum())}
+
+
+# ---------------------------------------------------------------- parts
+
+
+def pack_parts(chunks: list[Chunk], centres: list[np.ndarray], jpegs: list[bytes], spawn_studs: np.ndarray,
+               extras: dict, max_bytes: int = PART_MAX_BYTES) -> list[tuple[list[int], bytes]]:
+    """Chunks nearest the spawn first, as many per .glb as fit in max_bytes; returns (chunk indices, glb) per part."""
+    order = sorted(range(len(chunks)), key=lambda k: float(np.linalg.norm((centres[k] - spawn_studs)[[0, 2]])))
+    est = [len(jpegs[k]) + 32 * len(ch.V) + (6 if len(ch.V) < 65536 else 12) * len(ch.F) + 400 for k, ch in enumerate(chunks)]
+    groups: list[list[int]] = [[]]
+    size = 0
+    for k in order:
+        if groups[-1] and size + est[k] > 0.97 * max_bytes:
+            groups.append([])
+            size = 0
+        groups[-1].append(k)
+        size += est[k]
+    out = []
+    pending = list(groups)
+    while pending:
+        g = pending.pop(0)
+        ex = dict(extras, part=len(out) + 1)
+        data = glb_bytes([chunks[k] for k in g], [centres[k] for k in g], ex, jpegs=[jpegs[k] for k in g])
+        if len(data) > max_bytes and len(g) > 1:
+            pending.insert(0, g[-1:] + (pending.pop(0) if pending else []))
+            pending.insert(0, g[:-1])
+            continue
+        out.append((g, data))
+    return out
+
+
+def part_file(i: int) -> str:
+    return GLB_FILE if i == 0 else f"roblox-{i + 1}.glb"
+
+
+# ---------------------------------------------------------------- the whole v2 build
+
+
+def build_model_v2(scene_dir: Path | str, out_dir: Path | str | None = None, photos: Path | str | None = None,
+                   triangles: int = V2_TRIANGLES, texture: int = DEFAULT_TEXTURE, voxel: float | None = None,
+                   margin: float = NEAR_MARGIN_M, positions: int = V2_POSITIONS, face_res: int = FACE_RES,
+                   sky: bool = True, sky_size: int = SKY_SIZE, power: float = PHOTO_POWER, device: str | None = None,
+                   workers: int = 8, key: str | None = None, hole_edges: int = HOLE_EDGES,
+                   log: Callable[[str], None] = _log_noop, max_cams: int = 0, jpeg_quality: int = 88,
+                   max_parts: int = 0) -> dict:
+    t0 = time.time()
+    timings: dict[str, float] = {}
+
+    def lap(name: str, since: float) -> float:
+        now = time.time()
+        timings[name] = round(now - since, 2)
+        return now
+
+    import dataclasses
+
+    import torch
+
+    scene_dir = Path(scene_dir)
+    out_dir = Path(out_dir) if out_dir else scene_dir
+    triangles = int(max(MIN_TRIANGLES, min(V2_MAX_TRIANGLES, triangles)))
+    texture = int(max(128, min(4096, texture)))
+    dev = _device(device)
+    try:
+        room0 = load_room(scene_dir, log)
+    except rmap.MapError as e:
+        raise MeshError(str(e))
+    lo, hi, box_src = near_box(room0, margin)
+    room = dataclasses.replace(room0, lo=lo, hi=hi)
+    log(f"mesh box ({box_src} + {margin:.1f} m): x {lo[0]:.1f}..{hi[0]:.1f}  y {lo[1]:.1f}..{hi[1]:.1f}  "
+        f"z {lo[2]:.1f}..{hi[2]:.1f} m (v1 room box x {room0.lo[0]:.1f}..{room0.hi[0]:.1f} z {room0.lo[2]:.1f}..{room0.hi[2]:.1f})")
+    cams: list[PhotoCam] = []
+    if photos:
+        if not (scene_dir / "cameras.json").exists():
+            raise MeshError("the scene has no cameras.json: photo textures need the reconstruction's cameras")
+        cams = load_photo_cams(scene_dir, Path(photos), room.floor_y, log)
+        if max_cams and len(cams) > max_cams:
+            cams = cams[:: int(math.ceil(len(cams) / max_cams))]
+    t = lap("load", t0)
+
+    renderer = Renderer(room, dev)
+    renderer.keep_alpha = True
+    views, stands = plan_views(room, positions, face_res)
+    cube_shots, view_stats = render_views(renderer, views, log)
+    photo_shots = render_photo_shots(renderer, photo_views(cams), log) if cams else []
+    shots = cube_shots + photo_shots
+    if not shots:
+        raise MeshError("every view of this world is empty")
+    del renderer
+    t = lap("render", t)
+
+    v = voxel or float(np.clip(math.sqrt(max(1.0, _seen_area(shots, room)) / V2_SURFACE_CELLS), V2_VOXEL_MIN_M, VOXEL_MAX_M))
+    v = round(v, 4)
+    tsdf = Tsdf(shots, room, v, MAX_VOXELS_GPU if dev.type == "cuda" else MAX_VOXELS_CPU, log)
+    for s in shots:
+        tsdf.integrate(s)
+    if dev.type == "cuda":
+        torch.cuda.synchronize()
+    t = lap("fuse", t)
+
+    V, F = tsdf.surface(log)
+    t = lap("surface", t)
+    dense = len(F)
+    V, F = compact(V, F)
+    c = V[F].mean(axis=1)
+    V, F = compact(V, F[np.all((c >= room.lo) & (c <= room.hi), axis=1)])
+    if len(F) == 0:
+        raise MeshError("nothing of the surface is inside the walkable area")
+    fn, _ = face_normals(V, F)
+    cc = V[F].mean(axis=1)
+    pick = np.linspace(0, len(F) - 1, min(len(F), 20000)).astype(np.int64)
+    Pc = torch.as_tensor(cc[pick], dtype=torch.float32, device=dev)
+    Nc = torch.as_tensor(fn[pick], dtype=torch.float32, device=dev)
+    ahead, _, _ = tsdf.lookup(Pc + Nc * (1.5 * tsdf.v))
+    behind, _, _ = tsdf.lookup(Pc - Nc * (1.5 * tsdf.v))
+    if float((ahead > behind).float().mean()) < 0.5:
+        F = F[:, [0, 2, 1]]
+    room_idx, lid_idx, lid_h = split_ceiling(V, F, log)
+    keep = np.concatenate([room_idx, lid_idx])
+    fn, _ = face_normals(V, F[keep])
+    underside = (V[F[keep]].mean(axis=1)[:, 1] < UNDERSIDE_Y) & (fn[:, 1] < -0.5)
+    n_underside = int(underside.sum())
+    keep = keep[~underside]
+    n_sky = 0
+    if lid_h is None:
+        fn, _ = face_normals(V, F[keep])
+        skyf = (V[F[keep]].mean(axis=1)[:, 1] > SKY_MIN_Y) & (fn[:, 1] < -0.35)
+        n_sky = int(skyf.sum())
+        keep = keep[~skyf]
+    Vr, Fr = compact(V, F[keep])
+    _, area = face_normals(Vr, Fr)
+    min_piece = max(MIN_COMPONENT_M2, 2e-4 * float(area.sum()))
+    airborne = AIRBORNE_MAX_M2 if lid_h is not None else AIRBORNE_SKY_M2
+    Vr, Fr, n_small = drop_small_components(Vr, Fr, min_piece, airborne, keep_m2=KEEP_PIECE_M2)
+    if len(Fr) == 0:
+        raise MeshError("nothing is left of the room after cleaning it up")
+    Vr, Fr, n_holes = fill_holes(Vr, Fr, hole_edges)
+    Vr, plane_stats = snap_planes(Vr, Fr, log)
+    log(f"clean-up: {n_small} small or airborne pieces, {n_sky} sky faces and {n_underside} faces under the ground "
+        f"dropped, {n_holes} holes closed")
+    t = lap("clean", t)
+
+    Vf, Ff, open_m2 = floor_fill(Vr, Fr, room)
+    fill_m2 = float(face_normals(Vf, Ff)[1].sum()) if len(Ff) else 0.0
+    Vc, Fc, ceil_h, ceil_open = ceiling_fill(Vr, Fr, room, log, shots=shots)
+    rim_before = boundary_edges(Fr)
+    target = triangles - 2 * len(Ff) - 2 * len(Fc)
+    n_turned = n_late = 0
+    for budget in (int(target * 1.4), target):
+        if len(Fr) <= budget:
+            continue
+        Vr, Fr = decimate(Vr, Fr, budget)
+        Fr, turned = orient_faces(Vr, Fr, tsdf)
+        Vr, Fr, late = drop_small_components(Vr, Fr, min_piece, airborne, keep_m2=KEEP_PIECE_M2)
+        n_turned, n_late = n_turned + turned, n_late + late
+    rim_after = boundary_edges(Fr)
+    Vr, Fr, n_split = split_opposed(Vr, Fr)
+    Nr = vertex_normals(Vr, Fr)
+    log(f"decimated to {len(Fr)} triangles: {n_turned} faces turned, {n_late} loose pieces dropped, {n_split} vertices "
+        f"split; boundary edges {rim_before} -> {rim_after}; floor fill {len(Ff) // 2} tiles ({fill_m2:.1f} m2)")
+    lid = np.zeros(len(Fr), bool)
+    if lid_h is not None:
+        n_, _ = face_normals(Vr, Fr)
+        lid = (n_[:, 1] < -0.5) & (Vr[Fr].mean(axis=1)[:, 1] > lid_h - 0.15)
+    groups = [("room", Vr, Fr[~lid], Nr, texture)]
+    if lid.any():
+        groups.append(("ceiling", Vr, Fr[lid], Nr, texture))
+    if len(Ff):
+        groups.append(("floor", Vf, Ff, vertex_normals(Vf, Ff), min(texture, FLOOR_TEXTURE)))
+    if len(Fc):
+        groups.append(("ceilingfill", Vc, Fc, vertex_normals(Vc, Fc), min(texture, FLOOR_TEXTURE)))
+    t = lap("decimate", t)
+
+    parts_ = []
+    fill_names: set[str] = set()
+    for kind, Vg, Fg, Ng, size in groups:
+        fill = kind in ("floor", "ceilingfill")
+        limit = CHUNK_TRIANGLES // 2 if fill else CHUNK_TRIANGLES
+        area_cap = CHUNK_AREA_M2 * (size / 1024.0) ** 2 * (4.0 if fill else 1.0)
+        # the ceiling fill is ceiling: the game may leave "ceiling" chunks out (top-down views), like v1's lid
+        label = "ceiling" if kind == "ceilingfill" else kind
+        base = sum(1 for p in parts_ if p.kind == label)
+        for k, idx in enumerate(kd_chunks_area(Vg, Fg, limit, area_cap, 1)):
+            used, inv = np.unique(Fg[idx], return_inverse=True)
+            parts_.append(Part(f"{label}_{base + k:02d}", label, Vg[used], inv.reshape(-1, 3), Ng[used], size))
+            if kind == "ceilingfill":
+                fill_names.add(parts_[-1].name)
+    chunks = build_atlases(parts_, workers)
+    t = lap("atlas", t)
+
+    if cams:
+        bake_stats = bake_photos(chunks, cams, photo_shots, cube_shots + photo_shots, tsdf, room, log, power,
+                                 splat_only=fill_names)
+    else:
+        bake_stats = bake(chunks, shots, tsdf, room, log)
+    for ch in chunks:
+        if ch.kind == "floor":
+            add_underside(ch)
+        elif ch.kind == "ceiling" and ch.name in fill_names:
+            add_underside(ch, -FLOOR_UNDERSIDE_M)  # a thin slab: its back faces up, a centimetre higher
+    t = lap("bake", t)
+
+    S = STUDS_PER_METER
+    eye = np.array([room.spawn[0], SKY_EYE_M, room.spawn[2]])
+    sky_info = None
+    if sky:
+        del shots, cube_shots, photo_shots
+        if dev.type == "cuda":
+            torch.cuda.empty_cache()
+        sky_info = render_skybox(room, lo, hi, eye, sky_size, out_dir, dev, log)
+        t = lap("sky", t)
+
+    centres, chunk_meta = [], []
+    allV = np.concatenate([ch.V for ch in chunks]) * S
+    for ch in chunks:
+        lo_s, hi_s = ch.V.min(axis=0) * S, ch.V.max(axis=0) * S
+        centre = np.round((lo_s + hi_s) / 2, 3)
+        centres.append(centre)
+        chunk_meta.append({"name": ch.name, "kind": ch.kind, "triangles": int(len(ch.F)), "vertices": int(len(ch.V)),
+                           "center": [float(x) for x in centre], "size": [round(float(x), 3) for x in hi_s - lo_s],
+                           **ch.stats})
+    vm = room.voxel_map
+    name = str(room.scene.get("name") or room.scene.get("id") or scene_dir.name)[:80]
+    extras = {"sceneId": str(room.scene.get("id") or scene_dir.name), "name": name, "units": "studs", "studsPerMeter": S}
+    spawn_s = np.array(vm.get("headsetSpawn") or [room.spawn[0] * S, 0.0, room.spawn[2] * S], np.float64)
+    # with max_parts (e.g. 1 for a server that uploads one file), the textures give way until the model fits
+    for q in [jpeg_quality] + [x for x in (80, 74, 68, 62, 56, 50) if x < jpeg_quality]:
+        jpegs = [encode_jpeg(ch.image, q) for ch in chunks]
+        packed = pack_parts(chunks, centres, jpegs, spawn_s, extras)
+        if not max_parts or len(packed) <= max_parts:
+            break
+        log(f"{len(packed)} parts at JPEG quality {q}; more than {max_parts}, trying lower")
+    jpeg_quality = q
+    parts_meta = []
+    for i, (g, data) in enumerate(packed):
+        fname = part_file(i)
+        write_atomic(out_dir / fname, data)
+        for k in g:
+            chunk_meta[k]["part"] = i + 1
+        parts_meta.append({"file": fname, "sha1": hashlib.sha1(data).hexdigest(), "bytes": len(data),
+                           "triangles": int(sum(len(chunks[k].F) for k in g)), "chunks": [chunks[k].name for k in g]})
+    # a v1 model left in the folder from before must not be mistaken for a part
+    for i in range(len(packed), 32):
+        stale = out_dir / part_file(i)
+        if i > 0 and stale.exists():
+            stale.unlink()
+    n_room = sum(m["triangles"] for m in chunk_meta if m["kind"] == "room")
+    n_lid = sum(m["triangles"] for m in chunk_meta if m["kind"] == "ceiling")
+    n_fill = sum(m["triangles"] for m in chunk_meta if m["kind"] == "floor")
+    first = parts_meta[0]
+    result = {
+        "version": V2_VERSION,
+        "sceneId": extras["sceneId"],
+        "name": name,
+        "file": first["file"],
+        "bytes": first["bytes"],
+        "sha1": first["sha1"],
+        "parts": parts_meta,
+        "units": "studs",
+        "studsPerMeter": S,
+        "frame": "room frame x studsPerMeter, axis for axis: Y up, -Z forward, floor at y = 0 (the voxel map's frame)",
+        "import": {"scaleUnit": "Stud", "note": "Positions are already studs: keep the importer's Scale Unit on Stud. "
+                   "Every part is in the same frame: parent them all where they load, without moving them."},
+        "spawn": vm.get("spawn"),
+        "spawnYaw": vm.get("spawnYaw"),
+        "headsetSpawn": vm.get("headsetSpawn"),
+        "ceilingY": round((lid_h or ceil_h) * S, 2) if (lid_h or ceil_h) else vm.get("ceilingY"),
+        "hasCeiling": bool(n_lid),
+        "ceilingFillM2": round(ceil_open, 2),
+        "floorY": round(room.floor_y, 4),
+        "bounds": {"min": [round(float(x), 2) for x in allV.min(axis=0)],
+                   "max": [round(float(x), 2) for x in allV.max(axis=0)]},
+        "meshBox": {"min": [round(float(x) * S, 2) for x in lo], "max": [round(float(x) * S, 2) for x in hi],
+                    "source": box_src, "marginM": margin},
+        "triangles": n_room + n_lid + n_fill,
+        "roomTriangles": n_room,
+        "ceilingTriangles": n_lid,
+        "floorFillTriangles": n_fill,
+        "floorFillM2": round(fill_m2, 2),
+        "floorOpenM2": round(open_m2, 2),
+        "textureSize": texture,
+        "jpegQuality": jpeg_quality,
+        "maxTrianglesPerChunk": CHUNK_TRIANGLES,
+        "chunks": chunk_meta,
+        "build": {
+            "version": V2_VERSION,
+            "device": f"{dev.type}{' gsplat' if sio.gsplat_available() and dev.type == 'cuda' else ''}",
+            "positions": len(stands),
+            "standing": stands,
+            "views": view_stats,
+            "trainingCameras": len(cams),
+            "voxel": tsdf.v,
+            "truncation": round(tsdf.trunc, 4),
+            "blocks": int(len(tsdf.blocks)),
+            "denseTriangles": int(dense),
+            "smallComponentsDropped": n_small,
+            "skyFacesDropped": n_sky,
+            "undersideFacesDropped": n_underside,
+            "holesClosed": n_holes,
+            "planes": plane_stats,
+            "facesTurned": n_turned,
+            "piecesCutLoose": n_late,
+            "verticesSplit": n_split,
+            "boundaryEdges": {"beforeDecimation": rim_before, "afterDecimation": rim_after},
+            "bake": bake_stats,
+            "splats": len(room.splats),
+            "spawnSource": vm.get("source"),
+            "seconds": timings,
+        },
+    }
+    if sky_info:
+        result["sky"] = {n: {"file": f["file"], "sha1": f["sha1"], "bytes": f["bytes"]} for n, f in sky_info["faces"].items()}
+        result["skyInfo"] = {
+            "size": sky_size,
+            "eye": [round(float(x) * S, 2) for x in eye],
+            "properties": SKY_PROPERTY,
+            "faces": {n: {"look": list(SKY_FACES[n][0]), "imageUp": list(SKY_FACES[n][1])} for n in SKY_FACES},
+            "frame": "the model's frame (studs, Y up, -Z forward): rotate Sky.SkyboxOrientation by the same yaw if the "
+                     "model is placed turned",
+            "coverage": sky_info["coverage"],
+            "farSplats": sky_info["farSplats"],
+        }
+    if key:
+        result["build"]["key"] = key
+    result["build"]["seconds"]["write"] = round(time.time() - t, 2)
+    result["build"]["seconds"]["total"] = round(time.time() - t0, 2)
+    write_atomic(out_dir / SIDECAR_FILE, json.dumps(result, indent=1).encode("utf-8"))
+    sizes = ", ".join("%.1f MB" % (p["bytes"] / 1e6) for p in parts_meta)
+    log(f"{len(chunks)} chunks in {len(parts_meta)} parts ({sizes}), "
+        f"{n_room} room + {n_lid} ceiling + {n_fill} floor fill triangles in {time.time() - t0:.1f} s")
+    return result
+
+
+def _seen_area(shots: list[Shot], room: Room) -> float:
+    """m2 of distinct 10 cm cells hit by back-projected pixels inside the room box."""
+    import torch
+
+    lo = torch.as_tensor(room.lo, dtype=torch.float32, device=shots[0].depth.device)
+    hi = torch.as_tensor(room.hi, dtype=torch.float32, device=shots[0].depth.device)
+    keys = []
+    for s in shots:
+        p = backproject(s, 4)
+        p = p[((p >= lo) & (p <= hi)).all(dim=1)]
+        c = torch.floor((p - lo) / 0.1).long()
+        keys.append(torch.unique((c[:, 0] * 4096 + c[:, 1]) * 4096 + c[:, 2]))
+    return float(torch.unique(torch.cat(keys)).numel()) * 0.01 if keys else 0.0
+
+
+# --------------------------------------------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------------------------------------------
 
@@ -1661,16 +3063,35 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--key", help="cache key stored in build.key")
     ap.add_argument("--sheet", help="also write a contact sheet PNG of some rendered views")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--v2", action="store_true", help="v2: the walkable area only, photo textures, parts, skybox")
+    ap.add_argument("--photos", help="v2: the reconstruction's work folder (images/, masks/) for photo textures")
+    ap.add_argument("--near-margin", type=float, default=NEAR_MARGIN_M, help="v2: metres of geometry around world.bounds")
+    ap.add_argument("--no-sky", action="store_true", help="v2: no skybox")
+    ap.add_argument("--sky-size", type=int, default=SKY_SIZE, help="v2: skybox face size (px)")
+    ap.add_argument("--power", type=float, default=PHOTO_POWER, help="v2: photo blend sharpness")
+    ap.add_argument("--max-cams", type=int, default=0, help="v2: use at most this many training cameras (smoke tests)")
+    ap.add_argument("--jpeg-quality", type=int, default=88, help="v2: texture JPEG quality")
+    ap.add_argument("--max-parts", type=int, default=0, help="v2: lower the JPEG quality until the model fits this many files")
     args = ap.parse_args(argv)
     log = _log_noop if args.quiet else (lambda m: print(f"[roblox_mesh] {m}", file=sys.stderr, flush=True))
     try:
-        r = build_model(args.scene, args.out, args.triangles, args.texture, args.voxel, args.positions, args.face_res,
-                        not args.no_texture, args.device, args.workers, args.key, args.sheet, args.hole_edges, log)
+        if args.v2 or args.photos:
+            tri = args.triangles if args.triangles != DEFAULT_TRIANGLES else V2_TRIANGLES
+            pos = args.positions if args.positions != MAX_POSITIONS else V2_POSITIONS
+            r = build_model_v2(args.scene, args.out, args.photos, tri, args.texture, args.voxel, args.near_margin, pos,
+                               args.face_res, not args.no_sky, args.sky_size, args.power, args.device, args.workers,
+                               args.key, args.hole_edges, log, max_cams=args.max_cams, jpeg_quality=args.jpeg_quality,
+                               max_parts=args.max_parts)
+        else:
+            r = build_model(args.scene, args.out, args.triangles, args.texture, args.voxel, args.positions,
+                            args.face_res, not args.no_texture, args.device, args.workers, args.key, args.sheet,
+                            args.hole_edges, log)
     except MeshError as e:
         print(json.dumps({"ok": False, "error": str(e)}), flush=True)
         print(f"roblox_mesh: {e}", file=sys.stderr)
         return 2
     print(json.dumps({"ok": True, "triangles": r["triangles"], "chunks": len(r["chunks"]), "bytes": r["bytes"],
+                      "parts": [p["file"] for p in r.get("parts", [])] or [GLB_FILE], "sky": bool(r.get("sky")),
                       "seconds": r["build"]["seconds"]["total"], "out": str(Path(args.out or args.scene) / GLB_FILE)}),
           flush=True)
     return 0

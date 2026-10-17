@@ -17,7 +17,8 @@
 <body>
 <canvas id="out"></canvas>
 <script type="module">
-  // The splat world (Spark) next to its Roblox model (roblox.glb, studs, scaled back to metres) from the same cameras:
+  // Two modes. The default: the splat world (Spark) next to its Roblox model (roblox.glb, studs, scaled back to
+  // metres) from the same cameras:
   //   ?scene=<id>&model=<repo-relative dir holding roblox.glb + roblox-model.json, default data/scenes/<id>>
   // Columns: splat, mesh unlit (the baked texture as is), mesh lit (a rough stand-in for Roblox's default lighting).
   // Rows: the headset spawn, the Roblox spawn facing it, behind the headset spawn, an overview from a corner, and
@@ -34,136 +35,351 @@
   const FOV = Number(p.get('fov') || 75);
   const BG = 0x0c0c0e;
 
-  try {
-    const scene = await (await fetch(`/data/scenes/${sceneId}/scene.json`)).json();
-    const meta = await (await fetch(`/${modelDir}/roblox-model.json`)).json();
-    const spm = meta.studsPerMeter;
-    const floorY = Number(meta.floorY ?? scene.world.floorY ?? 0);
+  async function classic() {
+    try {
+      const scene = await (await fetch(`/data/scenes/${sceneId}/scene.json`)).json();
+      const meta = await (await fetch(`/${modelDir}/roblox-model.json`)).json();
+      const spm = meta.studsPerMeter;
+      const floorY = Number(meta.floorY ?? scene.world.floorY ?? 0);
 
-    const gl = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-    gl.setPixelRatio(1);
-    gl.setSize(W, H);
-    gl.outputColorSpace = THREE.SRGBColorSpace;
-    gl.domElement.id = 'gl';
-    document.body.appendChild(gl.domElement);
-    const camera = new THREE.PerspectiveCamera(FOV, W / H, 0.03, 500);
-    camera.rotation.order = 'YXZ';
+      const gl = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+      gl.setPixelRatio(1);
+      gl.setSize(W, H);
+      gl.outputColorSpace = THREE.SRGBColorSpace;
+      gl.domElement.id = 'gl';
+      document.body.appendChild(gl.domElement);
+      const camera = new THREE.PerspectiveCamera(FOV, W / H, 0.03, 500);
+      camera.rotation.order = 'YXZ';
 
-    // splat: the scene transform, then the floor to y = 0 (the room frame)
-    const splatScene = new THREE.Scene();
-    splatScene.background = new THREE.Color(BG);
-    const spark = new SparkRenderer({ renderer: gl });
-    splatScene.add(spark);
-    const t = scene.world.transform;
-    const splat = new SplatMesh({ url: `/data/scenes/${sceneId}/${scene.world.file}` });
-    splat.position.set(t.position[0], t.position[1] - floorY, t.position[2]);
-    splat.quaternion.set(...t.quaternion).normalize();
-    splat.scale.setScalar(t.scale || 1);
-    splatScene.add(splat);
+      // splat: the scene transform, then the floor to y = 0 (the room frame)
+      const splatScene = new THREE.Scene();
+      splatScene.background = new THREE.Color(BG);
+      const spark = new SparkRenderer({ renderer: gl });
+      splatScene.add(spark);
+      const t = scene.world.transform;
+      const splat = new SplatMesh({ url: `/data/scenes/${sceneId}/${scene.world.file}` });
+      splat.position.set(t.position[0], t.position[1] - floorY, t.position[2]);
+      splat.quaternion.set(...t.quaternion).normalize();
+      splat.scale.setScalar(t.scale || 1);
+      splatScene.add(splat);
 
-    const gltf = await new GLTFLoader().loadAsync(`/${modelDir}/roblox.glb`);
-    const lit = gltf.scene;
-    lit.scale.setScalar(1 / spm);
-    const unlit = lit.clone(true);
-    unlit.traverse((o) => {
-      if (o.isMesh) o.material = new THREE.MeshBasicMaterial({ map: o.material.map, vertexColors: !o.material.map });
-    });
-    const unlitScene = new THREE.Scene();
-    unlitScene.background = new THREE.Color(BG);
-    unlitScene.add(unlit);
-    const litScene = new THREE.Scene();
-    litScene.background = new THREE.Color(BG);
-    litScene.add(lit);
-    litScene.add(new THREE.HemisphereLight(0xdfe6ff, 0x5a5048, 1.6));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.4);
-    sun.position.set(0.4, 1, 0.3);
-    litScene.add(sun);
-    await splat.initialized;
+      const gltf = await new GLTFLoader().loadAsync(`/${modelDir}/roblox.glb`);
+      const lit = gltf.scene;
+      lit.scale.setScalar(1 / spm);
+      const unlit = lit.clone(true);
+      unlit.traverse((o) => {
+        if (o.isMesh) o.material = new THREE.MeshBasicMaterial({ map: o.material.map, vertexColors: !o.material.map });
+      });
+      const unlitScene = new THREE.Scene();
+      unlitScene.background = new THREE.Color(BG);
+      unlitScene.add(unlit);
+      const litScene = new THREE.Scene();
+      litScene.background = new THREE.Color(BG);
+      litScene.add(lit);
+      litScene.add(new THREE.HemisphereLight(0xdfe6ff, 0x5a5048, 1.6));
+      const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+      sun.position.set(0.4, 1, 0.3);
+      litScene.add(sun);
+      await splat.initialized;
 
-    // cameras (room frame metres): eye height 1.6
-    const S = (v) => v.map((c) => c / spm);
-    const hs = S(meta.headsetSpawn ?? [0, 0, 0]);
-    const rs = S(meta.spawn ?? [0, 0, 5]);
-    const bmin = S(meta.bounds.min), bmax = S(meta.bounds.max);
-    const yaw0 = Number(scene.world.spawn?.yaw ?? 0);
-    const ceil = meta.hasCeiling && meta.ceilingY ? meta.ceilingY / spm : null;
-    const overH = ceil ? Math.max(1.8, ceil - 0.35) : 4.5;
-    const cx = (bmin[0] + bmax[0]) / 2, cz = (bmin[2] + bmax[2]) / 2;
-    // overview: from the corner of the walkable area nearest the headset spawn's back-left, looking at it
-    const ox = hs[0] + Math.max(-6, Math.min(6, (bmax[0] - hs[0]) * 0.7));
-    const oz = hs[2] + Math.max(-6, Math.min(6, (bmax[2] - hs[2]) * 0.7));
-    const lookYaw = (from, to) => Math.atan2(-(to[0] - from[0]), -(to[2] - from[2]));
-    const views = [
-      { name: 'headset spawn', eye: [hs[0], 1.6, hs[2]], yaw: yaw0, pitch: -0.08 },
-      { name: 'roblox spawn', eye: [rs[0], 1.6, rs[2]], yaw: lookYaw(rs, hs), pitch: -0.08 },
-      { name: 'behind the headset', eye: [hs[0], 1.6, hs[2]], yaw: yaw0 + Math.PI, pitch: -0.08 },
-      { name: 'overview', eye: [ox, overH, oz], yaw: lookYaw([ox, 0, oz], [hs[0], 0, hs[2] - 2]), pitch: -0.45 },
-    ];
-    const ext = Math.max(bmax[0] - hs[0], hs[0] - bmin[0], bmax[2] - hs[2], hs[2] - bmin[2]);
-    const topH = Math.min(40, Math.max(5, (0.8 * ext) / Math.tan((FOV / 2) * Math.PI / 180)));
-    views.push({ name: 'top down', eye: [hs[0], topH, hs[2]], yaw: 0, pitch: -Math.PI / 2 + 1e-4, noCeiling: true });
-    const ceilingNodes = [];
-    for (const root of [lit, unlit]) root.traverse((o) => o.name.startsWith('ceiling_') && ceilingNodes.push(o));
+      // cameras (room frame metres): eye height 1.6
+      const S = (v) => v.map((c) => c / spm);
+      const hs = S(meta.headsetSpawn ?? [0, 0, 0]);
+      const rs = S(meta.spawn ?? [0, 0, 5]);
+      const bmin = S(meta.bounds.min), bmax = S(meta.bounds.max);
+      const yaw0 = Number(scene.world.spawn?.yaw ?? 0);
+      const ceil = meta.hasCeiling && meta.ceilingY ? meta.ceilingY / spm : null;
+      const overH = ceil ? Math.max(1.8, ceil - 0.35) : 4.5;
+      const cx = (bmin[0] + bmax[0]) / 2, cz = (bmin[2] + bmax[2]) / 2;
+      // overview: from the corner of the walkable area nearest the headset spawn's back-left, looking at it
+      const ox = hs[0] + Math.max(-6, Math.min(6, (bmax[0] - hs[0]) * 0.7));
+      const oz = hs[2] + Math.max(-6, Math.min(6, (bmax[2] - hs[2]) * 0.7));
+      const lookYaw = (from, to) => Math.atan2(-(to[0] - from[0]), -(to[2] - from[2]));
+      const views = [
+        { name: 'headset spawn', eye: [hs[0], 1.6, hs[2]], yaw: yaw0, pitch: -0.08 },
+        { name: 'roblox spawn', eye: [rs[0], 1.6, rs[2]], yaw: lookYaw(rs, hs), pitch: -0.08 },
+        { name: 'behind the headset', eye: [hs[0], 1.6, hs[2]], yaw: yaw0 + Math.PI, pitch: -0.08 },
+        { name: 'overview', eye: [ox, overH, oz], yaw: lookYaw([ox, 0, oz], [hs[0], 0, hs[2] - 2]), pitch: -0.45 },
+      ];
+      const ext = Math.max(bmax[0] - hs[0], hs[0] - bmin[0], bmax[2] - hs[2], hs[2] - bmin[2]);
+      const topH = Math.min(40, Math.max(5, (0.8 * ext) / Math.tan((FOV / 2) * Math.PI / 180)));
+      views.push({ name: 'top down', eye: [hs[0], topH, hs[2]], yaw: 0, pitch: -Math.PI / 2 + 1e-4, noCeiling: true });
+      const ceilingNodes = [];
+      for (const root of [lit, unlit]) root.traverse((o) => o.name.startsWith('ceiling_') && ceilingNodes.push(o));
 
-    const out = document.getElementById('out');
-    out.width = 3 * W + 4 * PAD;
-    out.height = views.length * (H + TOP + PAD) + PAD;
-    const ctx = out.getContext('2d');
-    ctx.fillStyle = '#0c0c0e';
-    ctx.fillRect(0, 0, out.width, out.height);
-    ctx.font = 'bold 13px sans-serif';
+      const out = document.getElementById('out');
+      out.width = 3 * W + 4 * PAD;
+      out.height = views.length * (H + TOP + PAD) + PAD;
+      const ctx = out.getContext('2d');
+      ctx.fillStyle = '#0c0c0e';
+      ctx.fillRect(0, 0, out.width, out.height);
+      ctx.font = 'bold 13px sans-serif';
 
-    const frame = () => new Promise((r) => requestAnimationFrame(r));
-    const label = (text, x, y, color = '#c6ff3d') => {
-      ctx.fillStyle = color;
-      ctx.fillText(text, x, y);
-    };
-    // How well the unlit mesh stands in for the splat from this camera: the share of the splat's covered pixels the
-    // mesh also covers, and the mean colour difference (0-255, RGB) where both cover the pixel.
-    const compare = (x0, x1, y0) => {
-      const a = ctx.getImageData(x0, y0, W, H).data, b = ctx.getImageData(x1, y0, W, H).data;
-      const lit = (d, i) => Math.abs(d[i] - 12) + Math.abs(d[i + 1] - 12) + Math.abs(d[i + 2] - 14) > 18;
-      let sa = 0, both = 0, diff = 0;
-      for (let i = 0; i < a.length; i += 4) {
-        if (!lit(a, i)) continue;
-        sa++;
-        if (!lit(b, i)) continue;
-        both++;
-        diff += (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2])) / 3;
+      const frame = () => new Promise((r) => requestAnimationFrame(r));
+      const label = (text, x, y, color = '#c6ff3d') => {
+        ctx.fillStyle = color;
+        ctx.fillText(text, x, y);
+      };
+      // How well the unlit mesh stands in for the splat from this camera: the share of the splat's covered pixels the
+      // mesh also covers, and the mean colour difference (0-255, RGB) where both cover the pixel.
+      const compare = (x0, x1, y0) => {
+        const a = ctx.getImageData(x0, y0, W, H).data, b = ctx.getImageData(x1, y0, W, H).data;
+        const lit = (d, i) => Math.abs(d[i] - 12) + Math.abs(d[i + 1] - 12) + Math.abs(d[i + 2] - 14) > 18;
+        let sa = 0, both = 0, diff = 0;
+        for (let i = 0; i < a.length; i += 4) {
+          if (!lit(a, i)) continue;
+          sa++;
+          if (!lit(b, i)) continue;
+          both++;
+          diff += (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2])) / 3;
+        }
+        return { meshCoversSplat: +(both / Math.max(1, sa)).toFixed(3), meanColourDiff: +(diff / Math.max(1, both)).toFixed(1) };
+      };
+      const info = [];
+      for (let k = 0; k < views.length; k++) {
+        const v = views[k];
+        camera.position.set(...v.eye);
+        camera.rotation.set(v.pitch, v.yaw, 0);
+        camera.updateMatrixWorld();
+        const y = PAD + k * (H + TOP + PAD);
+        // Spark sorts asynchronously for the current camera: render until it settles
+        for (let i = 0; i < 45; i++) {
+          gl.render(splatScene, camera);
+          await frame();
+        }
+        ctx.drawImage(gl.domElement, PAD, y + TOP);
+        for (const o of ceilingNodes) o.visible = !v.noCeiling;
+        gl.render(unlitScene, camera);
+        ctx.drawImage(gl.domElement, 2 * PAD + W, y + TOP);
+        gl.render(litScene, camera);
+        ctx.drawImage(gl.domElement, 3 * PAD + 2 * W, y + TOP);
+        const e = v.eye.map((c) => c.toFixed(2)).join(', ');
+        label(`${v.name}  (${e}) m, yaw ${(v.yaw * 180 / Math.PI).toFixed(0)}`, PAD, y + 15);
+        label('splat (Spark)', PAD + W - 100, y + 15, '#9aa0aa');
+        label('Roblox mesh, unlit', 2 * PAD + W, y + 15, '#9aa0aa');
+        label('Roblox mesh, lit', 3 * PAD + 2 * W, y + 15, '#9aa0aa');
+        info.push({ name: v.name, eye: v.eye, yaw: v.yaw, pitch: v.pitch, ...compare(PAD, 2 * PAD + W, y + TOP) });
       }
-      return { meshCoversSplat: +(both / Math.max(1, sa)).toFixed(3), meanColourDiff: +(diff / Math.max(1, both)).toFixed(1) };
-    };
-    const info = [];
-    for (let k = 0; k < views.length; k++) {
-      const v = views[k];
-      camera.position.set(...v.eye);
-      camera.rotation.set(v.pitch, v.yaw, 0);
-      camera.updateMatrixWorld();
-      const y = PAD + k * (H + TOP + PAD);
-      // Spark sorts asynchronously for the current camera: render until it settles
-      for (let i = 0; i < 45; i++) {
-        gl.render(splatScene, camera);
-        await frame();
-      }
-      ctx.drawImage(gl.domElement, PAD, y + TOP);
-      for (const o of ceilingNodes) o.visible = !v.noCeiling;
-      gl.render(unlitScene, camera);
-      ctx.drawImage(gl.domElement, 2 * PAD + W, y + TOP);
-      gl.render(litScene, camera);
-      ctx.drawImage(gl.domElement, 3 * PAD + 2 * W, y + TOP);
-      const e = v.eye.map((c) => c.toFixed(2)).join(', ');
-      label(`${v.name}  (${e}) m, yaw ${(v.yaw * 180 / Math.PI).toFixed(0)}`, PAD, y + 15);
-      label('splat (Spark)', PAD + W - 100, y + 15, '#9aa0aa');
-      label('Roblox mesh, unlit', 2 * PAD + W, y + 15, '#9aa0aa');
-      label('Roblox mesh, lit', 3 * PAD + 2 * W, y + 15, '#9aa0aa');
-      info.push({ name: v.name, eye: v.eye, yaw: v.yaw, pitch: v.pitch, ...compare(PAD, 2 * PAD + W, y + TOP) });
+      label(`${meta.name}: ${meta.triangles} triangles in ${meta.chunks.length} chunks, ${meta.textureSize}px textures`,
+        out.width - 520, out.height - 4, '#9aa0aa');
+      window.__info = { views: info, triangles: meta.triangles, chunks: meta.chunks.length, rows: views.length, rowHeight: H + TOP + PAD };
+    } catch (e) {
+      window.__error = String((e && e.stack) || e);
     }
-    label(`${meta.name}: ${meta.triangles} triangles in ${meta.chunks.length} chunks, ${meta.textureSize}px textures`,
-      out.width - 520, out.height - 4, '#9aa0aa');
-    window.__info = { views: info, triangles: meta.triangles, chunks: meta.chunks.length, rows: views.length, rowHeight: H + TOP + PAD };
-  } catch (e) {
-    window.__error = String((e && e.stack) || e);
   }
+
+  // ?mode=v2&scene=<id>&v1=<dir>&v2=<dir>: the splat world | the v1 model unlit | the v2 model (all its parts) unlit
+  // with its skybox, from the headset spawn (ahead and behind) and three walkable spots (training cameras far apart,
+  // looking where they looked). "Unlit" = the baked texture as is, which is what the game's unlit lighting recipe
+  // shows. Per row and model: how much of what the splat shows the mesh covers (mesh only, no sky), the mean colour
+  // difference where both show something, and how well their edges line up (correlation of gradient magnitudes).
+  async function v2mode() {
+    try {
+      const scene = await (await fetch(`/data/scenes/${sceneId}/scene.json`)).json();
+      const cams = await (await fetch(`/data/scenes/${sceneId}/cameras.json`)).json().catch(() => ({ cameras: [] }));
+      const dirs = { v1: p.get('v1'), v2: p.get('v2') };
+      const metas = {};
+      for (const k of ['v1', 'v2']) metas[k] = dirs[k] ? await (await fetch(`/${dirs[k]}/roblox-model.json`)).json() : null;
+      const ref = metas.v2 ?? metas.v1;
+      const spm = ref.studsPerMeter;
+      const floorY = Number(ref.floorY ?? scene.world.floorY ?? 0);
+      const VW = Number(p.get('w') || 640), VH = Number(p.get('h') || 400), VFOV = Number(p.get('fov') || 70);
+
+      const gl = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+      gl.setPixelRatio(1);
+      gl.setSize(VW, VH);
+      gl.outputColorSpace = THREE.SRGBColorSpace;
+      gl.domElement.id = 'gl';
+      document.body.appendChild(gl.domElement);
+      const camera = new THREE.PerspectiveCamera(VFOV, VW / VH, 0.03, 600);
+      camera.rotation.order = 'YXZ';
+
+      const splatScene = new THREE.Scene();
+      splatScene.background = new THREE.Color(BG);
+      const spark = new SparkRenderer({ renderer: gl });
+      splatScene.add(spark);
+      const t = scene.world.transform;
+      const splat = new SplatMesh({ url: `/data/scenes/${sceneId}/${scene.world.file}` });
+      splat.position.set(t.position[0], t.position[1] - floorY, t.position[2]);
+      splat.quaternion.set(...t.quaternion).normalize();
+      splat.scale.setScalar(t.scale || 1);
+      splatScene.add(splat);
+
+      const loader = new GLTFLoader();
+      const meshScenes = {};
+      for (const k of ['v1', 'v2']) {
+        const m = metas[k];
+        if (!m) continue;
+        const files = Array.isArray(m.parts) && m.parts.length ? m.parts.map((x) => x.file) : ['roblox.glb'];
+        const sc = new THREE.Scene();
+        sc.background = null;
+        for (const f of files) {
+          const g = await loader.loadAsync(`/${dirs[k]}/${f}`);
+          g.scene.scale.setScalar(1 / spm);
+          g.scene.traverse((o) => {
+            if (o.isMesh) o.material = new THREE.MeshBasicMaterial({ map: o.material.map, vertexColors: !o.material.map });
+          });
+          sc.add(g.scene);
+        }
+        meshScenes[k] = sc;
+      }
+      // the v2 skybox: six planes at infinity, each oriented exactly as the face convention in the sidecar says
+      // (look direction, image up), so this also checks how the faces were rendered
+      const sky = new THREE.Scene();
+      sky.background = new THREE.Color(BG);
+      let hasSky = false;
+      if (metas.v2?.sky && metas.v2?.skyInfo) {
+        const tl = new THREE.TextureLoader();
+        for (const [face, e] of Object.entries(metas.v2.sky)) {
+          const info = metas.v2.skyInfo.faces[face];
+          const tex = await tl.loadAsync(`/${dirs.v2}/${e.file}`);
+          tex.colorSpace = THREE.SRGBColorSpace;
+          const fwd = new THREE.Vector3(...info.look), up = new THREE.Vector3(...info.imageUp);
+          const right = new THREE.Vector3().crossVectors(fwd, up);
+          const plane = new THREE.Mesh(new THREE.PlaneGeometry(2.002, 2.002),
+            new THREE.MeshBasicMaterial({ map: tex, depthTest: false, depthWrite: false }));
+          const m4 = new THREE.Matrix4().makeBasis(right, up, fwd.clone().negate());
+          plane.quaternion.setFromRotationMatrix(m4);
+          plane.position.copy(fwd);
+          plane.userData.fwd = fwd;
+          sky.add(plane);
+        }
+        hasSky = true;
+      }
+      await splat.initialized;
+
+      // cameras (room frame metres, eye 1.6)
+      const S = (v) => v.map((c) => c / spm);
+      const hs = S(ref.headsetSpawn ?? [0, 0, 0]);
+      const yaw0 = Number(scene.world.spawn?.yaw ?? 0);
+      const views = [
+        { name: 'spawn', eye: [hs[0], 1.6, hs[2]], yaw: yaw0, pitch: -0.08 },
+        { name: 'spawn, turned around', eye: [hs[0], 1.6, hs[2]], yaw: yaw0 + Math.PI, pitch: -0.08 },
+      ];
+      const b = scene.world.bounds;
+      const inside = (c) => !b || (c[0] >= b.min[0] && c[0] <= b.max[0] && c[2] >= b.min[2] && c[2] <= b.max[2]);
+      const pool = (cams.cameras || []).map((c) => {
+        const m = c.c2w;
+        const f = [-m[0][2], -m[1][2], -m[2][2]];
+        return { name: c.name, pos: [m[0][3], m[1][3] - floorY, m[2][3]], yaw: Math.atan2(-f[0], -f[2]),
+          pitch: Math.max(-0.45, Math.min(0.25, Math.asin(Math.max(-1, Math.min(1, f[1]))))) };
+      }).filter((c) => inside(c.pos));
+      const picked = [];
+      const d2 = (a, q) => (a[0] - q[0]) ** 2 + (a[2] - q[2]) ** 2;
+      while (picked.length < 3 && pool.length) {
+        let best = null, bd = -1;
+        for (const c of pool) {
+          const dmin = Math.min(d2(c.pos, hs), ...picked.map((q) => d2(c.pos, q.pos)));
+          if (dmin > bd) { bd = dmin; best = c; }
+        }
+        picked.push(best);
+        pool.splice(pool.indexOf(best), 1);
+      }
+      picked.forEach((c, i) => views.push({ name: `spot ${i + 1} (${c.name})`, eye: [c.pos[0], 1.6, c.pos[2]], yaw: c.yaw, pitch: c.pitch }));
+      // what a Roblox player sees first: the game's spawn, facing spawnYaw (CFrame.Angles(0, yaw, 0), as three.js's
+      // rotation.y); then the ceiling above the spawn, and the spawn looking along the two side-face seams of the sky
+      // nearest the open lawn (front|right and back|right edges of the cube: yaw 45 and 135 degrees)
+      if (!p.get('rows') || p.get('rows') === 'all') {
+        const rsp = Array.isArray(ref.spawn) ? S(ref.spawn) : null;
+        if (rsp) views.push({ name: 'roblox spawn', eye: [rsp[0], 1.6, rsp[2]], yaw: Number(ref.spawnYaw ?? 0), pitch: -0.08 });
+        views.push({ name: 'spawn, looking up', eye: [hs[0], 1.6, hs[2]], yaw: yaw0, pitch: 0.75 });
+        views.push({ name: 'spawn, sky seam front-right', eye: [hs[0], 1.6, hs[2]], yaw: Math.PI / 4, pitch: 0 });
+        views.push({ name: 'spawn, sky seam back-right', eye: [hs[0], 1.6, hs[2]], yaw: (3 * Math.PI) / 4, pitch: 0 });
+      }
+
+      const cols = ['splat (Spark, the viewer)', 'v1 mesh, unlit', 'v2 mesh, unlit + skybox'];
+      const out = document.getElementById('out');
+      out.width = 3 * VW + 4 * PAD;
+      out.height = views.length * (VH + TOP + PAD) + PAD + 22;
+      const ctx = out.getContext('2d', { willReadFrequently: true });
+      ctx.fillStyle = '#0c0c0e';
+      ctx.fillRect(0, 0, out.width, out.height);
+      ctx.font = 'bold 13px sans-serif';
+      const label = (text, x, y, color = '#c6ff3d') => { ctx.fillStyle = color; ctx.fillText(text, x, y); };
+      const frame = () => new Promise((r) => requestAnimationFrame(r));
+      const scratch = document.createElement('canvas');
+      scratch.width = VW; scratch.height = VH;
+      const sctx = scratch.getContext('2d', { willReadFrequently: true });
+      const grab = () => { sctx.clearRect(0, 0, VW, VH); sctx.drawImage(gl.domElement, 0, 0); return sctx.getImageData(0, 0, VW, VH).data; };
+      const covered = (d, i) => Math.abs(d[i] - 12) + Math.abs(d[i + 1] - 12) + Math.abs(d[i + 2] - 14) > 18;
+      const gradMag = (d) => {
+        const g = new Float32Array(VW * VH), m = new Float32Array(VW * VH);
+        for (let i = 0, j = 0; j < g.length; i += 4, j++) g[j] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        for (let y = 1; y < VH - 1; y++) for (let x = 1; x < VW - 1; x++) {
+          const k = y * VW + x;
+          const gx = g[k + 1] - g[k - 1], gy = g[k + VW] - g[k - VW];
+          m[k] = Math.hypot(gx, gy);
+        }
+        return m;
+      };
+      const compare = (a, meshOnly, shown) => {
+        let sa = 0, both = 0, diff = 0;
+        const ga = gradMag(a), gb = gradMag(shown);
+        let n = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+        for (let i = 0, j = 0; i < a.length; i += 4, j++) {
+          if (!covered(a, i)) continue;
+          sa++;
+          if (!covered(meshOnly, i)) continue;
+          both++;
+          diff += (Math.abs(a[i] - shown[i]) + Math.abs(a[i + 1] - shown[i + 1]) + Math.abs(a[i + 2] - shown[i + 2])) / 3;
+          const x = ga[j], y = gb[j];
+          n++; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y;
+        }
+        const cov = sxy / n - (sx / n) * (sy / n);
+        const corr = cov / Math.sqrt(Math.max(1e-9, (sxx / n - (sx / n) ** 2) * (syy / n - (sy / n) ** 2)));
+        return { covers: +(both / Math.max(1, sa)).toFixed(3), colourDiff: +(diff / Math.max(1, both)).toFixed(1), edgeCorr: +(n ? corr : 0).toFixed(3) };
+      };
+      const info = [];
+      for (let k = 0; k < views.length; k++) {
+        const v = views[k];
+        camera.position.set(...v.eye);
+        camera.rotation.set(v.pitch, v.yaw, 0);
+        camera.updateMatrixWorld();
+        const y = PAD + k * (VH + TOP + PAD);
+        for (let i = 0; i < 45; i++) { gl.render(splatScene, camera); await frame(); }
+        const a = grab();
+        ctx.drawImage(gl.domElement, PAD, y + TOP);
+        const row = { name: v.name, eye: v.eye.map((c) => +c.toFixed(2)), yaw: +v.yaw.toFixed(3), pitch: +v.pitch.toFixed(3) };
+        for (const [ci, key] of [[1, 'v1'], [2, 'v2']]) {
+          const x = (ci + 1) * PAD + ci * VW;
+          const ms = meshScenes[key];
+          if (!ms) { label('(no model)', x + 10, y + TOP + 30, '#9aa0aa'); continue; }
+          ms.background = new THREE.Color(BG);
+          gl.render(ms, camera);
+          const meshOnly = grab();
+          let shown = meshOnly;
+          if (key === 'v2' && hasSky) {
+            for (const pl of sky.children) pl.position.copy(camera.position).add(pl.userData.fwd);
+            gl.autoClear = false;
+            gl.clear();
+            gl.render(sky, camera);
+            ms.background = null;
+            gl.render(ms, camera);
+            gl.autoClear = true;
+            shown = grab();
+          }
+          ctx.drawImage(gl.domElement, x, y + TOP);
+          row[key] = compare(a, meshOnly, shown);
+        }
+        const e = v.eye.map((c) => c.toFixed(2)).join(', ');
+        label(`${v.name}  (${e}) m, yaw ${(v.yaw * 180 / Math.PI).toFixed(0)}`, PAD, y + 15);
+        cols.forEach((c, i) => label(c, (i + 1) * PAD + i * VW + (i === 0 ? VW - 200 : 0), y + 15, '#9aa0aa'));
+        for (const [ci, key] of [[1, 'v1'], [2, 'v2']]) {
+          if (!row[key]) continue;
+          const r = row[key];
+          label(`covers ${(r.covers * 100).toFixed(0)}%  colour diff ${r.colourDiff}  edge corr ${r.edgeCorr}`, (ci + 1) * PAD + ci * VW + 8, y + TOP + VH - 8, '#ffffff');
+        }
+        info.push(row);
+      }
+      const desc = (m) => m ? `${m.triangles} triangles, ${m.chunks.length} chunks${m.parts ? `, ${m.parts.length} parts` : ''}` : 'none';
+      label(`${scene.name}: v1 ${desc(metas.v1)}; v2 ${desc(metas.v2)}${hasSky ? ' + skybox' : ''}`, PAD, out.height - 8, '#9aa0aa');
+      window.__info = { views: info, rows: views.length, rowHeight: VH + TOP + PAD, v1: desc(metas.v1), v2: desc(metas.v2) };
+    } catch (e) {
+      window.__error = String((e && e.stack) || e);
+    }
+  }
+  if (p.get('mode') === 'v2') await v2mode();
+  else await classic();
   window.__ready = true;
 </script>
 </body>
