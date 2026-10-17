@@ -14,3 +14,4 @@ graphify-out/
 
 # model weights are downloaded at setup, never committed
 pipeline/models/
+web/public/avatars/

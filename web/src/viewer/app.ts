@@ -24,6 +24,7 @@ import { analyseWorld, applyTransform, loadSplatMesh, repairHiddenSplats, splatC
 import type { AvatarsHandle } from './avatars.ts';
 import type { CollisionWorld } from './voxels.ts';
 import { XrSystem } from './xr.ts';
+import { ThirdPerson } from './third-person.ts';
 
 /** Contract of web/src/viewer/thirdwheel.ts, the video layer (docs/ARCHITECTURE.md). */
 interface VideoLayerHandle {
@@ -92,6 +93,9 @@ class Viewer {
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
   readonly rig = new THREE.Group();
+  /** ?as=<name>: your own avatar (web/public/avatars/<name>.glb) walks in third person on screen; V switches view. */
+  thirdPerson: ThirdPerson | null = null;
+  private thirdOn = true;
   readonly content = new THREE.Group();
   readonly flip = new THREE.Group();
   readonly spark: SparkRenderer;
@@ -183,6 +187,15 @@ class Viewer {
     });
     this.scene.add(this.sky.mesh, this.floorGlow.mesh, this.spark, this.rig, this.content);
     this.content.add(this.flip);
+    const as = params.get('as');
+    if (as && /^[A-Za-z0-9_-]{1,40}$/.test(as)) {
+      this.thirdPerson = new ThirdPerson(`/avatars/${as}.glb`, this.scene);
+      window.addEventListener('keydown', (e) => {
+        if (e.code !== 'KeyV' || !this.thirdPerson || (e.target as HTMLElement | null)?.closest?.('input, textarea')) return;
+        this.thirdOn = !this.thirdOn;
+        this.thirdPerson.setVisible(this.thirdOn);
+      });
+    }
 
     this.controls = new DesktopControls(this.renderer.domElement, hud);
     this.controls.enabled = false;
@@ -915,9 +928,18 @@ class Viewer {
     return Promise.resolve();
   }
 
-  private syncRig(): void {
-    if (this.renderer.xr.isPresenting) return;
+  private syncRig(dt = 1 / 60): void {
+    if (this.renderer.xr.isPresenting) {
+      this.thirdPerson?.setVisible(false);
+      return;
+    }
     const p = this.player;
+    if (this.thirdPerson?.loaded && this.thirdOn) {
+      this.thirdPerson.setVisible(true);
+      this.thirdPerson.update(dt, p.pos, p.vel, p.yaw, p.pitch, this.rig, this.camera, this.world);
+      return;
+    }
+    this.thirdPerson?.setVisible(false);
     this.rig.position.set(p.pos.x, p.eyeY, p.pos.z);
     this.rig.rotation.set(0, p.yaw, 0);
     this.camera.position.set(0, 0, 0);
@@ -974,7 +996,7 @@ class Viewer {
         const flyGrow = room ? 0.5 : 2.5;
         const wb = this.analysis ? (fly ? expandBounds(this.analysis.walkBounds, [flyGrow, 0, flyGrow]) : this.analysis.walkBounds) : null;
         this.player.update(dt, input, { world: this.world, ground: this.ground, walkBounds: wb, margin: fly ? (room ? 0.4 : 1.5) : room ? 0.3 : 0.5 });
-        this.syncRig();
+        this.syncRig(dt);
       } else {
         this.rig.position.copy(this.introPose.position);
         this.rig.rotation.set(0, this.introPose.yaw, 0);
