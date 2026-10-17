@@ -166,9 +166,13 @@ local function buildTable(tableCf: CFrame, length: number, width: number, visibl
 		centre.CFrame = frame * CFrame.new(0, 0.01, 0)
 	end
 
-	net = ensurePart("Net", Vector3.new(Sim.NET_L, Sim.NET_H, 0.05), Color3.fromRGB(235, 235, 235), folder)
-	net.Transparency = 0.15
+	net = ensurePart("Net", Vector3.new(Sim.NET_L, Sim.NET_H, 0.12), Color3.fromRGB(245, 245, 245), folder)
+	net.Material = Enum.Material.Neon
+	net.Transparency = 0.05
 	net.CFrame = frame * CFrame.new(0, Sim.NET_H / 2, 0)
+	local netTop = ensurePart("NetTop", Vector3.new(Sim.NET_L + 0.2, 0.1, 0.16), Color3.fromRGB(255, 60, 40), folder)
+	netTop.Material = Enum.Material.Neon
+	netTop.CFrame = frame * CFrame.new(0, Sim.NET_H, 0)
 
 	ball = Instance.new("Part")
 	ball.Name = "PPBall"
@@ -286,6 +290,7 @@ local function launch(to: string, p0: Vector3, flight: number, aim: number)
 	state.serving = false
 	state.lastTouch = state.t
 	state.bounces = 0
+	state.receiverBounces = 0
 	state.shot += 1
 	state.rally = state.rally or 0
 	lastHitter = other(to)
@@ -307,6 +312,7 @@ local function serve(wait: boolean)
 	local p = Sim.servePos(serverSide, len)
 	state.p, state.v, state.t = p, Vector3.zero, now()
 	state.live, state.lastTouch, state.bounces = true, now(), 0
+	state.receiverBounces = 0
 	state.to = serverSide
 	state.serving = true
 	lastHitter, lastBounce = nil, nil
@@ -427,10 +433,20 @@ local function step(dt: number)
 	local ev = Sim.step(state, dt, len, wid)
 	ball.CFrame = frame * CFrame.new(state.p)
 	if ev.table then
-		lastBounce = ev.table
 		state.serveInFlight = false
 		state.lastTouch = state.t
+		local hitter = other(state.to)
+		if ev.table == hitter then
+			point(state.to, "Fault: it did not cross the net")
+			return
+		end
+		lastBounce = ev.table
+		state.receiverBounces = (state.receiverBounces or 0) + 1
 		updateBoard()
+		if state.receiverBounces >= 2 then
+			point(hitter, "Double bounce")
+			return
+		end
 		if ev.table == state.to then
 			botReturn()
 		end
@@ -474,9 +490,13 @@ local function onHit(player: Player, payload: any)
 	if not side or side ~= state.to or state.serving then
 		return
 	end
-	-- the ball must be on their half; a volley there is allowed (friendlier than a strict bounce gate)
-	local onSide = (side == "A" and state.p.Z < 0) or (side == "B" and state.p.Z > 0)
-	if not onSide then
+	-- the ball must bounce on their half first: no volleys, and they must be near it
+	if lastBounce ~= side then
+		return
+	end
+	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	local ballWorld = frame:PointToWorldSpace(state.p)
+	if not hrp or (hrp.Position - ballWorld).Magnitude > 9 then
 		return
 	end
 	if type(payload) ~= "table" then

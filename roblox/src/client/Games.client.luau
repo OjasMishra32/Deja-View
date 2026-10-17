@@ -53,7 +53,7 @@ dbg("remotes ready")
 local GRIP = CFrame.new(0, 0, -0.35) * CFrame.Angles(math.rad(-20), 0, 0)
 local PADDLE_SEND = 1 / 30
 local ASSIST_SEND = 1 / 5
-local CHARGE_MAX = 1.6 -- seconds to full power
+local CHARGE_MAX = 0.8 -- seconds from min to max; then back down and up again
 local CHARGE_MIN = 0.06
 
 local lastSend = 0
@@ -224,7 +224,8 @@ local function endCharge()
 		return
 	end
 	charging = false
-	local held = math.clamp((os.clock() - chargeStart) / CHARGE_MAX, CHARGE_MIN, 1)
+	local phase = ((os.clock() - chargeStart) / CHARGE_MAX) % 2
+	local held = math.clamp(if phase <= 1 then phase else 2 - phase, CHARGE_MIN, 1)
 	charge = 0
 	barBack.Visible = false
 	reticle.Visible = false
@@ -350,7 +351,9 @@ RunService.RenderStepped:Connect(function(dt)
 		end
 	end
 	if charging then
-		charge = math.clamp((t - chargeStart) / CHARGE_MAX, 0, 1)
+		-- triangle wave: min -> max -> min -> max while the button stays held
+		local phase = ((t - chargeStart) / CHARGE_MAX) % 2
+		charge = if phase <= 1 then phase else 2 - phase
 		barFill.Size = UDim2.fromScale(charge, 1)
 		barFill.BackgroundColor3 = Color3.fromRGB(0, 122, 255):Lerp(Color3.fromRGB(255, 90, 60), charge)
 		clampToScope()
