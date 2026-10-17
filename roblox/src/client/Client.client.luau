@@ -342,7 +342,9 @@ end)
 local function layoutForScreen()
 	local size = workspace.CurrentCamera.ViewportSize
 	-- 1 on a laptop, down to 0.6 on a phone in landscape.
-	Ui.setScale(ui, math.clamp(math.min(size.X / 1100, size.Y / 620), 0.6, 1))
+	local scale = math.clamp(math.min(size.X / 1100, size.Y / 620), 0.6, 1)
+	Ui.setScale(ui, scale)
+	ui.host.Position = UDim2.new(0, 16, 0, 64 + 120 * scale) -- right under the (scaled) HUD row
 	local small = size.X < 900
 	ui.scoreRows.Visible = size.X >= 700
 	ui.roomsBtn.Text = if UserInputService.KeyboardEnabled then "ROOMS (R)" else "ROOMS"
