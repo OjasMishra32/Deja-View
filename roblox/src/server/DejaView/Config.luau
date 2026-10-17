@@ -35,6 +35,9 @@ local Config = {
 	-- Hand-tuned chess boards per scene until /model sends features.chessBoard (Update 5):
 	-- ["chess-room"] = { centre = { x, y, z }, yaw = 0, size = 32 }   (studs; yaw = the way white looks)
 	CHESS_BOARDS = {} :: { [string]: any },
+	-- Hand-tuned ping pong tables until features.pingPongTable (studs; centre = table top centre; yaw: long axis):
+	-- ["the-courts"] = { centre = { x, y, z }, yaw = 0, length = 14, width = 8, visible = false }
+	PINGPONG_TABLES = {} :: { [string]: any },
 	-- Extra Roblox user ids that get host controls (the owner always does).
 	HOST_USER_IDS = {} :: { number },
 
