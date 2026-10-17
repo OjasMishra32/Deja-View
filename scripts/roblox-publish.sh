@@ -12,13 +12,20 @@ KEY_FILE="${ROBLOX_KEY_FILE:-$HOME/.config/dejaview/roblox.key}"
 UNIVERSE="${UNIVERSE:-10771472038}"
 PLACE="${PLACE:-119735023233195}"
 ROJO="${ROJO_BIN:-/tmp/rojo/rojo}"
+CURL_BIN="${CURL_BIN:-curl}"
 OUT="${OUT:-/tmp/dejaview-place.rbxl}"
+PLACE_FILE="${PLACE_FILE:-}"
 
 [[ -s "$KEY_FILE" ]] || { echo "missing API key at $KEY_FILE" >&2; exit 1; }
-[[ -x "$ROJO" ]] || { echo "missing rojo at $ROJO" >&2; exit 1; }
-
-echo "building $OUT"
-"$ROJO" build "$ROOT/roblox" -o "$OUT" >/dev/null
+if [[ -n "$PLACE_FILE" ]]; then
+  [[ -f "$PLACE_FILE" ]] || { echo "missing place file at $PLACE_FILE" >&2; exit 1; }
+  OUT="$PLACE_FILE"
+  echo "publishing existing place file $OUT"
+else
+  [[ -x "$ROJO" ]] || { echo "missing rojo at $ROJO" >&2; exit 1; }
+  echo "building $OUT"
+  "$ROJO" build "$ROOT/roblox" -o "$OUT" >/dev/null
+fi
 
 KEY="$(tr -d '\r\n' < "$KEY_FILE")"
 # Asset uploads need an assets:write key. Keep it separate from the place publish key.
@@ -78,7 +85,7 @@ PY
 fi
 echo "publishing to universe $UNIVERSE place $PLACE"
 for attempt in 1 2 3 4 5; do
-  code="$(curl -sS --max-time 120 -o /tmp/roblox-publish.out -w '%{http_code}' \
+  code="$("$CURL_BIN" -sS --max-time 120 -o /tmp/roblox-publish.out -w '%{http_code}' \
     -X POST "https://apis.roblox.com/universes/v1/$UNIVERSE/places/$PLACE/versions?versionType=Published" \
     -H "x-api-key: $KEY" \
     -H "Content-Type: application/octet-stream" \
@@ -93,7 +100,7 @@ sed -e 's/[A-Za-z0-9._-]\{40,\}/<redacted>/g' /tmp/roblox-publish.out
 echo "published: https://www.roblox.com/games/$PLACE"
 
 # Running servers keep the old scripts until they stop; restart the universe so new joins get this build.
-rcode="$(curl -sS --max-time 60 -o /tmp/roblox-restart.out -w '%{http_code}' \
+rcode="$("$CURL_BIN" -sS --max-time 60 -o /tmp/roblox-restart.out -w '%{http_code}' \
   -X POST "https://apis.roblox.com/cloud/v2/universes/$UNIVERSE:restartServers" \
   -H "x-api-key: $KEY" -H 'content-type: application/json' -d '{}')"
 echo "restart servers: http $rcode"
