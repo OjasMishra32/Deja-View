@@ -133,8 +133,8 @@ local actions: { [string]: (Player, any) -> () } = {
 			return
 		end
 		local sceneId = workspace:GetAttribute("SceneId")
-		local info = type(sceneId) == "string" and Rooms.modelInfo(sceneId) or nil
-		Pong.placeForRoom(p, info and info.features or nil, if typeof(cameraLook) == "Vector3" then cameraLook else nil)
+		local features = type(sceneId) == "string" and Rooms.featuresFor(sceneId) or nil
+		Pong.placeForRoom(p, features, if typeof(cameraLook) == "Vector3" then cameraLook else nil)
 	end,
 	foosball = function(p, cameraLook)
 		if Foosball.isActive() then
@@ -142,8 +142,8 @@ local actions: { [string]: (Player, any) -> () } = {
 			return
 		end
 		local sceneId = workspace:GetAttribute("SceneId")
-		local info = type(sceneId) == "string" and Rooms.modelInfo(sceneId) or nil
-		Foosball.placeForRoom(p, info and info.features or nil, if typeof(cameraLook) == "Vector3" then cameraLook else nil)
+		local features = type(sceneId) == "string" and Rooms.featuresFor(sceneId) or nil
+		Foosball.placeForRoom(p, features, if typeof(cameraLook) == "Vector3" then cameraLook else nil)
 	end,
 	chess = function(p, cameraLook)
 		if Chess.isActive() then
@@ -151,8 +151,8 @@ local actions: { [string]: (Player, any) -> () } = {
 			return
 		end
 		local sceneId = workspace:GetAttribute("SceneId")
-		local info = type(sceneId) == "string" and Rooms.modelInfo(sceneId) or nil
-		Chess.placeForRoom(p, info and info.features or nil, if typeof(cameraLook) == "Vector3" then cameraLook else nil)
+		local features = type(sceneId) == "string" and Rooms.featuresFor(sceneId) or nil
+		Chess.placeForRoom(p, features, if typeof(cameraLook) == "Vector3" then cameraLook else nil)
 	end,
 	auto_join = function(_, v)
 		workspace:SetAttribute("AutoJoin", v == true)

@@ -112,6 +112,24 @@ Rooms.modelInfo = function(sceneId: string): any?
 	return modelInfo(sceneId)
 end
 
+-- Table and board positions (contract 6.6): /model's features, else the map's (chess-room has no model yet).
+function Rooms.featuresFor(sceneId: string): any?
+	local merged = {}
+	local e = cache[sceneId]
+	if e and e.map and type(e.map.features) == "table" then
+		for k, v in e.map.features do
+			merged[k] = v
+		end
+	end
+	local mi = modelInfo(sceneId)
+	if mi and type(mi.features) == "table" then
+		for k, v in mi.features do
+			merged[k] = v
+		end
+	end
+	return if next(merged) then merged else nil
+end
+
 -- The union of {min, max} boxes (studs), or nil when any is missing.
 local function unionBox(boxes: { any }): any?
 	local mn, mx = nil, nil

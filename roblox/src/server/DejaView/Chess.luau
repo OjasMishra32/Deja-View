@@ -27,6 +27,8 @@ local pieces: { [number]: Model } = {}
 local seats: { [string]: Player? } = { w = nil, b = nil }
 local selected: { [Player]: number } = {}
 local over = false
+local roundId = ""
+local startedAt = 0
 local lastMove = ""
 local turnLabel: TextLabel? = nil
 local hidden: { [BasePart]: { number } } = {} -- world blocks cleared away for the board: {transparency, collide}
@@ -181,6 +183,10 @@ local function finish(status: string)
 		elseif winnerColour then (if winnerColour == "w" then "White" else "Black")
 		else "draw"
 	local score = if winnerColour == "w" then "1-0" elseif winnerColour == "b" then "0-1" else "1/2-1/2"
+	Backend.gameResult({ game = "chess", round = roundId, startedAt = startedAt,
+		winner = if winnerColour then seats[winnerColour] else seats.w,
+		loser = if winnerColour then seats[R.other(winnerColour)] else seats.b,
+		score = if winnerColour then "1-0" else "draw", draw = winnerColour == nil })
 	if winnerPlayer then
 		Stats.win(winnerPlayer, "chess")
 		Stats.badge(winnerPlayer, "checkmate")
@@ -298,6 +304,7 @@ function Chess.place(centre: Vector3, yaw: number, size: number?)
 	square = (size or 32) / 8
 	origin = CFrame.new(centre + Vector3.new(0, 0.2, 0)) * CFrame.Angles(0, yaw, 0)
 	state, seats, over, lastMove = R.new(), { w = nil, b = nil }, false, ""
+	roundId, startedAt = Backend.newRound("chess"), os.clock()
 	local f = Instance.new("Folder")
 	f.Name = "Chess"
 	f.Parent = room
@@ -349,14 +356,19 @@ local function placeFromFeature(fb: any): boolean
 		local c = fb.corners[i]
 		pts[i] = Vector3.new(c[1] or c.x, c[2] or c.y, c[3] or c.z)
 	end
-	local a1 = tonumber(fb.a1) or 1
 	local centre = (pts[1] + pts[2] + pts[3] + pts[4]) / 4
-	-- white sits behind a1; white looks from a1 towards the board centre
-	local a1p = pts[a1]
-	local toCentre = Vector3.new(centre.X - a1p.X, 0, centre.Z - a1p.Z)
-	local side = (pts[1] - pts[2]).Magnitude
-	-- a1 -> centre is 45 degrees left of white's forward direction
-	local forward = CFrame.Angles(0, -math.pi / 4, 0):VectorToWorldSpace(toCentre.Unit)
+	local side = tonumber(fb.size) or (pts[1] - pts[2]).Magnitude
+	local forward: Vector3
+	local wf = fb.whiteForward
+	if type(wf) == "table" then
+		-- the server says which way white looks (contract 6.6)
+		forward = Vector3.new(wf[1] or wf.x or 0, 0, wf[3] or wf.z or 0).Unit
+	else
+		-- white sits behind a1 and looks from a1 towards the centre, turned 45 degrees right (a1 is white's left)
+		local a1p = pts[tonumber(fb.a1) or 1]
+		local toCentre = Vector3.new(centre.X - a1p.X, 0, centre.Z - a1p.Z).Unit
+		forward = CFrame.Angles(0, math.pi / 4, 0):VectorToWorldSpace(toCentre)
+	end
 	Chess.place(centre, math.atan2(-forward.X, -forward.Z), side)
 	return true
 end

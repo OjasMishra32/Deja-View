@@ -17,13 +17,16 @@ local Foosball = {}
 
 local WIN_SCORE = 5
 local SIDE_ZONE = 12
+-- Sizes follow the table (set in place): a big arcade table (16 x 9) or the real one at the court (4.2 x 2.5).
 local BALL_R = 0.45
 local MAN_HALF = 0.55 -- half width of a little player along X
 local GOAL_HALF = 1.8
 local SPEED = 14 -- studs/s after a hit
 local KICK_SPEED = 24
+local MIN_SPEED = 2
+local ROD_Y, MAN_H = 1.6, 1.6 -- rod height above the pitch, height of a little player
 local FRICTION = 0.35 -- speed lost per second, fraction
-local ROD_SPEED = 14 -- studs/s a rod slides
+local ROD_SPEED = 14 -- studs/s a rod slides (set per table)
 
 -- Table frame: long axis along Z, team A defends -Z, team B defends +Z, top at y = 0.
 local tableCf = CFrame.new()
@@ -42,6 +45,8 @@ local score = { A = 0, B = 0 }
 local ball = { pos = Vector2.zero, vel = Vector2.zero } -- (x, z) on the table
 local paused = true
 local over = false
+local roundId = ""
+local startedAt = 0
 local botError: { [string]: number } = { A = 0, B = 0 } -- bots aim a little off, so they can be beaten
 local botErrorAt = 0
 
@@ -65,13 +70,14 @@ local function sideOf(player: Player): string?
 	if not hrp then
 		return nil
 	end
+	-- players stand on the long sides (where the rod handles are): team A on -X, team B on +X
 	local p = tableCf:PointToObjectSpace(hrp.Position)
-	if math.abs(p.X) > WID / 2 + SIDE_ZONE then
+	if math.abs(p.Z) > LEN / 2 + 3 or math.abs(p.X) > WID / 2 + SIDE_ZONE then
 		return nil
 	end
-	if p.Z < -LEN / 2 + 3 and p.Z > -LEN / 2 - SIDE_ZONE then
+	if p.X < -WID / 2 + 0.3 then
 		return "A"
-	elseif p.Z > LEN / 2 - 3 and p.Z < LEN / 2 + SIDE_ZONE then
+	elseif p.X > WID / 2 - 0.3 then
 		return "B"
 	end
 	return nil
@@ -86,7 +92,8 @@ local function drop(towards: string?)
 	local rng = Random.new()
 	ball.pos = Vector2.new(0, 0)
 	local dir = if towards == "A" then -1 elseif towards == "B" then 1 else (if rng:NextNumber() < 0.5 then -1 else 1)
-	ball.vel = Vector2.new(rng:NextNumber(-4, 4), dir * 5)
+	local k = LEN / 16
+	ball.vel = Vector2.new(rng:NextNumber(-4, 4) * k, dir * 5 * k)
 	paused = false
 end
 
@@ -101,6 +108,8 @@ local function goal(scorer: string)
 		local final = string.format("%d-%d", score.A, score.B)
 		World.Moment:FireAllClients({ type = "winner", title = string.upper(nameOf(scorer)) .. " WINS FOOSBALL", mvp = final })
 		local sceneId = workspace:GetAttribute("SceneId")
+		Backend.gameResult({ game = "foosball", round = roundId, winner = teams[scorer], loser = teams[other(scorer)],
+			score = string.format("%d-%d", score[scorer], score[other(scorer)]), startedAt = startedAt })
 		Stats.win(teams[scorer], "foosball")
 		if sceneId == "the-courts" then
 			Stats.badge(teams[scorer], "court")
@@ -125,7 +134,8 @@ local function step(dt: number)
 	if os.clock() - botErrorAt > 1.2 then
 		botErrorAt = os.clock()
 		local rng = Random.new()
-		botError = { A = rng:NextNumber(-1.4, 1.4), B = rng:NextNumber(-1.4, 1.4) }
+		local e = MAN_HALF * 2.6
+		botError = { A = rng:NextNumber(-e, e), B = rng:NextNumber(-e, e) }
 		for _, t in { "A", "B" } do
 			if not teams[t] and rng:NextNumber() < 0.5 then
 				kickAt[t] = os.clock()
@@ -147,9 +157,9 @@ local function step(dt: number)
 		end
 		rod.offset = math.clamp(rod.offset + dir * ROD_SPEED * dt, -rod.range, rod.range)
 		for i, part in rod.parts do
-			part.CFrame = world(rod.men[i] + rod.offset, 0.9, rod.z)
+			part.CFrame = world(rod.men[i] + rod.offset, MAN_H / 2, rod.z)
 		end
-		rod.bar.CFrame = world(rod.offset, 1.6, rod.z) * CFrame.Angles(0, 0, math.pi / 2)
+		rod.bar.CFrame = world(rod.offset, ROD_Y, rod.z)
 	end
 	if paused then
 		return
@@ -157,8 +167,8 @@ local function step(dt: number)
 	-- ball
 	local p, v = ball.pos, ball.vel
 	v *= math.max(0, 1 - FRICTION * dt)
-	if v.Magnitude < 2 then
-		v = v.Unit * 2 -- never stall on the table
+	if v.Magnitude < MIN_SPEED then
+		v = v.Unit * MIN_SPEED -- never stall on the table
 	end
 	local np = p + v * dt
 	-- side walls
@@ -243,8 +253,9 @@ function Foosball.rematch()
 	end
 end
 
-function Foosball.place(centre: Vector3, yaw: number, length: number?, width: number?, visible: boolean?)
-	lastPlace = table.pack(centre, yaw, length, width, visible)
+-- extra (real table): { rodZs = { local z of each rod }, rodY = rod height above the pitch }
+function Foosball.place(centre: Vector3, yaw: number, length: number?, width: number?, visible: boolean?, extra: any?)
+	lastPlace = table.pack(centre, yaw, length, width, visible, extra)
 	Foosball.remove()
 	local room = workspace:FindFirstChild("Room")
 	if not room then
@@ -252,6 +263,12 @@ function Foosball.place(centre: Vector3, yaw: number, length: number?, width: nu
 	end
 	LEN, WID = length or 16, width or 9
 	tableCf = CFrame.new(centre) * CFrame.Angles(0, yaw, 0)
+	local k = LEN / 16 -- 1 for the arcade table
+	-- real proportions (ball ~3.5 % of the width, a player ~6 %), so a ball can slip between players like on a real table
+	BALL_R, MAN_HALF, GOAL_HALF = math.min(0.45 * k, WID * 0.035), math.min(0.55 * k, WID * 0.03), WID * 0.16
+	SPEED, KICK_SPEED, MIN_SPEED, ROD_SPEED = 14 * k, 24 * k, 2 * k, WID * 1.6
+	ROD_Y = if extra and tonumber(extra.rodY) then extra.rodY else 1.6 * k
+	MAN_H = math.max(ROD_Y + 0.15 * k, 0.5 * k)
 	local f = Instance.new("Folder")
 	f.Name = "Foosball"
 	f.Parent = room
@@ -276,22 +293,36 @@ function Foosball.place(centre: Vector3, yaw: number, length: number?, width: nu
 		end
 	end
 	part(f, "Line", Vector3.new(WID, 0.02, 0.12), world(0, 0.02, 0), Color3.new(1, 1, 1))
-	-- rods: defence near each team's own goal, attack in the other half (interleaved like a real table)
+	-- 8 rods like a real table, from team A's goal (-Z) to team B's: goalie, defence, their attack, midfield,
+	-- their midfield, attack, their defence, their goalie (1, 2, 3, 5, 5, 3, 2, 1 players)
 	rods = {}
-	local layout = {
-		{ team = "A", z = -LEN * 0.32, men = { -2.4, 0, 2.4 } },
-		{ team = "B", z = -LEN * 0.12, men = { -2.6, 0, 2.6 } },
-		{ team = "A", z = LEN * 0.12, men = { -2.6, 0, 2.6 } },
-		{ team = "B", z = LEN * 0.32, men = { -2.4, 0, 2.4 } },
-	}
-	for _, def in layout do
-		local rod = { team = def.team, z = def.z, men = def.men, offset = 0, parts = {}, range = WID / 2 - 2.9 - MAN_HALF }
-		local colour = if def.team == "A" then Theme.Accent else Color3.fromRGB(255, 77, 109)
-		rod.bar = part(f, "Rod", Vector3.new(WID + 3, 0.18, 0.18), world(0, 1.6, def.z), Color3.fromRGB(200, 200, 205))
-		rod.bar.Shape = Enum.PartType.Cylinder
+	local teamsOrder = { "A", "A", "B", "A", "B", "A", "B", "B" }
+	local counts = { 1, 2, 3, 5, 5, 3, 2, 1 }
+	local zs = {}
+	if extra and type(extra.rodZs) == "table" and #extra.rodZs == 8 then
+		zs = table.clone(extra.rodZs)
+		table.sort(zs)
+	else
+		for i = 1, 8 do
+			zs[i] = -LEN / 2 + LEN * (i - 0.5) / 8
+		end
+	end
+	for i = 1, 8 do
+		local n = counts[i]
+		local spacing = WID / (n + 0.6)
+		local men = {}
+		for j = 1, n do
+			table.insert(men, (j - (n + 1) / 2) * spacing)
+		end
+		local outer = math.abs(men[1])
+		local rod = { team = teamsOrder[i], z = zs[i], men = men, offset = 0, parts = {},
+			range = math.max(0, WID / 2 - 0.05 * WID - outer - MAN_HALF) }
+		local colour = if rod.team == "A" then Theme.Accent else Color3.fromRGB(255, 77, 109)
+		rod.bar = part(f, "Rod", Vector3.new(WID + 1.2 * k + 0.6, 0.07 + 0.11 * k, 0.07 + 0.11 * k), world(0, ROD_Y, zs[i]),
+			Color3.fromRGB(200, 200, 205))
 		rod.bar.CanCollide = false
-		for _, mx in def.men do
-			local man = part(f, "Man", Vector3.new(MAN_HALF * 2, 1.6, 0.5), world(mx, 0.9, def.z), colour)
+		for _, mx in men do
+			local man = part(f, "Man", Vector3.new(MAN_HALF * 2, MAN_H, 0.12 + 0.38 * k), world(mx, MAN_H / 2, zs[i]), colour)
 			man.CanCollide = false
 			table.insert(rod.parts, man)
 		end
@@ -311,10 +342,11 @@ function Foosball.place(centre: Vector3, yaw: number, length: number?, width: nu
 	scoreLabel = Theme.label({ Text = "", FontFace = Theme.Heading, TextXAlignment = Enum.TextXAlignment.Center,
 		Size = UDim2.new(1, -20, 1, -12), Position = UDim2.fromOffset(10, 6), MaxText = 26, Parent = card })
 	teams, input, score, over, paused = { A = nil, B = nil }, { A = 0, B = 0 }, { A = 0, B = 0 }, false, true
+	roundId, startedAt = Backend.newRound("foosball"), os.clock()
 	ball.pos, ball.vel = Vector2.zero, Vector2.zero
 	updateBoard()
 	workspace:SetAttribute("FoosActive", true)
-	World.toast("Foosball: stand at an end, slide with ◀ ▶ (Z / X), KICK (C)")
+	World.toast("Foosball: stand at a long side, ◀ ▶ (Z / X) pull and push your rods, KICK (C)")
 	conn = RunService.Heartbeat:Connect(function(dt)
 		local ok, err = pcall(step, math.min(dt, 0.05))
 		if not ok then
@@ -340,7 +372,18 @@ local function placeFromFeature(ft: any): boolean
 	local centre = (c[1] + c[2] + c[3] + c[4]) / 4
 	local e1, e2 = c[2] - c[1], c[3] - c[2]
 	local long, short = if e1.Magnitude >= e2.Magnitude then e1 else e2, if e1.Magnitude >= e2.Magnitude then e2 else e1
-	Foosball.place(centre, math.atan2(-long.X, -long.Z), long.Magnitude, short.Magnitude, false)
+	local extra = {}
+	if type(ft.rodOffsets) == "table" and #ft.rodOffsets == 8 then
+		extra.rodZs = {}
+		for i, o in ft.rodOffsets do
+			extra.rodZs[i] = -o -- contract: local z = -offset
+		end
+	end
+	if tonumber(ft.rodHeight) and tonumber(ft.fieldHeight) then
+		extra.rodY = ft.rodHeight - ft.fieldHeight
+	end
+	-- the table's own frame: y = 0 is the pitch (corners and height are the field)
+	Foosball.place(centre, math.atan2(-long.X, -long.Z), long.Magnitude, short.Magnitude, false, extra)
 	return true
 end
 
@@ -365,8 +408,9 @@ function Foosball.placeForRoom(host: Player?, features: any?, cameraLook: Vector
 	local look = if flat.Magnitude > 0.01 then flat.Unit else Vector3.new(0, 0, -1)
 	local hum = (hrp.Parent :: Model):FindFirstChildOfClass("Humanoid")
 	local floorY = hrp.Position.Y - ((hum and hum.HipHeight or 2) + hrp.Size.Y / 2)
-	local centre = Vector3.new(hrp.Position.X, floorY + 3, hrp.Position.Z) + look * (5 + 8)
-	Foosball.place(centre, math.atan2(look.X, look.Z), 16, 9, true)
+	-- turned so the host stands at the middle of a long side (team A), the table running left to right
+	local centre = Vector3.new(hrp.Position.X, floorY + 3, hrp.Position.Z) + look * (9 / 2 + 3)
+	Foosball.place(centre, math.atan2(-look.Z, look.X), 16, 9, true)
 end
 
 local function onInput(player: Player, kind: any, value: any)
@@ -386,9 +430,9 @@ local function onInput(player: Player, kind: any, value: any)
 		return
 	end
 	if kind == "slide" and type(value) == "number" then
-		-- ▶ means "to my right": team A looks along +Z, so its right is -X; team B looks along -Z (right is +X)
+		-- ▶ pushes your rods away from you, ◀ pulls them in: team A stands on -X, team B on +X
 		local v = math.clamp(value, -1, 1)
-		input[side] = if side == "A" then -v else v
+		input[side] = if side == "A" then v else -v
 	elseif kind == "kick" then
 		kickAt[side] = os.clock()
 	end
