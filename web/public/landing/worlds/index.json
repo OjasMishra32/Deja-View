@@ -1,0 +1,5 @@
+{
+  "about": "Worlds that have a looping flight here as <id>.mp4 with an <id>.jpg poster. The landing page's Step inside row (the-courts, chess-room, kitchen, tilted-towers) reads this list; add an id once both files are in place. The hero chips use the small <id>-chip.mp4 and <id>-chip.jpg for the ids under chips (240 px wide), else the full clip.",
+  "clips": ["the-courts", "chess-room"],
+  "chips": ["the-courts", "chess-room"]
+}

@@ -1,0 +1,514 @@
+/* The curated "All worlds" list (gallery.ts): one rounded white panel on the grey section, one hairline-separated
+   row per world: its picture, its name and mode, one line on how it was made, and Walk in. The whole row is the
+   link. Above it, the visitor's own worlds (#mine) in the same rows, with how far along they are. At the end, the
+   phone-or-headset panel's extras (no QR code on a phone, the controls folded). */
+
+#gallery {
+  background: var(--bg-2);
+}
+
+/* the filter control stays out of sight until gallery.ts decides it is worth showing */
+#gallery #filters:empty {
+  display: none;
+}
+
+#gallery #grid,
+#gallery .wl-list {
+  display: block;
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--bg);
+}
+
+/* the visitor's own worlds, over the list */
+#gallery .wl-mine {
+  margin-bottom: 28px;
+}
+#gallery .wl-mine-title {
+  margin: 0 0 10px;
+  color: var(--text-2);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   A row */
+
+#gallery .world-row {
+  --pad: 20px;
+  --thumb: 52px;
+  --gap: 16px;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--thumb) minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--gap);
+  min-width: 0;
+  min-height: 76px;
+  padding: 12px var(--pad);
+  transition: background-color 0.2s var(--ease);
+}
+
+/* inset hairline between rows, starting where the text starts */
+#gallery .world-row + .world-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: calc(var(--pad) + var(--thumb) + var(--gap));
+  height: 1px;
+  background: var(--hairline);
+  pointer-events: none;
+}
+@media (min-resolution: 2dppx) {
+  #gallery .world-row + .world-row::before {
+    transform: scaleY(0.5);
+    transform-origin: 0 0;
+    background: rgba(0, 0, 0, 0.16);
+  }
+}
+
+/* the world just made (?new=<id> from the capture page) */
+#gallery .world-row.is-new {
+  background: rgba(0, 113, 227, 0.06);
+}
+@media (prefers-reduced-motion: no-preference) {
+  #gallery .world-row.is-new {
+    animation: wl-new 1.2s var(--ease) 4s forwards;
+  }
+}
+/* no fade, but the tint still clears */
+@media (prefers-reduced-motion: reduce) {
+  #gallery .world-row.is-new {
+    animation: wl-new 0s linear 5s forwards;
+  }
+}
+@keyframes wl-new {
+  to {
+    background: transparent;
+  }
+}
+
+@media (hover: hover) {
+  #gallery .world-row.is-ready:hover {
+    background: #fafafc;
+  }
+}
+/* the row is the link: its ring goes round the row */
+#gallery .world-row:has(.wl-walk:focus-visible) {
+  outline: 3px solid rgba(0, 113, 227, 0.5);
+  outline-offset: -3px;
+  border-radius: 18px;
+}
+
+#gallery .wl-thumb {
+  position: relative;
+  width: var(--thumb);
+  height: var(--thumb);
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--bg-2);
+}
+#gallery .wl-thumb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+  pointer-events: none;
+}
+#gallery .wl-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+#gallery .world-row.no-thumb .wl-thumb::after {
+  content: none;
+}
+
+#gallery .wl-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+#gallery .wl-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  margin: 0;
+}
+#gallery .wl-name {
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.022em;
+}
+/* the mode, as a small label beside the name */
+#gallery .wl-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 980px;
+  background: var(--fill-2);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0;
+}
+#gallery .world-row[data-mode='video'] .wl-chip {
+  background: rgba(0, 113, 227, 0.08);
+  color: #0066cc;
+}
+/* one line on how it was made: never cut, it wraps on a narrow screen */
+#gallery .wl-line {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  text-wrap: pretty;
+}
+#gallery .world-row[data-state='failed'] .wl-line {
+  color: var(--red);
+}
+
+/* a thin progress line while one of the visitor's worlds is being made */
+#gallery .wl-bar {
+  display: block;
+  width: min(280px, 100%);
+  height: 3px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #e8e8ed;
+}
+#gallery .wl-bar[hidden] {
+  display: none;
+}
+#gallery .wl-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--imessage, var(--blue));
+  transform-origin: left center;
+  transition: transform 0.6s var(--ease);
+}
+#gallery .wl-bar.indeterminate i {
+  width: 30%;
+  transform: none !important;
+  animation: wl-slide 1.6s ease-in-out infinite;
+}
+@keyframes wl-slide {
+  from {
+    margin-left: -30%;
+  }
+  to {
+    margin-left: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #gallery .wl-bar.indeterminate i {
+    width: 100%;
+    margin-left: 0;
+    animation: none;
+    opacity: 0.3;
+  }
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Walk in (or, for a world that did not make it, Try again) */
+
+#gallery .wl-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+#gallery .wl-actions:empty {
+  display: none;
+}
+#gallery .wl-walk {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 6px 16px;
+  border-radius: 980px;
+  background: var(--fill);
+  color: var(--blue);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background-color 0.2s var(--ease);
+}
+/* the whole row opens the world */
+#gallery .wl-walk::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+#gallery .wl-walk:focus-visible {
+  outline: none;
+}
+#gallery .world-row:hover .wl-walk {
+  background: rgba(118, 118, 128, 0.2);
+  text-decoration: none;
+}
+#gallery .wl-go {
+  display: none;
+}
+#gallery .wl-again {
+  color: var(--blue);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+#gallery .wl-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Loading and empty */
+
+#gallery #grid .skeleton {
+  --sk-text: 88px; /* where the text (and the hairline above it) starts, as in a real row */
+  position: relative;
+  height: 76px;
+  aspect-ratio: auto;
+  border-radius: 0;
+  background: none;
+  animation: none;
+}
+#gallery #grid .skeleton + .skeleton {
+  background: linear-gradient(var(--hairline-2), var(--hairline-2)) no-repeat var(--sk-text) 0 / calc(100% - var(--sk-text)) 1px;
+}
+#gallery #grid .skeleton::before,
+#gallery #grid .skeleton::after {
+  content: '';
+  position: absolute;
+  background: var(--bg-2);
+}
+#gallery #grid .skeleton::before {
+  top: 12px;
+  left: 20px;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+}
+#gallery #grid .skeleton::after {
+  top: 24px;
+  left: var(--sk-text);
+  width: min(260px, 40%);
+  height: 10px;
+  border-radius: 5px;
+  box-shadow: 0 18px 0 var(--bg-2);
+}
+@media (prefers-reduced-motion: no-preference) {
+  #gallery #grid .skeleton::before,
+  #gallery #grid .skeleton::after {
+    animation: wl-pulse 1.2s ease-in-out infinite alternate;
+  }
+}
+@keyframes wl-pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.45;
+  }
+}
+
+#gallery .wl-empty {
+  padding: 56px 24px;
+  text-align: center;
+}
+#gallery .wl-empty-title {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.17;
+  letter-spacing: 0.009em;
+}
+#gallery .wl-empty p + p {
+  margin: 6px 0 20px;
+  color: var(--text-2);
+}
+
+/* "Sign in to make your own. Anyone can walk in." (only when sign-in is on) */
+#gallery .signin-note,
+#headset .signin-note {
+  margin: 12px 0 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.4;
+}
+#gallery .wl-empty .signin-note {
+  margin-top: 14px;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Phone */
+
+@media (max-width: 734px) {
+  /* All, Photo and Video fit a 320 px screen */
+  #gallery #filters {
+    max-width: 100%;
+  }
+  #gallery #filters > button {
+    min-width: 0;
+    padding: 5px 10px;
+  }
+  #gallery #grid,
+  #gallery .wl-list {
+    border-radius: 16px;
+  }
+  #gallery .world-row {
+    --pad: 16px;
+    --thumb: 48px;
+    --gap: 12px;
+    min-height: 72px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+  #gallery .wl-name {
+    font-size: 16px;
+    line-height: 1.25;
+  }
+  #gallery .wl-line {
+    font-size: 13px;
+    line-height: 1.38;
+  }
+  #gallery .wl-walk {
+    padding: 6px 13px;
+  }
+  #gallery #grid .skeleton {
+    --sk-text: 76px;
+    height: 72px;
+  }
+  #gallery #grid .skeleton::before {
+    left: 16px;
+    width: 48px;
+    height: 48px;
+  }
+}
+
+/* a narrow phone: the row ends in a chevron, so the line about how it was made keeps its room */
+@media (max-width: 479px) {
+  #gallery .wl-walk {
+    width: 28px;
+    min-height: 28px;
+    margin-right: -6px;
+    padding: 0;
+    background: none;
+    color: var(--text-3);
+  }
+  #gallery .world-row:hover .wl-walk {
+    background: none;
+  }
+  #gallery .wl-walk-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  #gallery .wl-go {
+    display: block;
+  }
+}
+
+/* the smallest phones (320 px): a little less of everything around the text */
+@media (max-width: 359px) {
+  #gallery .world-row {
+    --pad: 12px;
+    --thumb: 44px;
+    --gap: 10px;
+  }
+  #gallery .wl-thumb {
+    border-radius: 10px;
+  }
+  #gallery #grid .skeleton {
+    --sk-text: 66px;
+  }
+  #gallery #grid .skeleton::before {
+    left: 12px;
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (pointer: coarse) {
+  #gallery .wl-walk,
+  #gallery #filters > button {
+    min-height: 36px;
+  }
+}
+
+/* ---------------------------------------------------------------------------------------------
+   On your phone or headset: a phone gets no QR code (it is the phone), its own controls first, and the laptop's
+   and the headset's under one fold (gallery.ts moves them into the details) */
+
+#headset .ctl-more {
+  border-top: 1px solid var(--hairline);
+}
+#headset .ctl-more > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  color: var(--blue);
+  font-size: 15px;
+  font-weight: 500;
+  list-style: none;
+  cursor: pointer;
+}
+#headset .ctl-more > summary::-webkit-details-marker {
+  display: none;
+}
+#headset .ctl-more > summary::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  margin-right: 4px;
+  border-right: 1.8px solid currentColor;
+  border-bottom: 1.8px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 0.2s var(--ease);
+}
+#headset .ctl-more[open] > summary::after {
+  transform: translateY(2px) rotate(-135deg);
+}
+#headset .ctl-more > div {
+  margin-top: 6px;
+}
+#headset .ctl-more > div + div {
+  margin-top: 22px;
+}
+@media (max-width: 734px) {
+  #headset .qr {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #headset .ctl-more > summary::after {
+    transition: none;
+  }
+}

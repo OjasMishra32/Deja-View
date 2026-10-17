@@ -1,0 +1,459 @@
+/* The "Step inside" row (worlds-row.ts): our best worlds as big rounded cards, each a looping flight through it.
+   A carousel in the apple.com manner: the first card lines up with the headline, the row scrolls on its own
+   (never the page), the next card peeks, and two round arrows sit under it when there is more to see. */
+
+.worlds {
+  padding: clamp(88px, 12vh, 136px) 0 clamp(72px, 10vh, 112px);
+  background: var(--bg);
+}
+.worlds-title {
+  font-size: clamp(40px, 5.4vw, 64px);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.022em;
+  text-wrap: balance;
+}
+.worlds-sub {
+  max-width: 36em;
+  margin-top: 14px;
+  color: var(--text-2);
+  font-size: clamp(19px, 1.75vw, 24px);
+  line-height: 1.33;
+  letter-spacing: -0.012em;
+  text-wrap: pretty;
+}
+
+.worlds-row {
+  --wr-gap: 20px;
+  --wr-per: 3;
+  --wr-aspect: 4 / 5;
+  --wr-radius: 28px;
+  --wr-pad: 28px;
+  /* lines the first card up with the headline above it */
+  --wr-edge: max(var(--gutter), calc((100% - var(--wrap)) / 2));
+  margin-top: clamp(32px, 5vh, 56px);
+}
+
+.wr-track {
+  display: flex;
+  gap: var(--wr-gap);
+  margin: 0;
+  /* room for the focus ring above and below */
+  padding: 6px var(--wr-edge) 8px;
+  list-style: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--wr-edge);
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.wr-track::-webkit-scrollbar {
+  display: none;
+}
+
+.wr-card {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex: 0 0 calc((100% - (var(--wr-per) - 1) * var(--wr-gap)) / var(--wr-per));
+  flex-direction: column;
+  justify-content: flex-end;
+  aspect-ratio: var(--wr-aspect);
+  overflow: hidden;
+  border-radius: var(--wr-radius);
+  /* what shows for the moment before the still arrives: the night, not a white hole */
+  background: #1d1d1f;
+  color: #fff;
+  scroll-snap-align: start;
+}
+.wr-card:has(.wr-walk:focus-visible) {
+  outline: 3px solid rgba(0, 113, 227, 0.55);
+  outline-offset: 3px;
+}
+
+.wr-media {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+}
+.wr-still,
+.wr-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition:
+    opacity 0.6s var(--ease),
+    transform 1.4s var(--ease);
+}
+.wr-still {
+  opacity: 0;
+}
+.wr-card.has-still .wr-still {
+  opacity: 1;
+}
+.wr-video {
+  opacity: 0;
+  pointer-events: none;
+}
+.wr-card.has-frame .wr-video {
+  opacity: 1;
+}
+/* a soft shade under the words, nothing at the top */
+.wr-media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0) 38%,
+    rgba(0, 0, 0, 0.22) 54%,
+    rgba(0, 0, 0, 0.58) 74%,
+    rgba(0, 0, 0, 0.74) 100%
+  );
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .wr-card:hover .wr-still,
+  .wr-card:hover .wr-video {
+    transform: scale(1.035);
+  }
+}
+
+.wr-copy {
+  /* not positioned: the Walk in link's hit area spans the whole card */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: var(--wr-pad);
+  text-shadow: 0 1px 14px rgba(0, 0, 0, 0.22);
+}
+.wr-name {
+  color: #fff;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.016em;
+  text-wrap: balance;
+}
+.wr-made {
+  margin-top: 6px;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 17px;
+  line-height: 1.35;
+  letter-spacing: -0.016em;
+  text-wrap: pretty;
+}
+.wr-walk {
+  margin-top: 20px;
+  min-height: 40px;
+  padding: 9px 20px;
+  text-shadow: none;
+}
+.wr-walk::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.wr-walk:focus-visible {
+  outline-color: rgba(255, 255, 255, 0.9);
+}
+
+/* play / pause, level with Walk in */
+.wr-toggle {
+  position: absolute;
+  right: var(--wr-pad);
+  bottom: var(--wr-pad);
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.78);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color 0.2s var(--ease);
+}
+.wr-toggle:hover {
+  background: rgba(255, 255, 255, 0.92);
+}
+.wr-toggle svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+.wr-toggle:focus-visible {
+  outline-color: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+}
+
+/* the arrows under the row, at its right edge */
+.wr-nav {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+  margin-top: 18px;
+}
+.wr-arrow {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(210, 210, 215, 0.64);
+  color: rgba(0, 0, 0, 0.56);
+  cursor: pointer;
+  transition:
+    background-color 0.2s var(--ease),
+    color 0.2s var(--ease);
+}
+.wr-arrow:hover {
+  background: rgba(223, 223, 227, 0.7);
+  color: rgba(0, 0, 0, 0.64);
+}
+.wr-arrow:disabled {
+  background: rgba(232, 232, 237, 0.64);
+  color: rgba(0, 0, 0, 0.18);
+  cursor: default;
+}
+.wr-arrow svg {
+  width: 36px;
+  height: 36px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.wr-arrow:focus-visible {
+  border-radius: 50%;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Sizes. Laptop and Quest: three tall cards across the width of the page, a peek when there are more.
+   Between phone and laptop: two and a peek. Phone: one card and the edge of the next, swiped. */
+
+@media (min-width: 1068px) {
+  .worlds-row[data-count='4'],
+  .worlds-row[data-count='5'] {
+    --wr-per: 3.16;
+  }
+  .worlds-row[data-count='2'] {
+    --wr-per: 2;
+    --wr-aspect: 5 / 4;
+  }
+}
+
+@media (min-width: 735px) and (max-width: 1067px) {
+  .worlds-row {
+    --wr-per: 2.16;
+    --wr-pad: 24px;
+  }
+  .worlds-row[data-count='2'] {
+    --wr-per: 2;
+  }
+}
+
+/* a short landscape screen (the Quest browser's default window, a laptop with the bar open, a tablet held sideways):
+   square cards, so the headline and the whole row fit on one screen */
+@media (min-width: 735px) and (max-height: 820px) {
+  .worlds {
+    padding-top: clamp(48px, 7vh, 72px);
+  }
+  .worlds-row {
+    margin-top: 24px;
+  }
+  .worlds-row:not([data-count='1']):not([data-count='2']) {
+    --wr-aspect: 1 / 1;
+  }
+}
+/* two cards between phone and laptop are 4:5 otherwise, too tall for a short screen */
+@media (min-width: 735px) and (max-width: 1067px) and (max-height: 820px) {
+  .worlds-row[data-count='2'] {
+    --wr-aspect: 1 / 1;
+  }
+}
+
+@media (min-width: 735px) {
+  .worlds-row[data-count='1'] {
+    --wr-per: 1;
+    --wr-aspect: 21 / 9;
+  }
+}
+
+@media (max-width: 734px) {
+  .worlds-row {
+    --wr-gap: 12px;
+    --wr-radius: 24px;
+    --wr-pad: 20px;
+  }
+  .wr-card {
+    flex-basis: min(84vw, 400px);
+  }
+  .wr-name {
+    font-size: 24px;
+  }
+  .wr-made {
+    font-size: 15px;
+  }
+  .wr-walk {
+    margin-top: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wr-still,
+  .wr-video {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------------------------
+   The hero's chips (mountHeroChips in worlds-row.ts): three small worlds under the calls to action, each a link
+   down to Step inside. Laptop: a row of soft pills, a small moving picture and a name. Phone: three small tiles,
+   the name under each. */
+
+.hero-chips {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  /* the chips' height is there from the first paint, so the headset under them never jumps when they arrive */
+  min-height: 40px;
+  margin-top: 20px;
+}
+/* only when sign-in is on (gallery.ts) */
+.hero-signin {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.4;
+  letter-spacing: -0.008em;
+}
+.hc-list {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hc-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 4px 15px 4px 4px;
+  border-radius: 980px;
+  background: var(--bg-2);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background-color 0.2s var(--ease);
+}
+.hc-link:hover {
+  background: #ebebef;
+  text-decoration: none;
+}
+.hc-media {
+  position: relative;
+  flex: none;
+  width: 50px;
+  height: 32px;
+  overflow: hidden;
+  border-radius: 980px;
+  background: #e3e3e8;
+}
+.hc-still,
+.hc-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.5s var(--ease);
+}
+.hc.has-still .hc-still,
+.hc.has-frame .hc-video {
+  opacity: 1;
+}
+
+/* a short laptop screen: a little slimmer, so the headset keeps its room */
+@media (min-width: 735px) and (max-height: 820px) {
+  .hero-chips {
+    min-height: 36px;
+    margin-top: 16px;
+  }
+  .hc-link {
+    height: 36px;
+    padding-right: 14px;
+    font-size: 13px;
+  }
+  .hc-media {
+    width: 46px;
+    height: 28px;
+  }
+}
+
+@media (max-width: 734px) {
+  .hero-chips {
+    gap: 12px;
+    min-height: 78px;
+    margin-top: 22px;
+  }
+  .hero-signin {
+    font-size: 13px;
+  }
+  .hc-list {
+    gap: 12px;
+  }
+  .hc-link {
+    flex-direction: column;
+    gap: 6px;
+    height: auto;
+    padding: 0;
+    background: none;
+    color: var(--text-2);
+    font-size: 12px;
+  }
+  .hc-link:hover {
+    background: none;
+  }
+  .hc-media {
+    width: min(88px, 26vw);
+    height: auto;
+    aspect-ratio: 16 / 10;
+    border-radius: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hc-still,
+  .hc-video,
+  .hc-link {
+    transition: none;
+  }
+}
+
+/* short phones (320x640 and the like): the chips would push the headset off the first screen */
+@media (max-width: 734px) and (max-height: 700px) {
+  .hero-chips {
+    display: none;
+  }
+}
