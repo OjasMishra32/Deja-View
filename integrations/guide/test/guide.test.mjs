@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, afterEach, before, describe, mock, test } from 'node:test';
 import { answerFallback } from '../fallback.mjs';
-import { ask, describe as describeImage, health, hotspots, narrate, setClient } from '../gemini.mjs';
+import { ask, describe as describeImage, health, hotspots, narrate, resetTtsRest, setClient, speak } from '../gemini.mjs';
 import { loadNotes, notesContext, sceneNotes } from '../notes.mjs';
 import { DESCRIBE_SYSTEM, FRAMES_SYSTEM, MEMORY_PLACES, WORLD_HINTS, worldHints } from '../prompts.mjs';
 
@@ -246,5 +246,27 @@ describe('fallback answers from notes', () => {
   test('with no key at all, /ask answers from the notes', async () => {
     const result = await ask(jpeg('kitchen'), { question: 'what are they cooking?', scene: { id: 'kitchen-cooking' } });
     assert.deepEqual([result.answer, result.error], ['They made garlic fried rice', 'mock mode']);
+  });
+});
+
+describe('speech models', () => {
+  afterEach(() => { delete process.env.MODEL_TTS; resetTtsRest(); });
+  test('a used-up speech model hands over to the next, and rests instead of being asked again', async () => {
+    process.env.MODEL_TTS = 'tts-a, tts-b';
+    const asked = [];
+    setClient({ models: { async generateContent(request) {
+      asked.push(request.model);
+      if (request.model === 'tts-a') throw new Error('{"error":{"code":429,"message":"You exceeded your current quota","status":"RESOURCE_EXHAUSTED"}}');
+      return { candidates: [{ content: { parts: [{ inlineData: { mimeType: 'audio/wav', data: WAV } }] } }] };
+    } } });
+    const first = await speak('welcome to the kitchen');
+    assert.ok(first.speech.startsWith('data:audio/wav;base64,'));
+    await speak('who won the foosball game');
+    assert.deepEqual(asked, ['tts-a', 'tts-b', 'tts-b']);
+  });
+  test('when every speech model fails, the last error comes back', async () => {
+    process.env.MODEL_TTS = 'tts-a,tts-b';
+    setClient({ models: { async generateContent() { throw new Error('503 UNAVAILABLE'); } } });
+    await assert.rejects(speak('hello there, room'), /503/);
   });
 });

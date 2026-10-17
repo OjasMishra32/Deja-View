@@ -24,7 +24,17 @@ async function timed(fn) { const started = performance.now(); const value = awai
 // Thinking stays low: it counts against maxOutputTokens, and at the default level it ran past the cap (cut-off JSON)
 // and took about 27 s for labels that take under 3 s this way.
 // timeoutMs bounds one call (retries included), so a busy model can hand over to another in time.
+// A busy (503) or used-up (429) understanding model hands the same request to the other one, so the room keeps talking.
+const busy = (error) => /\b(429|503)\b|RESOURCE_EXHAUSTED|UNAVAILABLE|quota|high demand/i.test(String(error?.message));
 async function generateJson(model, systemInstruction, parts, mediaResolution = 'MEDIA_RESOLUTION_LOW', responseSchema = undefined, timeoutMs = undefined) {
+  try { return await generateJsonOnce(model, systemInstruction, parts, mediaResolution, responseSchema, timeoutMs); }
+  catch (error) {
+    const other = model === models.fast ? models.spatial : models.fast;
+    if (!busy(error) || other === model) throw error;
+    return generateJsonOnce(other, systemInstruction, parts, mediaResolution, responseSchema, timeoutMs);
+  }
+}
+async function generateJsonOnce(model, systemInstruction, parts, mediaResolution, responseSchema, timeoutMs) {
   const response = await (await client()).models.generateContent({ model, contents: [{ role: 'user', parts }], config: { systemInstruction, responseMimeType: 'application/json', ...(responseSchema ? { responseSchema } : {}), temperature: 0.3, mediaResolution, maxOutputTokens: 1200, thinkingConfig: { thinkingLevel: 'low' }, ...(timeoutMs ? { abortSignal: AbortSignal.timeout(timeoutMs) } : {}) } });
   return parseJson(response.text);
 }
@@ -44,15 +54,31 @@ function wavDataUrl(raw, mimeType = '') {
   return { speech: `data:audio/wav;base64,${Buffer.concat([header, source]).toString('base64')}`, speechSeconds: Number((source.length / (rate * channels * 2)).toFixed(1)) };
 }
 
+// MODEL_TTS may name several speech models, comma separated. Each has its own daily quota on a free key, so when one
+// is used up (429) the next one speaks and the used-up one rests for an hour; any other failure just moves on.
+const ttsResting = new Map();
+export const TTS_REST_MS = 60 * 60 * 1000;
+export function ttsModels() { return String(process.env.MODEL_TTS || models.tts).split(',').map((m) => m.trim()).filter(Boolean); }
+export function resetTtsRest() { ttsResting.clear(); }
 export async function speak(text) {
   if (!text || isMock()) return { speech: null, speechSeconds: 0 };
   if (speechCache.has(text)) return speechCache.get(text);
-  const response = await (await client()).models.generateContent({ model: models.tts, contents: [{ role: 'user', parts: [{ text }] }], config: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } } });
-  const audio = response.candidates?.[0]?.content?.parts?.find((part) => part.inlineData)?.inlineData;
-  if (!audio?.data) throw new Error('Gemini returned no audio');
-  const output = wavDataUrl(audio.data, audio.mimeType);
-  speechCache.set(text, output);
-  return output;
+  let lastError = null;
+  for (const model of ttsModels()) {
+    if ((ttsResting.get(model) ?? 0) > Date.now()) continue;
+    try {
+      const response = await (await client()).models.generateContent({ model, contents: [{ role: 'user', parts: [{ text }] }], config: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } } });
+      const audio = response.candidates?.[0]?.content?.parts?.find((part) => part.inlineData)?.inlineData;
+      if (!audio?.data) throw new Error('Gemini returned no audio');
+      const output = wavDataUrl(audio.data, audio.mimeType);
+      speechCache.set(text, output);
+      return output;
+    } catch (error) {
+      lastError = error;
+      if (/\b429\b|RESOURCE_EXHAUSTED|quota/i.test(String(error?.message))) ttsResting.set(model, Date.now() + TTS_REST_MS);
+    }
+  }
+  throw lastError || new Error('every speech model is resting after its quota ran out');
 }
 
 export async function describe(image, { frames = [], scene = {} } = {}) {
