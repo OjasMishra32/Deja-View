@@ -1,4 +1,4 @@
-# Third-party code and models
+# Open-source models and tools we depend on
 
 The open-source models, libraries and tools Déjà View depends on, credited as the SwampHacks rules
 require. The full reasoning is in `docs/object-layer.md`.
