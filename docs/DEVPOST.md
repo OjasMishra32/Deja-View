@@ -160,7 +160,9 @@ something the camera saw is marked as imagined.
 of the viewer and the guide, and a WebXR emulator for the headset code paths. We also built mock versions of the
 guide and DeepSpace services so every hop could be tested before the real ones existed.
 
-**AI tools used: [team to fill in]**
+**AI tools used:** Claude Code (Anthropic) for engineering help while we built it: code, tests and docs. Inside the
+product, Google Gemini writes the captions and labels and answers spoken questions, and the generative models listed
+in our credits fill in what the camera never saw.
 
 ## Challenges we ran into
 
