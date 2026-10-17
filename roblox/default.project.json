@@ -16,6 +16,9 @@
         "Brightness": 2
       }
     },
+    "StarterGui": {
+      "$properties": { "ScreenOrientation": "LandscapeSensor" }
+    },
     "StarterPlayer": {
       "$properties": {
         "DevCameraOcclusionMode": "Invisicam",

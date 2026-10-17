@@ -25,13 +25,21 @@ function Ui.build()
 		DisplayOrder = 10,
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling, Parent = player:WaitForChild("PlayerGui"),
 	})
-	local ui: { [string]: any } = { gui = gui }
+	-- HUD stays clear of notches, rounded corners and Android camera cutouts.
+	gui.ScreenInsets = Enum.ScreenInsets.DeviceSafeInsets
+	-- Full-screen cards (loading, winner) cover the whole display, notch included.
+	local full = make("ScreenGui", {
+		Name = "DejaViewFull", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 11,
+		ScreenInsets = Enum.ScreenInsets.None, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		Parent = player:WaitForChild("PlayerGui"),
+	})
+	local ui: { [string]: any } = { gui = gui, full = full }
 	-- UIScales on the pixel-sized pieces only (full-screen cards stay full-screen); Ui.setScale drives them.
 	ui.scales = {}
 
 	-- Loading screen
 	local loading = make("Frame", { Name = "Loading", Size = UDim2.fromScale(1, 1), BackgroundColor3 = Theme.Bg,
-		ZIndex = 50, Parent = gui })
+		ZIndex = 50, Parent = full })
 	ui.loading = loading
 	local col = make("Frame", { BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(0.8, 0.6), ZIndex = 51, Parent = loading },
@@ -80,7 +88,9 @@ function Ui.build()
 		Position = UDim2.new(0, 16, 0, 184), Size = UDim2.new(0, 170, 0, 300), Visible = false, Parent = gui },
 		{ Theme.corner(14), Theme.stroke(), make("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10),
 			PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10) }),
-		  make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }) })
+		  make("UIListLayout", { Name = "List", Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }) })
+	ui.hostGrid = make("UIGridLayout", { Name = "Grid", CellSize = UDim2.new(0.485, 0, 0, 34),
+		CellPadding = UDim2.new(0.03, 0, 0, 6), SortOrder = Enum.SortOrder.LayoutOrder })
 	ui.host = host
 	label({ Text = "HOST", TextColor3 = Theme.Muted, FontFace = Theme.Heading, Size = UDim2.new(1, 0, 0, 16), MaxText = 14,
 		LayoutOrder = 0, Parent = host })
@@ -106,11 +116,11 @@ function Ui.build()
 		TextXAlignment = Enum.TextXAlignment.Center, FontFace = Theme.Heading, Visible = false, ZIndex = 40, Parent = gui })
 	Theme.corner(12).Parent = ui.banner
 
-	-- Toasts (right, middle)
-	ui.toasts = make("Frame", { BackgroundTransparency = 1, AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -16, 0.55, 0), Size = UDim2.new(0.3, 0, 0.3, 0), Parent = gui },
-		{ make("UIListLayout", { Padding = UDim.new(0, 6), VerticalAlignment = Enum.VerticalAlignment.Bottom,
-			HorizontalAlignment = Enum.HorizontalAlignment.Right, SortOrder = Enum.SortOrder.LayoutOrder }) })
+	-- Toasts (top centre, under the banner; the lower corners belong to the thumbstick and jump button)
+	ui.toasts = make("Frame", { BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 112), Size = UDim2.new(0.5, 0, 0, 140), Parent = gui },
+		{ make("UIListLayout", { Padding = UDim.new(0, 6), VerticalAlignment = Enum.VerticalAlignment.Top,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder }) })
 
 	-- Scoreboard (top-right)
 	local score = make("Frame", { Name = "Scoreboard", BackgroundColor3 = Theme.Bg, BackgroundTransparency = 0.05,
@@ -138,7 +148,7 @@ function Ui.build()
 
 	-- Winner card
 	local winner = make("Frame", { Name = "Winner", Size = UDim2.fromScale(1, 1), BackgroundColor3 = Theme.Bg,
-		BackgroundTransparency = 0.05, Visible = false, ZIndex = 45, Parent = gui })
+		BackgroundTransparency = 0.05, Visible = false, ZIndex = 45, Parent = full })
 	ui.winner = winner
 	ui.winTitle = label({ Text = "", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.42),
 		Size = UDim2.fromScale(0.85, 0.2), FontFace = Theme.Heading, TextXAlignment = Enum.TextXAlignment.Center,
@@ -170,6 +180,25 @@ function Ui.build()
 		table.insert(ui.scales, make("UIScale", { Scale = 1, Parent = piece }))
 	end
 	return ui
+end
+
+-- Small screens: the host panel becomes a short 2-column grid so it fits above the thumbstick.
+function Ui.setCompact(ui, compact: boolean)
+	local list = ui.host:FindFirstChild("List")
+	if compact then
+		ui.host.Size = UDim2.new(0, 340, 0, 156)
+		if list then
+			list.Parent = nil
+			ui.hostList = list
+		end
+		ui.hostGrid.Parent = ui.host
+	else
+		ui.host.Size = UDim2.new(0, 170, 0, 300)
+		ui.hostGrid.Parent = nil
+		if ui.hostList then
+			ui.hostList.Parent = ui.host
+		end
+	end
 end
 
 function Ui.setScale(ui, scale: number)

@@ -278,7 +278,11 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then
 		return
 	end
-	if input.KeyCode == Enum.KeyCode.R then
+	if input.KeyCode == Enum.KeyCode.ButtonX and isHost() then
+		hostOpen = not hostOpen
+		refresh()
+	end
+	if input.KeyCode == Enum.KeyCode.R or input.KeyCode == Enum.KeyCode.ButtonY then
 		ui.panel.Visible = not ui.panel.Visible
 		renderCards()
 	end
@@ -342,7 +346,9 @@ end)
 local function layoutForScreen()
 	local size = workspace.CurrentCamera.ViewportSize
 	-- 1 on a laptop, down to 0.6 on a phone in landscape.
-	local scale = math.clamp(math.min(size.X / 1100, size.Y / 620), 0.6, 1)
+	-- Laptops 1, tablets ~0.9, phones 0.75 (keeps tap targets around 33 pt or more).
+	local scale = math.clamp(math.min(size.X / 1100, size.Y / 620), 0.75, 1)
+	Ui.setCompact(ui, size.Y < 560)
 	Ui.setScale(ui, scale)
 	ui.host.Position = UDim2.new(0, 16, 0, 64 + 120 * scale) -- right under the (scaled) HUD row
 	local small = size.X < 900
