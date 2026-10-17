@@ -141,7 +141,10 @@ def decode_linear(clip: Path, size: tuple[int, int], keep: set[int], gain: float
 
     src = hdr_source(clip)
     if src is None:
-        raise SystemExit(f"{clip.name} is not HDR; this step expects the iPhone HLG signal")
+        # an SDR clip: undo its gamma 2.4 so encode_sdr() gives the same pixels back (gain 1)
+        for i, rgb in decode_frames(clip, size, keep=keep, tonemap=False):
+            yield i, (np.power(rgb.astype(np.float32) / 255.0, hdr.SDR_GAMMA) * gain).astype(np.float32)
+        return
     for i, sig in decode_frames(clip, size, keep=keep, hdr_signal=True):
         lin = hdr_linear(sig, src.transfer, src.primaries) * gain
         r, g, b = hdr._rolloff(lin[..., 0], lin[..., 1], lin[..., 2])
@@ -182,6 +185,8 @@ def cmd_frames(a) -> None:
         raise SystemExit(f"the clip is {info.width}x{info.height} but its solved camera is {W}x{H}")
     src = hdr_source(a.clip)
     gain = a.gain
+    if gain is None and src is None:
+        gain = 1.0  # an SDR clip: its frames are already exposed for display
     if gain is None:
         probe_idx = {j for _, j, _ in picks[:: max(1, len(picks) // 12)]}
         gain = exposure_gain([s for _, s in decode_frames(a.clip, (W, H), keep=probe_idx, hdr_signal=True)], src.transfer, src.primaries)
@@ -222,7 +227,7 @@ def cmd_frames(a) -> None:
         "distortion": cam.distortion(),
         "analysisDiv": ANALYSIS_DIV,
         "exposureGain": gain,
-        "hdr": {"transfer": src.transfer, "primaries": src.primaries},
+        "hdr": {"transfer": src.transfer, "primaries": src.primaries} if src else None,
         "keyframes": keys,
         "note": "intrinsics are of the undistorted (pinhole) frames in continuous pixel coordinates (pixel centres at "
                 "i + 0.5); position/quaternion: the stage-1 track at the source frame (viewer frame, OpenGL camera)",
