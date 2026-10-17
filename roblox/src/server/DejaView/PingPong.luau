@@ -11,6 +11,7 @@ local Stats = require(script.Parent.Stats)
 local Rooms = require(script.Parent.Rooms)
 local Pong = require(script.Parent.Pong)
 local Sim = require(ReplicatedStorage.Shared.PingPongSim)
+local Debris = game:GetService("Debris")
 
 local PingPong = {}
 
@@ -277,7 +278,30 @@ local function placeForScene(host: Player?, features: any?, cameraLook: Vector3?
 	buildTable(CFrame.new(centre2) * CFrame.Angles(0, math.atan2(look.X, look.Z), 0), Sim.LEN, Sim.WID, true)
 end
 
+-- The sounds of a rally, from Roblox's own built-in click at three pitches: a sharp tock on the table, a deeper
+-- pock off the paddle, a dull tap on the net. They play at the ball, so they come from where it is.
+local SOUNDS = {
+	table = { speed = 1.7, volume = 0.7 },
+	paddle = { speed = 1.15, volume = 0.9 },
+	net = { speed = 0.75, volume = 0.45 },
+}
+local function tock(kind: string)
+	local c = SOUNDS[kind]
+	if not c or not ball then
+		return
+	end
+	local snd = Instance.new("Sound")
+	snd.SoundId = "rbxasset://sounds/clickfast.wav"
+	snd.Volume = c.volume
+	snd.PlaybackSpeed = c.speed * (0.94 + math.random() * 0.12)
+	snd.RollOffMaxDistance = 60
+	snd.Parent = ball
+	snd:Play()
+	Debris:AddItem(snd, 1)
+end
+
 local function launch(to: string, p0: Vector3, flight: number, aim: number)
+	tock("paddle")
 	state.to = to
 	state.p = p0
 	state.t = now()
@@ -292,7 +316,7 @@ local function launch(to: string, p0: Vector3, flight: number, aim: number)
 	lastBounce = nil
 	-- aim at the receiver's half, never back at the hitter
 	local v = Sim.assistReturn(p0, to, aim, flight, len, wid)
-	state.v = v
+	state.v, state.w = v, Vector3.zero
 	ball.CFrame = frame * CFrame.new(state.p)
 	broadcastState()
 	updateBoard()
@@ -300,6 +324,7 @@ end
 
 -- A player's own shot (camera aim or paddle swing): the ball flies at the other side, which starts with no bounces.
 local function struck(side: string, v: Vector3)
+	tock("paddle")
 	state.to = other(side)
 	state.v = v
 	state.lastTouch = state.t
@@ -328,7 +353,7 @@ local function serve(wait: boolean)
 	state = state or { rally = 0, best = 0, shot = 0 }
 	state.rally = 0
 	local p = Sim.servePos(serverSide, len)
-	state.p, state.v, state.t = p, Vector3.zero, now()
+	state.p, state.v, state.w, state.t = p, Vector3.zero, Vector3.zero, now()
 	state.live, state.lastTouch, state.bounces = true, now(), 0
 	state.receiverBounces = 0
 	state.serveInFlight = false
@@ -455,6 +480,7 @@ local function step(dt: number)
 	local ev = Sim.step(state, dt, len, wid)
 	ball.CFrame = frame * CFrame.new(state.p)
 	if ev.table then
+		tock("table")
 		state.serveInFlight = false
 		state.lastTouch = state.t
 		local hitter = other(state.to)
@@ -473,6 +499,7 @@ local function step(dt: number)
 		botReturn()
 	end
 	if ev.net then
+		tock("net")
 		if state.serveInFlight then
 			state.serveInFlight = false
 			World.toast("Let, serve again")
@@ -531,6 +558,7 @@ local function onHit(player: Player, payload: any)
 	if aimed and payload.vr ~= true then
 		-- hold to charge, aim with the camera: reach and pace grow with the hold, and a late aim sails out
 		v = Sim.aimedVelocity(p0, frame:VectorToObjectSpace((dir :: Vector3).Unit), charge, len)
+		state.w = Vector3.zero -- an aimed shot flies flat, so it lands where it was aimed
 	elseif payload.vr == true and typeof(payload.cf) == "CFrame" and typeof(payload.vel) == "Vector3" then
 		-- the paddle really hit it: reflect off the blade and let the ball fly
 		local blade = payload.cf :: CFrame

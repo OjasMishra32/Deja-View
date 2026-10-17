@@ -21,6 +21,14 @@ Sim.DEAD_AFTER = 1.5
 Sim.SUBSTEPS = 4
 Sim.WIN_SCORE = 11
 Sim.SKIT_SCORE = 7
+-- Spin, as in a real rally: the rubber grips the ball and a brushing stroke spins it; spin curves its flight (Magnus:
+-- topspin dips, backspin floats, sidespin curls) and kicks it off the table (topspin jumps forward, backspin checks).
+Sim.REAL_R = 0.071 -- the real ball's radius in studs (20 mm); spin and grip use it, collisions use BALL_R
+Sim.MAGNUS = 0.0012 -- acceleration per (rad/s x stud/s)
+Sim.SPIN_DECAY = 0.25 -- per second in the air
+Sim.GRIP = 0.45 -- share of the brushing slip the rubber turns into spin
+Sim.MAX_SPIN = 900 -- rad/s, about 140 turns a second
+Sim.BOUNCE_KICK = 0.4 -- a hollow ball's share of contact slip removed on the table
 
 local function fin(v: number): boolean
 	return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge
@@ -85,9 +93,14 @@ function Sim.step(st: any, dt: number, len: number, wid: number): any
 		return ev
 	end
 	local p, v = st.p, st.v
+	local w: Vector3 = st.w or Vector3.zero
 	local p0 = p
 	v = v + Vector3.new(0, -Sim.GRAVITY * dt, 0)
 	v = v - v * (Sim.DRAG * v.Magnitude * dt)
+	if w.Magnitude > 1e-3 then
+		v = v + w:Cross(v) * (Sim.MAGNUS * dt)
+		w = w * math.max(0, 1 - Sim.SPIN_DECAY * dt)
+	end
 	p = p + v * dt
 
 	-- Table top: the ball's bottom crosses y = 0 while moving down, inside the top rectangle.
@@ -98,6 +111,12 @@ function Sim.step(st: any, dt: number, len: number, wid: number): any
 		if Sim.overTable(hit, len, wid) then
 			p = Vector3.new(hit.X, Sim.TOP_Y + Sim.BALL_R, hit.Z)
 			v = Vector3.new(v.X * 0.95, -v.Y * Sim.REST_TABLE, v.Z * 0.95)
+			if w.Magnitude > 1e-3 then
+				-- the spinning contact point slips on the table: friction kicks the ball and eats some of the spin
+				local slip = w:Cross(Vector3.new(0, -Sim.REAL_R, 0))
+				v = v - Vector3.new(slip.X, 0, slip.Z) * Sim.BOUNCE_KICK
+				w = w * 0.55
+			end
 			st.bounces += 1
 			-- one physical contact can be detected for several frames while the ball skims the surface; report it once
 			if st.t - (st.lastBounceAt or -1) > 0.12 then
@@ -128,21 +147,29 @@ function Sim.step(st: any, dt: number, len: number, wid: number): any
 		ev.dead = true
 	end
 
-	st.p, st.v, st.t = p, v, st.t + dt
+	st.p, st.v, st.w, st.t = p, v, w, st.t + dt
 	return ev
 end
 
--- Reflect the ball off a paddle. `n` is the blade normal, `pv` the paddle velocity.
--- Solved in the paddle's frame, then the paddle's velocity is added back so a swing carries into the ball.
+-- Reflect the ball off a paddle. `n` is the blade normal (either face: the one toward the ball is used), `pv` the
+-- paddle velocity. Solved in the paddle's frame, then the paddle's velocity is added back so a swing carries into the
+-- ball. The rubber grips: part of the sideways slip becomes spin (brush up for topspin, under for backspin).
 function Sim.paddleHit(st: any, n: Vector3, pv: Vector3, restitution: number?)
 	local rel = st.v - pv
+	if rel:Dot(n) > 0 then
+		n = -n -- the other face of the blade meets the ball
+	end
 	local vn = rel:Dot(n)
 	if vn < 0 then
 		local relN = n * vn
 		local relT = rel - relN
-		-- bounce off the face; keep most of the sideways slip, so only a little of the paddle's sideways movement
-		-- goes into the ball
-		st.v = pv + relT * 0.85 - relN * (restitution or 0.8)
+		local w: Vector3 = (st.w or Vector3.zero) * 0.3 + n:Cross(relT) * (Sim.GRIP / Sim.REAL_R)
+		if w.Magnitude > Sim.MAX_SPIN then
+			w = w.Unit * Sim.MAX_SPIN
+		end
+		st.w = w
+		-- bounce off the face; what the rubber does not turn into spin stays as sideways speed
+		st.v = pv + relT * (0.85 - Sim.GRIP * 0.5) - relN * (restitution or 0.8)
 		if st.v.Magnitude > Sim.MAX_SPEED then
 			st.v = st.v.Unit * Sim.MAX_SPEED
 		end

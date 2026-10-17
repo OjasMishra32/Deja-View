@@ -134,6 +134,31 @@ check(
 local fast = Sim.aimedVelocity(p0, dir, 1, LEN)
 check("speed is capped", fast.Magnitude <= Sim.MAX_SPEED + 0.01, `speed={fast.Magnitude}`)
 
+-- 9. spin: topspin dips the ball shorter than the same flat shot; backspin floats it longer
+local function firstBounceZ(w: Vector3): number
+	local st = Sim.newState(Vector3.new(0, 1.2, -LEN / 2), Vector3.new(0, 8, 14), 0)
+	st.w = w
+	for _ = 1, 240 * 3 do
+		local ev = Sim.step(st, 1 / 240, LEN, WID)
+		if ev.table then
+			return st.p.Z
+		end
+	end
+	return math.huge
+end
+local flatZ = firstBounceZ(Vector3.zero)
+local topZ = firstBounceZ(Vector3.new(400, 0, 0)) -- forward roll for a ball moving along +Z
+local backZ = firstBounceZ(Vector3.new(-400, 0, 0))
+check("topspin dips shorter, backspin floats longer", topZ < flatZ and backZ > flatZ, `top={topZ} flat={flatZ} back={backZ}`)
+
+-- 10. a brushing stroke spins the ball, and either face of the blade returns it
+local brush = Sim.newState(Vector3.new(0, 1, 2), Vector3.new(0, -2, -20), 0)
+Sim.paddleHit(brush, Vector3.new(0, 0, 1), Vector3.new(0, 12, 6))
+check("brushing up the ball makes topspin toward the far end", brush.v.Z > 0 and brush.w.X > 50, `v={brush.v} w={brush.w}`)
+local backhand = Sim.newState(Vector3.new(0, 1, 2), Vector3.new(0, -2, -20), 0)
+Sim.paddleHit(backhand, Vector3.new(0, 0, -1), Vector3.new(0, 0, 4))
+check("the other face of the blade returns the ball too", backhand.v.Z > 0, `v={backhand.v}`)
+
 print(("\n%s  (%d failure(s))"):format(if failures == 0 then "ALL PASS" else "FAILURES", failures))
 if failures > 0 then
 	error("ping pong sim failures: " .. failures)
