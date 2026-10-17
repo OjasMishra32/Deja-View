@@ -9,6 +9,7 @@ local Backend = require(script.Parent.Backend)
 local World = require(script.Parent.World)
 local Theme = require(ReplicatedStorage.Shared.Theme)
 local R = require(ReplicatedStorage.Shared.ChessRules)
+local Stats = require(script.Parent.Stats)
 
 local Chess = {}
 
@@ -180,6 +181,10 @@ local function finish(status: string)
 		elseif winnerColour then (if winnerColour == "w" then "White" else "Black")
 		else "draw"
 	local score = if winnerColour == "w" then "1-0" elseif winnerColour == "b" then "0-1" else "1/2-1/2"
+	if winnerPlayer then
+		Stats.win(winnerPlayer, "chess")
+		Stats.badge(winnerPlayer, "checkmate")
+	end
 	World.Moment:FireAllClients({
 		type = "winner",
 		title = if winnerColour then "CHECKMATE" else "STALEMATE",
@@ -270,7 +275,21 @@ function Chess.remove()
 end
 
 -- Builds a fresh game. centre: board centre at floor height; yaw: direction white looks (0 faces -Z).
+local lastPlace: any = nil
+
+-- Rematch: the same game again in the same spot (Update 6 item 1).
+function Chess.isActive(): boolean
+	return lastPlace ~= nil and workspace:FindFirstChild("Room") ~= nil and workspace.Room:FindFirstChild("Chess") ~= nil
+end
+
+function Chess.rematch()
+	if lastPlace then
+		Chess.place(table.unpack(lastPlace, 1, lastPlace.n))
+	end
+end
+
 function Chess.place(centre: Vector3, yaw: number, size: number?)
+	lastPlace = table.pack(centre, yaw, size)
 	Chess.remove()
 	local room = workspace:FindFirstChild("Room")
 	if not room then

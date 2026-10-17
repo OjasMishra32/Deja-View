@@ -29,7 +29,9 @@ local Config = {
 	FALL_Y = -30,
 
 	-- Scene the server builds on boot if it is ready (falls back to the newest ready room).
-	DEFAULT_SCENE = "fortnite-tilted-night", -- Update 4: the test world to join until the real four arrive
+	DEFAULT_SCENE = "the-courts", -- Update 8: the court is the best demo moment; boot there
+	-- Rooms always listed first on the picker, in this order (Update 8: "the-courts loads first in your picker").
+	PINNED_SCENES = { "the-courts" } :: { string },
 	-- Auto-join on boot. Set false for the skit (everyone waits in the lobby until JOIN).
 	AUTO_JOIN_DEFAULT = true,
 	-- Hand-tuned chess boards per scene until /model sends features.chessBoard (Update 5):

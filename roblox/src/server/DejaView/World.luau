@@ -69,10 +69,15 @@ function World.toLobby(player: Player)
 	end
 end
 
+World.onEnterRoom = nil :: ((Player) -> ())?
+
 -- Moves players into the built room around spawn.
 function World.toRoom(list: { Player })
 	for i, player in list do
 		player:SetAttribute("Where", "room")
+		if World.onEnterRoom then
+			task.spawn(World.onEnterRoom :: any, player)
+		end
 		local character = player.Character
 		if character and MapBuilder.current then
 			MapBuilder.place(character, i)

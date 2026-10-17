@@ -12,6 +12,7 @@ local Extras = require(DV.Extras)
 local Chess = require(DV.Chess)
 local Pong = require(DV.Pong)
 local Foosball = require(DV.Foosball)
+local Stats = require(DV.Stats)
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local Vote = Remotes:WaitForChild("Vote") :: RemoteEvent
@@ -87,16 +88,28 @@ local actions: { [string]: (Player, any) -> () } = {
 		Extras.endHunt(nil)
 	end,
 	pingpong = function(p, cameraLook)
+		if Pong.isActive() then
+			Pong.rematch() -- pressed again while it's up: a rematch in the same spot
+			return
+		end
 		local sceneId = workspace:GetAttribute("SceneId")
 		local info = type(sceneId) == "string" and Rooms.modelInfo(sceneId) or nil
 		Pong.placeForRoom(p, info and info.features or nil, if typeof(cameraLook) == "Vector3" then cameraLook else nil)
 	end,
 	foosball = function(p, cameraLook)
+		if Foosball.isActive() then
+			Foosball.rematch() -- pressed again while it's up: a rematch in the same spot
+			return
+		end
 		local sceneId = workspace:GetAttribute("SceneId")
 		local info = type(sceneId) == "string" and Rooms.modelInfo(sceneId) or nil
 		Foosball.placeForRoom(p, info and info.features or nil, if typeof(cameraLook) == "Vector3" then cameraLook else nil)
 	end,
 	chess = function(p, cameraLook)
+		if Chess.isActive() then
+			Chess.rematch() -- pressed again while it's up: a rematch in the same spot
+			return
+		end
 		local sceneId = workspace:GetAttribute("SceneId")
 		local info = type(sceneId) == "string" and Rooms.modelInfo(sceneId) or nil
 		Chess.placeForRoom(p, info and info.features or nil, if typeof(cameraLook) == "Vector3" then cameraLook else nil)
@@ -138,6 +151,10 @@ HostAction.OnServerEvent:Connect(function(player, action, value)
 	end
 end)
 
+Stats.start()
+World.onEnterRoom = function(p)
+	Stats.badge(p, "memory")
+end
 TagGame.start10Hz()
 Extras.start()
 Chess.start()

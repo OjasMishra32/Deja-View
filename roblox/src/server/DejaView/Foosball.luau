@@ -9,6 +9,7 @@ local Config = require(script.Parent.Config)
 local Backend = require(script.Parent.Backend)
 local World = require(script.Parent.World)
 local Theme = require(ReplicatedStorage.Shared.Theme)
+local Stats = require(script.Parent.Stats)
 
 local FoosInput = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("FoosInput") :: RemoteEvent
 
@@ -100,6 +101,10 @@ local function goal(scorer: string)
 		local final = string.format("%d-%d", score.A, score.B)
 		World.Moment:FireAllClients({ type = "winner", title = string.upper(nameOf(scorer)) .. " WINS FOOSBALL", mvp = final })
 		local sceneId = workspace:GetAttribute("SceneId")
+		Stats.win(teams[scorer], "foosball")
+		if sceneId == "the-courts" then
+			Stats.badge(teams[scorer], "court")
+		end
 		if type(sceneId) == "string" then
 			Backend.sendEvent(sceneId, { type = "game", game = "foosball", winner = nameOf(scorer), score = final })
 		end
@@ -225,7 +230,21 @@ function Foosball.remove()
 end
 
 -- centre: table top centre; yaw: long axis direction (team A at the back). visible=false: the real table is the world's.
+local lastPlace: any = nil
+
+-- Rematch: the same game again in the same spot (Update 6 item 1).
+function Foosball.isActive(): boolean
+	return lastPlace ~= nil and workspace:FindFirstChild("Room") ~= nil and workspace.Room:FindFirstChild("Foosball") ~= nil
+end
+
+function Foosball.rematch()
+	if lastPlace then
+		Foosball.place(table.unpack(lastPlace, 1, lastPlace.n))
+	end
+end
+
 function Foosball.place(centre: Vector3, yaw: number, length: number?, width: number?, visible: boolean?)
+	lastPlace = table.pack(centre, yaw, length, width, visible)
 	Foosball.remove()
 	local room = workspace:FindFirstChild("Room")
 	if not room then
