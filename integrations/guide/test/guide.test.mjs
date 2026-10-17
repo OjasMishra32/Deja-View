@@ -122,6 +122,7 @@ describe('world hints', () => {
       kitchen: ['the fridge', 'the two stoves', 'the sink', 'the steel prep table', 'the bar tables', 'the plant'],
       'tilted-towers': ['the clock tower', 'the shops'],
       'brick-apartment': ['the kitchen', 'the windows', 'the door', 'the bed'],
+      'old-house-kitchen': ['the granite island', 'the cherry cabinets', 'the steel fridge', 'the range and microwave', 'the sliding door', 'the sink window'],
     });
     assert.deepEqual(MEMORY_PLACES, { 'courts-foosball': 'the-courts', 'chess-match': 'chess-room', 'kitchen-cooking': 'kitchen' });
     assert.equal(worldHints({ id: 'kitchen-cooking' }), worldHints({ id: 'kitchen' }));

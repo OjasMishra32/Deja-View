@@ -18,10 +18,14 @@ function dataUrlPart(value, name) {
   if (!match) throw new Error(`${name} must be a base64 data URL`);
   return { inlineData: { mimeType: match[1], data: match[2].replace(/\s/g, '') } };
 }
+const HOTSPOTS_SCHEMA = { type: 'object', properties: { hotspots: { type: 'array', items: { type: 'object', properties: { label: { type: 'string' }, box_2d: { type: 'array', items: { type: 'integer' } }, blurb: { type: 'string' } }, required: ['label', 'box_2d', 'blurb'] } } }, required: ['hotspots'] };
 export function parseJson(text) { return JSON.parse(String(text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')); }
 async function timed(fn) { const started = performance.now(); const value = await fn(); return { value, ms: Math.round(performance.now() - started) }; }
-async function generateJson(model, systemInstruction, parts, mediaResolution = 'MEDIA_RESOLUTION_LOW') {
-  const response = await (await client()).models.generateContent({ model, contents: [{ role: 'user', parts }], config: { systemInstruction, responseMimeType: 'application/json', temperature: 0.3, mediaResolution, maxOutputTokens: 600 } });
+// Thinking stays low: it counts against maxOutputTokens, and at the default level it ran past the cap (cut-off JSON)
+// and took about 27 s for labels that take under 3 s this way.
+// timeoutMs bounds one call (retries included), so a busy model can hand over to another in time.
+async function generateJson(model, systemInstruction, parts, mediaResolution = 'MEDIA_RESOLUTION_LOW', responseSchema = undefined, timeoutMs = undefined) {
+  const response = await (await client()).models.generateContent({ model, contents: [{ role: 'user', parts }], config: { systemInstruction, responseMimeType: 'application/json', ...(responseSchema ? { responseSchema } : {}), temperature: 0.3, mediaResolution, maxOutputTokens: 1200, thinkingConfig: { thinkingLevel: 'low' }, ...(timeoutMs ? { abortSignal: AbortSignal.timeout(timeoutMs) } : {}) } });
   return parseJson(response.text);
 }
 function wavDataUrl(raw, mimeType = '') {
@@ -76,7 +80,7 @@ export async function hotspots(image, scene = {}) {
   try {
     const hints = worldHints(scene);
     const context = `Scene: ${scene.name || 'unnamed'}; mode: ${scene.mode === 'video' ? 'video' : 'photo'}; caption: ${scene.caption || 'none'}. Find room hotspots.${hints ? ` ${hints}` : ''}`;
-    const result = await timed(() => generateJson(models.spatial, HOTSPOTS_SYSTEM, [{ text: context }, dataUrlPart(image, 'image')]));
+    const result = await timed(() => generateJson(models.spatial, HOTSPOTS_SYSTEM, [{ text: context }, dataUrlPart(image, 'image')], 'MEDIA_RESOLUTION_LOW', HOTSPOTS_SCHEMA, 8000).catch(() => generateJson(models.fast, HOTSPOTS_SYSTEM, [{ text: context }, dataUrlPart(image, 'image')], 'MEDIA_RESOLUTION_LOW', HOTSPOTS_SCHEMA)));
     lastFailure = false;
     return { hotspots: (result.value.hotspots || []).slice(0, 6).map((item) => ({ label: String(item.label || '').toLowerCase().trim().split(/\s+/).slice(0, 3).join(' '), x: Number((((item.box_2d?.[1] ?? 500) + (item.box_2d?.[3] ?? 500)) / 2000).toFixed(4)), y: Number((((item.box_2d?.[0] ?? 500) + (item.box_2d?.[2] ?? 500)) / 2000).toFixed(4)), blurb: String(item.blurb || '').trim().split(/\s+/).slice(0, 5).join(' '), box: item.box_2d || [] })).filter((item) => item.label), degraded: false, ms: { understand: result.ms } };
   } catch (error) { lastFailure = true; return { hotspots: [], degraded: true, error: error.message, ms: { understand: 0 } }; }
