@@ -3,7 +3,8 @@
 just the part where the people are (the chess match is 21 s of a 196 s walk round the room).
 
 The cut is frame-exact: frames [first, first + count) of the source (decode order, the track's frameIndex), the
-audio from that frame's presentation time for the same length, re-encoded so the new clip starts on that frame.
+audio from that frame's presentation time for the same length, re-encoded so the new clip starts on that frame, at
+the size the camera was solved at (the poses' video width and height), since people.py checks the two match.
 The poses file is sliced to match: frameIndex and time restart at 0, everything else (frame, intrinsics, positions)
 is kept, so pipeline/recon/people.py and pipeline/avatar treat the cut like any other clip of that room.
 
@@ -40,7 +41,8 @@ def main() -> int:
     fps = (f1 - 1 - f0) / (t1 - t0) if f1 - 1 > f0 else float(poses["video"]["fps"])
     dur = a.count / fps
 
-    vf = f"trim=start_frame={f0}:end_frame={f1},setpts=PTS-STARTPTS"
+    vw, vh = int(poses["video"]["width"]), int(poses["video"]["height"])
+    vf = f"trim=start_frame={f0}:end_frame={f1},setpts=PTS-STARTPTS,scale={vw}:{vh}:flags=lanczos"
     af = f"atrim=start={t0:.6f}:duration={dur:.6f},asetpts=PTS-STARTPTS"
     cmd = [a.ffmpeg, "-y", "-v", "error", "-i", str(a.clip), "-vf", vf, "-af", af, "-map", "0:v:0", "-map", "0:a:0?",
            "-fps_mode", "passthrough", "-c:v", "libx264", "-crf", str(a.crf), "-preset", "medium", "-pix_fmt", "yuv420p",
