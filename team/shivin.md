@@ -8,6 +8,22 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 6 (Sat ~3:55 AM): ping pong and the first chess are merged. Your queue after foosball (Update 5 item 2),
+> in order, so you never wait on anyone:**
+> 1. **Finish the games:** chess checkmate/stalemate/promotion edge cases; ping pong and foosball scores sent as
+>    `POST /event {type:"game", ...}` (Update 5 item 5); a rematch button.
+> 2. **Hall of fame:** a lobby board with wins per player across sessions (DataStore), per game, top 5.
+> 3. **Badges** (Roblox badges or in-game): "Walked into a memory", "Tagged the judge", "Checkmate at the chess room",
+>    "21 at the court".
+> 4. **Sound per world:** quiet ambient loops from the Creator Store (night crickets at the court, lounge hum in the chess
+>    room, wind in Tilted), plus hit/goal/check sounds; credit them for the Devpost.
+> 5. **First-join card:** a 10-second controls card for phone, keyboard and Quest, shown once.
+> 6. **Replay (when Ojasva says Tiger Data is live):** after a round, a Replay button plays everyone's paths as ghost
+>    trails from `GET BASE/api/replay/<id>?from=<ms>&to=<ms>` (per person: `t[]`, `x[]`, `y[]`, `z[]`, `yaw[]` in room
+>    metres, times in ms after `from`).
+> 7. **Trailer:** a 30-second capture of the best Roblox moments (joining from a phone, a tag, a checkmate, ping pong)
+>    for the Devpost video.
+
 > **Update 5 (Sat ~3:30 AM): items 1-4, 6 and 7 are merged, great work. Next: make the real places real games.**
 >
 > The worlds are rebuilt from our own footage, so the actual objects are there. Turn them into games people play:
