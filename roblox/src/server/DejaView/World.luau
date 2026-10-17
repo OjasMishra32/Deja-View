@@ -161,6 +161,15 @@ local function onCharacter(player: Player, character: Model)
 			if World.where(player) ~= "room" then
 				player:SetAttribute("Where", "lobby")
 			end
+			-- Late joiners: with Auto-join on and a room already built, send them straight in.
+			if player:GetAttribute("JoinedOnce") ~= true then
+				player:SetAttribute("JoinedOnce", true)
+				task.wait(1.5)
+				if player.Parent and character.Parent and World.where(player) ~= "room"
+					and workspace:GetAttribute("AutoJoin") == true and workspace:GetAttribute("Phase") == "room" then
+					World.toRoom({ player })
+				end
+			end
 		end
 	end)
 end
