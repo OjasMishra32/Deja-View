@@ -13,6 +13,7 @@ local Ghosts = require(Modules.Ghosts)
 local Effects = require(Modules.Effects)
 local PongBall = require(Modules.PongBall)
 local RoomLook = require(Modules.RoomLook)
+local Arrival = require(Modules.Arrival)
 local Theme = require(ReplicatedStorage:WaitForChild("Shared").Theme)
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -607,6 +608,8 @@ task.spawn(function()
 		renderCards()
 	end
 end)
+
+Arrival.start()
 
 -- Boot: the dark loading screen fades into the lobby
 task.delay(1.2, function()
