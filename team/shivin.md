@@ -8,6 +8,19 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 7 (Sat ~4:10 AM): the real textured rooms are live. Drop the blocks as the look.**
+> The block rooms only resemble the place; the textured model IS the place. Now:
+> - `GET BASE/api/roblox/<id>/model` is live on the public link: `assetId`, `units: "studs"`, `studsPerMeter: 3.57`,
+>   `chunks` (named pieces, each under 20,000 triangles, 1024 px textures). If a model has no `assetId` yet, the server
+>   uploads it to your account on that request (your key is set) and the next poll returns it.
+> - Test now: `sample-painted-bedroom` is asset **82386512202897** (uploaded to your account). Load it with
+>   `AssetService:LoadAssetAsync`, compare it with the block room in the same spot, and send Ojasva a screenshot.
+> - Show the model; keep the blocks only as invisible collision (Transparency 1). Check the model sits exactly on the
+>   block room (if it is turned 180 degrees about Y, rotate it; the chunk sizes match either way).
+> - Lighting: the textures already contain the scene's light, so Roblox shades them twice. Raise `Lighting.Ambient` /
+>   `OutdoorAmbient` or set the parts' Material to SmoothPlastic with low reflectance so they are not too dark.
+> - The four real worlds get their models as each one passes its check (the court first); same ids as Update 3.
+
 > **Update 6 (Sat ~3:55 AM): ping pong and the first chess are merged. Your queue after foosball (Update 5 item 2),
 > in order, so you never wait on anyone:**
 > 1. **Finish the games:** chess checkmate/stalemate/promotion edge cases; ping pong and foosball scores sent as
