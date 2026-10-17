@@ -285,7 +285,7 @@ end
 -- Power to distance: a soft return still clears the net, half power lands in the far half, full power reaches the
 -- far edge or out from close range. Faster flight as the charge grows, and a lift that guarantees net clearance.
 local function aimedVelocity(p0: Vector3, dirLocal: Vector3, charge: number): Vector3
-	local reach = len * (0.72 + charge * 0.62)
+	local reach = len * (0.68 + charge * 0.54)
 	local flight = math.clamp(0.55 - charge * 0.33, 0.22, 0.55)
 	local target = p0 + dirLocal * reach
 	if target.Y < Sim.TOP_Y + Sim.BALL_R then
