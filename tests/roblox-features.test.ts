@@ -146,6 +146,22 @@ describe('features.json (metres) to studs in the map frame', () => {
     expect(pool.clothColor).toEqual([38, 110, 72]);
   });
 
+  test('surfaces: named, typed tops (a stove, a counter) in studs; bad kinds and broken corners are dropped', () => {
+    const frame = { transform: IDENTITY, floorY: 0, studsPerMeter: 3.57 };
+    const stove = { kind: 'stove', name: 'range 1', corners: [[0, 0.87, -1], [0.76, 0.87, -1], [0.76, 0.87, -0.36], [0, 0.87, -0.36]] };
+    const f = featuresToStuds({
+      surfaces: [stove, { kind: 'Bad Kind', corners: stove.corners }, { kind: 'counter', corners: stove.corners.slice(0, 3) }],
+    }, frame)!;
+    const s = f.surfaces as Array<Record<string, unknown>>;
+    expect(s).toHaveLength(1);
+    expect(s[0]!.kind).toBe('stove');
+    expect(s[0]!.name).toBe('range 1');
+    expect(s[0]!.height).toBeCloseTo(0.87 * 3.57, 2);
+    expect(s[0]!.length).toBeCloseTo(0.76 * 3.57, 2);
+    expect(s[0]!.width).toBeCloseTo(0.64 * 3.57, 2);
+    expect(featuresToStuds({ surfaces: [{ kind: 'stove', corners: [] }] }, frame)).toBeNull();
+  });
+
   test('a broken table is left out on its own; nothing usable gives null', () => {
     const frame = { transform: IDENTITY, floorY: 0, studsPerMeter: 3.57 };
     const f = featuresToStuds({ pingPongTable: TABLE, foosballTable: { corners: TABLE.corners.slice(0, 3) }, chessBoard: { corners: TABLE.corners, a1: 5 }, poolTable: 'no' }, frame)!;

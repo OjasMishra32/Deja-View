@@ -193,7 +193,26 @@ function poolTable(raw: unknown, map: FeatureMapper): Raw | null {
   return out;
 }
 
-const KINDS: Record<string, (raw: unknown, map: FeatureMapper) => Raw | null> = { pingPongTable, foosballTable, chessBoard, poolTable };
+/** Other measured tops a game can use (a kitchen's stoves and counters, a room's tables): each a named rectangle of
+ * four corners at its top's height, with a `kind` (stove, counter, table, fridge, ...), sent like the tables. */
+const SURFACE_KIND = /^[a-z][a-z0-9-]{0,23}$/;
+function surfaces(raw: unknown, map: FeatureMapper): Raw[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out: Raw[] = [];
+  for (const s of raw.slice(0, 64)) {
+    if (!isObject(s) || typeof s.kind !== 'string' || !SURFACE_KIND.test(s.kind)) continue;
+    const t = table(s, map);
+    if (!t) continue;
+    const item: Raw = { kind: s.kind, corners: t.corners, height: t.height, centre: t.centre, length: t.length, width: t.width, yaw: t.yaw };
+    if (typeof s.name === 'string' && s.name.length <= 40) item.name = s.name;
+    const top = levelAt(s, s.top, map);
+    if (top !== undefined) item.top = top;
+    out.push(item);
+  }
+  return out.length ? out : null;
+}
+
+const KINDS: Record<string, (raw: unknown, map: FeatureMapper) => Raw | Raw[] | null> = { pingPongTable, foosballTable, chessBoard, poolTable, surfaces };
 
 /** A features.json body (metres) as `features` for the game (studs, map frame); null when no table is usable. */
 export function featuresToStuds(raw: unknown, frame: FeatureFrame): Record<string, unknown> | null {
