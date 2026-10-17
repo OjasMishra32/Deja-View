@@ -3,8 +3,10 @@
 This page is current and final. The long guides (`shivin.md`, `brianna.md`, `seb.md`) are being updated to match it; if
 anything in them disagrees with this page, **this page wins** until they are refreshed.
 
-**The product:** Déjà View. Two modes: **Photo** (one photo becomes a world you walk into) and **Video** (a still-camera
-video becomes a room with the real footage standing in it in 3D). Walk around in a Meta Quest 3S or a browser.
+**The product:** Déjà View. Two modes: **Photo** (one photo or game screenshot becomes a world you walk into, **and the
+same world is a Roblox place** friends play on the Quest Roblox app or a phone) and **Video** (a still-camera video becomes
+a room with the real footage standing in it in 3D; headset and browser only, not Roblox). Walk around in a Meta Quest 3S
+or a browser.
 
 **The demo (a short skit, then a live finale):** "We had a game night. Seb skipped it." Seb drops the game-night video into his
 Déjà View memory board (the DeepSpace app), the world comes back, the judge puts on the headset and is standing in it with sound. Gemini
@@ -17,6 +19,10 @@ Details for every connection: `contracts.md`. The whole plan: `plan.md`.
 ---
 
 ## Shivin: Déjà View in Roblox
+
+**Update (Sat ~2 AM):** only Photo worlds go to Roblox, and each one now comes as a real textured model of the room
+(`GET /api/roblox/<id>/model`, `.../model.glb`), not just blocks; it must play on the Quest Roblox app and on phones.
+You join the judge in the **Fortnite** world. Details: Update 2 at the top of `shivin.md`.
 
 Someone texts a photo of a real room, it becomes a 3D world, and you plus friends join that same room in Roblox and play
 tag with the person in the VR headset.
