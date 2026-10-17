@@ -36,9 +36,42 @@ local function headers(isPost: boolean)
 	return h
 end
 
+-- Failover between the configured address (Experience Config) and the one built into the code: a stale
+-- dejaview_base or a tunnel that died must never strand the game. Only "nobody answered" counts (DNS, refused,
+-- timeout, Cloudflare 530 for a gone tunnel); an app error like a 502 from one route does not.
+local useFallback = false
+local deadStreak = 0
+local DEAD_LIMIT = 3
+
+local function currentBase(): string
+	local configured = Config.base()
+	if workspace:GetAttribute("DejaViewBase") then
+		return configured -- an explicit console override always wins
+	end
+	local fallback = (Config.BASE_FALLBACK:gsub("/+$", ""))
+	return if useFallback and fallback ~= configured then fallback else configured
+end
+
+local function noteResult(answered: boolean)
+	if answered then
+		deadStreak = 0
+		return
+	end
+	deadStreak += 1
+	if deadStreak >= DEAD_LIMIT then
+		deadStreak = 0
+		local configured = Config.base()
+		local fallback = (Config.BASE_FALLBACK:gsub("/+$", ""))
+		if configured ~= fallback and not workspace:GetAttribute("DejaViewBase") then
+			useFallback = not useFallback
+			warn("[DejaView] no answer from the server; switching to " .. currentBase())
+		end
+	end
+end
+
 local function request(method: string, path: string, body: any?, timeout: number?)
 	local opts: { [string]: any } = {
-		Url = Config.base() .. path,
+		Url = currentBase() .. path,
 		Method = method,
 		Headers = headers(body ~= nil),
 		Body = if body ~= nil then HttpService:JSONEncode(body) else nil,
@@ -53,8 +86,10 @@ local function request(method: string, path: string, body: any?, timeout: number
 		ok, res = pcall(HttpService.RequestAsync, HttpService, opts)
 	end
 	if not ok then
+		noteResult(false)
 		return false, tostring(res), 0
 	end
+	noteResult(res.StatusCode ~= 530)
 	local okJson, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
 	if not okJson then
 		return false, "not JSON (tunnel down?)", res.StatusCode
