@@ -8,6 +8,21 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 9 (Sat ~5 AM): Updates 6-8 are merged, amazing. Next: make every world a real, polished game.**
+> 1. **Playable end to end, every world:** join from a phone, a laptop and the Quest Roblox app into `the-courts`,
+>    `chess-room`, `kitchen`, `tilted-towers`, `brick-apartment` (as each lands): spawn on the floor, walls hold you in,
+>    the games start from one prompt, nothing falls through. Fix whatever breaks; a short checklist per world in your
+>    README.
+> 2. **A game per world:** court = ping pong + foosball (done); chess-room = giant chess (done); **kitchen = a cooking
+>    rush** (ingredients appear around the real counters, carry them to the stove before the timer ends, score board);
+>    **tilted-towers = tag or a "floor is lava" round on the real street**; apartment = hide and seek.
+> 3. **Arrival animation:** when a room loads, the real room assembles around the players: chunks of the textured model
+>    rise from the floor and slot into place over ~2 s with a soft sound, then the game prompt appears. Same when leaving
+>    (the room folds away into a card). This mirrors the headset, where the photo turns into the world.
+> 4. **VR polish (Quest Roblox app):** comfortable movement, the HUD on a wrist or a floating panel, games playable with
+>    motion controllers.
+> 5. **Still open:** ambient sounds per world, phones at 30+ fps, the 30-second trailer.
+
 > **Update 8 (Sat ~4:50 AM):**
 > - **New world:** `kitchen` (a real office kitchen: fridge, stoves, sink, steel prep table, bar tables and stools). It
 >   is a Photo world, so it gets a textured model and goes in your picker like the others.
