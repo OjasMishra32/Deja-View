@@ -37,7 +37,7 @@ local Config = {
 	-- Mock knobs
 	MOCK_LATENCY = { 0.05, 0.25 },
 	MOCK_FAIL_RATE = 0.05,
-	MOCK_NOISE_PARTS = 800,
+	MOCK_NOISE_PARTS = 120, -- random filler blocks in mock rooms (stress rooms still use 6k/12k)
 	MOCK_STRESS_ROOMS = true, -- adds 6k and 12k part rooms to the mock list
 }
 
