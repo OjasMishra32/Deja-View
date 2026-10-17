@@ -296,6 +296,8 @@ export interface WorkerStatus {
   lastBeat?: string;
   /** Seconds since the last heartbeat, measured on the remote clock. */
   age?: number;
+  /** Heartbeat status: starting, loading, idle, busy, error, stopped. */
+  status?: string;
 }
 
 export const WORKER_STALE_S = 90;
@@ -331,6 +333,7 @@ export function parseWorker(stdout: string, staleS = WORKER_STALE_S): WorkerStat
     gpu: typeof beat?.gpu === 'string' ? beat.gpu : undefined,
     lastBeat: ref !== null ? new Date(ref * 1000).toISOString() : undefined,
     age,
+    ...(typeof beat?.status === 'string' ? { status: beat.status } : {}),
   };
 }
 

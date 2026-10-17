@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Run one ThirdWheel job directory (same entry point on HiPerGator and the Mac).
+"""Run one Déjà View job directory (same entry point on HiPerGator and the Mac).
 
   python pipeline/run_job.py <jobdir>
 
 Reads <jobdir>/job.json ({"id", "mode", "prompt"?, "params"}), rewrites <jobdir>/progress.json
 (JobProgress) as it goes, appends <jobdir>/log.txt, writes <jobdir>/out/scene.json (JobResult,
 paths relative to out/) and finally a DONE or FAILED marker.
+
+What the app shows comes from here: progress.json `stage` (short step names), `error` (one product sentence on
+failure; the technical cause is in `detail` and log.txt) and the result `caption`. None of them name tools,
+models or services.
 
 Modes
   rentfree     best photo, or the sharpest steadiest video frame, or a prompt -> flashworld_run.py
@@ -26,7 +30,9 @@ Job params (all optional)
   thirdwheel   maxSeconds, start, fovDeg, stabilize (auto|on|off), crf, room (auto|plate),
                maxSplats, cameraHeight, trajectory, seed, depthModel, plateDepthModel, segmenter,
                segStride, keepWork
-  rentfree     localFallback (true: build a plate-depth room locally instead of failing without a GPU)
+  rentfree     localFallback (true: build a plate-depth room locally instead of failing without a GPU),
+               seed (default: the attempt number, so a retry gives a new world), trajectory, cameraHeight,
+               maxSplats, shDegree
   reconstruct  maxFrames (frames sampled from a video, default 48)
 """
 from __future__ import annotations
@@ -45,14 +51,26 @@ if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
 
 from common import env as _env  # noqa: E402,F401
-from common.jobio import ChildProgressRelay, Job, JobError, read_json, write_json_atomic  # noqa: E402
-from common.media import MediaError  # noqa: E402
+from common.jobio import (  # noqa: E402
+    GENERIC_FAILURE,
+    ChildProgressRelay,
+    Job,
+    JobError,
+    explain_failure,
+    read_json,
+    write_json_atomic,
+)
 
 REPO_ROOT = PIPELINE_DIR.parent
-GPU_REQUIRED = (
-    "{what} needs a GPU backend (HiPerGator worker/batch, or the FlashWorld Hugging Face Space for photos). "
-    "It cannot run on this machine: {why}."
-)
+# Technical note for the log when a mode needs a GPU this machine does not have.
+GPU_REQUIRED = "{what} needs a GPU backend (HiPerGator worker/batch, or the cloud GPU for photos); not here: {why}"
+# The smallest photo short side the depth and world models can do anything useful with (the server rejects < 320).
+MIN_PHOTO_SIDE = 64
+# What the app says when a runner subprocess fails, per runner.
+RUNNER_FAILURE = {
+    "flashworld": "We couldn't generate this world. Try again in a minute.",
+    "anysplat": "We couldn't reconstruct this place. Try again in a minute.",
+}
 
 
 class Cancelled(Exception):
@@ -153,26 +171,44 @@ def run_runner(job: Job, name: str, args: list[str], lo: float, hi: float, stage
         err = None
         if progress_file is not None:
             err = (read_json(progress_file) or {}).get("error")
-        detail = err or (tail[-1] if tail else "no output")
-        raise JobError(f"{name} failed (exit {rc}): {detail}")
+        detail = f"{name} failed (exit {rc}): {err or (tail[-1] if tail else 'no output')}"
+        user, _ = explain_failure(RuntimeError(detail))
+        if "memory" not in user:
+            user = RUNNER_FAILURE.get(name, user)
+        raise JobError(user, detail)
     job.log(f"{name}: finished in {time.time() - t0:.1f}s")
     cb(None, 1.0)
 
 
+def world_params(job: Job) -> dict:
+    """Generation params for the world runner, as the warm worker uses them: the job's own params, and a seed that
+    defaults to the attempt number so Retry gives a different world."""
+    params = {k: job.params[k] for k in ("trajectory", "seed", "cameraHeight", "maxSplats", "shDegree") if job.params.get(k) is not None}
+    if "seed" not in params:
+        try:
+            params["seed"] = int(job.params.get("attempt") or 0)
+        except (TypeError, ValueError):
+            params["seed"] = 0
+    return params
+
+
 def _flashworld(job: Job, out_dir: Path, image: Path | None, prompt: str | None, lo: float, hi: float, stage: str) -> dict:
+    import flashworld_run
+
     out_dir.mkdir(parents=True, exist_ok=True)
     args = ["--out", str(out_dir)]
     if image is not None:
         args += ["--image", str(image)]
     if prompt:
         args += ["--prompt", prompt]
+    args += flashworld_run._cli_from_params(world_params(job))
     run_runner(job, "flashworld", args, lo, hi, stage, progress_file=job.work_dir / f"flashworld-progress-{out_dir.name}.json")
     res = read_json(out_dir / "scene.json")
     if not isinstance(res, dict) or not isinstance(res.get("world"), dict):
-        raise JobError("flashworld did not write a world into scene.json")
+        raise JobError(RUNNER_FAILURE["flashworld"], "flashworld did not write a world into scene.json")
     wf = out_dir / res["world"].get("file", "")
     if not wf.is_file():
-        raise JobError(f"flashworld result is missing {res['world'].get('file')}")
+        raise JobError(RUNNER_FAILURE["flashworld"], f"flashworld result is missing {res['world'].get('file')}")
     return res
 
 
@@ -213,22 +249,55 @@ def pick_rentfree_input(job: Job) -> Path | None:
         return dst
     unknown = [p.name for p in job.input_files()]
     if unknown:
-        raise JobError(f"unsupported input files: {', '.join(unknown)} (use photos or a video)")
+        raise JobError(
+            "These files aren't photos or a video we can use. Try a JPEG, PNG or HEIC photo, or an MP4 or MOV video.",
+            f"unsupported input files: {', '.join(unknown)}",
+        )
     return None
+
+
+def _check_photo_size(rgb, what: str = "photo") -> None:
+    """Refuses photos too small to build anything from (a 1x1 image even crashes the depth step)."""
+    h, w = rgb.shape[:2]
+    if min(h, w) < MIN_PHOTO_SIDE:
+        raise JobError(
+            f"This {what} is too small ({w}x{h}). Use one at least 320 px on the short side.",
+            f"input {what} is {w}x{h}, below {MIN_PHOTO_SIDE} px",
+        )
 
 
 # ---------------------------------------------------------------------------- modes
 
+PHOTO_CAPTION = "Generated from one photo: the rest of the room was imagined."
+FRAME_CAPTION = "Generated from the sharpest frame of your clip: the rest of the room was imagined."
+PROMPT_CAPTION = "Generated from your prompt."
+DEPTH_ROOM_CAPTION = "Built from the depth in your photo: what the camera saw, in 3D."
+DEPTH_FRAME_CAPTION = "Built from the depth in the sharpest frame of your clip: what the camera saw, in 3D."
+
+
+def _from_clip(job: Job) -> bool:
+    """Photo mode got a video (a game or phone clip) rather than photos."""
+    return not job.input_images() and bool(job.input_videos())
+
+
 def run_rentfree(job: Job) -> dict:
     image = pick_rentfree_input(job)
     if image is None and not job.prompt:
-        raise JobError("Rent Free needs a photo, a video or a text prompt")
+        raise JobError("Photo mode needs a photo, a video or a prompt.", "rentfree job without inputs or prompt")
     ok, why = runner_available("flashworld")
     if not ok:
         if image is not None and bool(job.params.get("localFallback")):
-            job.warn(f"FlashWorld unavailable ({why}); building a plate-depth room from the photo instead")
+            job.warn(f"world model unavailable ({why}); building a plate-depth room from the photo instead")
             return _local_photo_room(job, image)
-        raise JobError(GPU_REQUIRED.format(what="Rent Free (FlashWorld)", why=why))
+        if image is None:
+            raise JobError(
+                "Worlds from a prompt alone need a GPU, and none is free right now. Try again in a few minutes, or add a photo.",
+                GPU_REQUIRED.format(what="Photo mode (prompt only)", why=why),
+            )
+        raise JobError(
+            "No GPU is free to build this world right now. Try again in a few minutes.",
+            GPU_REQUIRED.format(what="Photo mode", why=why),
+        )
     res = _flashworld(job, job.out_dir, image, job.prompt, 0.05, 0.98, "Generating the world")
     if image is not None and not (job.out_dir / "thumb.jpg").exists():
         from common.media import load_image, resize_long, save_jpg
@@ -236,7 +305,7 @@ def run_rentfree(job: Job) -> dict:
         save_jpg(job.out_dir / "thumb.jpg", resize_long(load_image(image), 640), quality=88)
         res["thumb"] = "thumb.jpg"
     res.setdefault("thumb", "thumb.jpg")
-    res.setdefault("caption", "Generated from a photo" if image is not None else f"Generated from: {job.prompt}")
+    res["caption"] = PROMPT_CAPTION if image is None else FRAME_CAPTION if _from_clip(job) else PHOTO_CAPTION
     return res
 
 
@@ -247,8 +316,10 @@ def _local_photo_room(job: Job, image: Path) -> dict:
     from common.models import DEFAULT_PLATE_DEPTH, DepthEstimator
     from plate_room import build_plate_room, estimate_plate_depth
 
-    job.stage("Estimating depth", 0.1)
-    rgb = resize_long(load_image(image), 1280)
+    job.stage("Measuring the depth of the photo", 0.1)
+    rgb = load_image(image)
+    _check_photo_size(rgb)
+    rgb = resize_long(rgb, 1280)
     rgb = rgb[: rgb.shape[0] // 2 * 2, : rgb.shape[1] // 2 * 2]
     de = DepthEstimator(DEFAULT_PLATE_DEPTH, device=pick_device())
     depth = estimate_plate_depth(de, rgb)
@@ -258,21 +329,24 @@ def _local_photo_room(job: Job, image: Path) -> dict:
     save_jpg(job.out_dir / "thumb.jpg", resize_long(rgb, 640), quality=88)
     world = room["world"]
     world["transform"]["quaternion"] = [0.0, 0.0, 0.0, 1.0]
-    return {"world": world, "thumb": "thumb.jpg", "caption": "Room lifted from the photo's depth (local fallback, no AI fill-in)"}
+    return {"world": world, "thumb": "thumb.jpg", "caption": DEPTH_FRAME_CAPTION if _from_clip(job) else DEPTH_ROOM_CAPTION}
 
 
 def run_reconstruct(job: Job) -> dict:
     ok, why = runner_available("anysplat")
     images, videos = job.input_images(), job.input_videos()
     if not images and not videos:
-        raise JobError("Reconstruct needs 8 or more photos or a video")
+        raise JobError("Reconstruct needs at least 8 photos or a video.", "reconstruct job without photos or video")
     if not ok:
-        raise JobError(GPU_REQUIRED.format(what="Reconstruct (AnySplat)", why=why))
+        raise JobError(
+            "Reconstructions need a GPU, and none is free right now. Try again in a few minutes.",
+            GPU_REQUIRED.format(what="Reconstruct", why=why),
+        )
     img_dir = job.work_dir / "images"
     if img_dir.exists():
         shutil.rmtree(img_dir)
     img_dir.mkdir(parents=True)
-    job.stage("Preparing photos", 0.01)
+    job.stage("Preparing the photos", 0.01)
     if images:
         for i, p in enumerate(images):
             _normalise_image(p, img_dir / f"{i:03d}.jpg", max_long=1920)
@@ -281,19 +355,19 @@ def run_reconstruct(job: Job) -> dict:
         job.log(f"sampled {n} frames from {videos[0].name}")
     count = len(list(img_dir.glob("*.jpg")))
     if count < 8:
-        job.warn(f"only {count} images; reconstruction quality needs 8 or more")
+        job.notice(f"Only {count} views to work from; 8 or more give a cleaner result.", f"only {count} images; quality needs 8 or more")
     run_runner(job, "anysplat", ["--images", str(img_dir), "--out", str(job.out_dir)], 0.05, 0.98, "Reconstructing",
                progress_file=job.work_dir / "anysplat-progress.json")
     res = read_json(job.out_dir / "scene.json")
     if not isinstance(res, dict) or "world" not in res:
-        raise JobError("anysplat did not write a world into scene.json")
+        raise JobError(RUNNER_FAILURE["anysplat"], "anysplat did not write a world into scene.json")
     if not (job.out_dir / "thumb.jpg").exists():
         from common.media import load_image, resize_long, save_jpg
 
         first = sorted(img_dir.glob("*.jpg"))[0]
         save_jpg(job.out_dir / "thumb.jpg", resize_long(load_image(first), 640), quality=88)
     res.setdefault("thumb", "thumb.jpg")
-    res.setdefault("caption", f"Reconstructed from {count} views")
+    res["caption"] = with_notices(f"Reconstructed from {count} {'photos' if images else 'views of your video'}.", job)
     return res
 
 
@@ -328,7 +402,7 @@ def run_thirdwheel(job: Job) -> dict:
     videos = job.input_videos()
     if not videos:
         names = ", ".join(p.name for p in job.input_files()) or "nothing"
-        raise JobError(f"Third Wheel needs one video (got {names})")
+        raise JobError("Video mode needs one video, filmed from a still, propped-up phone.", f"thirdwheel needs one video (got {names})")
     if len(videos) > 1:
         job.warn(f"{len(videos)} videos uploaded; using {videos[0].name}")
     room_mode = str(job.params.get("room", "auto"))
@@ -341,7 +415,7 @@ def run_thirdwheel(job: Job) -> dict:
             cfg.focal_35mm = float(f35)
     job.set_range(0.0, 0.62 if fw_ok else 0.86)
     job.log(f"thirdwheel: {videos[0].name}, device {cfg.device}, room: {'FlashWorld (' + fw_why + ')' if fw_ok else 'plate (' + fw_why + ')'}")
-    tw = process_video(videos[0], job.out_dir, job.work_dir, cfg, progress=job.progress, log=job.log, warn=job.warn)
+    tw = process_video(videos[0], job.out_dir, job.work_dir, cfg, progress=job.progress, log=job.log, warn=job.warn, notice=job.notice)
     video = tw["video"]
     job.set_range(0.0, 1.0)
 
@@ -350,24 +424,31 @@ def run_thirdwheel(job: Job) -> dict:
     if fw_ok:
         try:
             world, video = _generated_room(job, tw, video)
-            caption = "Room generated from the space behind your friend"
+            caption = "The room was imagined from the space behind the people in your clip."
         except Exception as e:  # the plate room is always possible
             job.warn(f"generated room failed ({e}); building the room from the plate instead")
             world = None
     if world is None:
         from plate_room import build_plate_room
 
-        job.progress("Building the room from the plate", 0.88)
+        job.progress("Building the room", 0.88)
         room = build_plate_room(
             tw["plate_rgb"], tw["plate_depth"], tw["K"], job.out_dir / "world.ply",
             max_splats=int(job.params.get("maxSplats", 700_000)), log=job.log,
         )
         world = room["world"]
         video["cameraPose"] = {"position": [0.0, 0.0, 0.0], "quaternion": room["levelQuaternion"]}
-        caption = "Room lifted from the background plate (no GPU world model)"
-    secs = video["duration"]
-    caption = f"{caption}; {secs:.0f}s of video{' with sound' if video['hasAudio'] else ''}"
-    return {"world": world, "video": video, "thumb": "thumb.jpg", "caption": caption}
+        caption = "The room is built from the background of your clip."
+    secs = float(video["duration"])
+    length = f"{secs:.0f} seconds" if secs >= 1.5 else "1 second"
+    caption = f"{caption} {length} of video{' with sound' if video['hasAudio'] else ', no sound'}."
+    return {"world": world, "video": video, "thumb": "thumb.jpg", "caption": with_notices(caption, job)}
+
+
+def with_notices(caption: str, job: Job) -> str:
+    """The caption plus the warnings the person should see (job.notice), each its own sentence."""
+    notes = [n.strip() for n in getattr(job, "notices", []) if n and n.strip()]
+    return " ".join([caption.strip(), *notes]).strip()
 
 
 def _generated_room(job: Job, tw: dict, video: dict) -> tuple[dict, dict]:
@@ -395,7 +476,7 @@ def _generated_room(job: Job, tw: dict, video: dict) -> tuple[dict, dict]:
     res = flashworld_run.generate_room(str(job.out_dir / "plate.jpg"), job.prompt, str(room_dir), progress=job.subprogress(0.62, 0.95), **params)
     world = (res or {}).get("world")
     if not isinstance(world, dict) or not (room_dir / world.get("file", "")).is_file():
-        raise RuntimeError("FlashWorld returned no world file")
+        raise RuntimeError("the world model returned no world file")
     for name in (world["file"], "input_camera.json", "input_depth.npy"):
         if (room_dir / name).exists():
             shutil.copy2(room_dir / name, job.out_dir / name)
@@ -414,9 +495,9 @@ def run(jobdir: Path | str) -> int:
         job = Job(jobdir)
     except JobError as e:
         if jobdir.is_dir():
-            (jobdir / "FAILED").write_text(f"{e}\n")
-            write_json_atomic(jobdir / "progress.json", {"stage": "Failed", "error": str(e), "done": True})
-        print(f"FAILED: {e}", file=sys.stderr)
+            (jobdir / "FAILED").write_text(f"{e.user}\n{e.detail}\n")
+            write_json_atomic(jobdir / "progress.json", {"stage": "Failed", "error": e.user, "detail": e.detail, "done": True})
+        print(f"FAILED: {e.detail}", file=sys.stderr)
         return 2
     job.clear_markers()
     t0 = time.time()
@@ -424,24 +505,26 @@ def run(jobdir: Path | str) -> int:
     try:
         fn = MODES.get(job.mode)
         if fn is None:
-            raise JobError(f"unknown mode {job.mode!r} (expected rentfree, thirdwheel or reconstruct)")
+            raise JobError("This kind of scene isn't supported.", f"unknown mode {job.mode!r} (expected rentfree, thirdwheel or reconstruct)")
         result = fn(job)
         result = {k: result[k] for k in ("world", "video", "thumb", "caption") if result.get(k) is not None}
         job.write_result(result)
         job.log(f"job {job.id}: done in {time.time() - t0:.1f}s")
         job.finish_ok()
         return 0
-    except (JobError, MediaError) as e:
-        msg = str(e)
     except Cancelled as e:
-        msg = str(e)
+        user, detail = "Cancelled.", str(e)
     except MemoryError:
-        msg = "ran out of memory (try a shorter clip: params.maxSeconds)"
-    except Exception as e:  # unexpected: keep the traceback in the log
-        job.log(traceback.format_exc().rstrip())
-        msg = f"internal error: {type(e).__name__}: {e}"
-    job.log(f"FAILED: {msg}")
-    job.finish_failed(msg)
+        user, detail = explain_failure(MemoryError(), job.mode)
+        detail = "ran out of memory (try a shorter clip: params.maxSeconds)"
+    except Exception as e:  # JobError and MediaError carry their own product sentence; anything else is unexpected
+        if not isinstance(e, JobError) and type(e).__name__ != "MediaError":
+            job.log(traceback.format_exc().rstrip())
+        user, detail = explain_failure(e, job.mode)
+        if user == GENERIC_FAILURE.get(job.mode) and not isinstance(e, JobError):
+            detail = f"internal error: {detail}"
+    job.log(f"FAILED: {detail}")
+    job.finish_failed(user, detail)
     return 1
 
 

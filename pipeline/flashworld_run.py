@@ -598,14 +598,14 @@ def finish_world(
     poses = request_poses(req)
     idx_cam = int(req.get("image_index", 0))
     cam_in = poses[idx_cam]
-    prog("Cleaning up the splats", 0.0)
+    prog("Cleaning up the world", 0.0)
     raw_count = len(splats)
     keep = sio.prune_indices(splats, max_splats, cameras=np.array([p[:3, 3] for p in poses]))
     splats = splats.subset(keep)
     prog("Finding the floor", 0.2)
     place = sio.place_world(splats.means, splats.opacities, cam_in, camera_height=camera_height, scale_limits=(0.3, 3.0), fallback_scale=1.0)
     s = place["scale"]
-    prog("Writing the world", 0.35)
+    prog("Saving the world", 0.35)
     sio.write_spz(out_dir / "world.spz", splats, sh_degree=sh_degree)
     if write_ply:
         sio.write_ply(out_dir / "world.ply", splats, sh_degree=sh_degree)
@@ -617,7 +617,7 @@ def finish_world(
     K = {k: float(orig.get(k, req["cameras"][idx_cam][k])) for k in ("fx", "fy", "cx", "cy")}
     dw, dh = _depth_size(ow, oh, 1024)
     sx, sy = dw / ow, dh / oh
-    prog("Rendering depth at the input camera", 0.5)
+    prog("Measuring the room", 0.5)
     tensors: dict = {}
     # Pixel-corner convention (pixel i spans [i, i+1)), as in gsplat and FlashWorld: intrinsics scale directly.
     r = sio.render(splats, cam_in, K["fx"] * sx, K["fy"] * sy, K["cx"] * sx, K["cy"] * sy, dw, dh,
@@ -625,7 +625,7 @@ def finish_world(
     depth = (r.depth * s).astype(np.float32)
     depth[r.alpha < 0.5] = 0.0
     np.save(out_dir / "input_depth.npy", depth)
-    prog("Rendering the thumbnail", 0.75)
+    prog("Making the thumbnail", 0.75)
     tw = 640
     th = max(1, int(round(oh * tw / ow)))
     tsx, tsy = tw / ow, th / oh
@@ -668,9 +668,9 @@ def finish_world(
     text = (caption_text or "").strip()
     has_image = bool(meta["hasImage"]) if "hasImage" in meta else bool(req.get("image_prompt"))
     if has_image:
-        caption = "Generated from one photo: FlashWorld filled in the rest of the room."
+        caption = "Generated from one photo: the rest of the room was imagined."
     else:
-        caption = "Generated from a text prompt with FlashWorld."
+        caption = "Generated from your prompt."
     result = {"world": world, "thumb": "thumb.jpg", "caption": caption}
     sio.write_json_atomic(out_dir / "scene.json", result)
     diag = {
@@ -735,7 +735,7 @@ def generate(
     prog("Preparing the input", 0.01)
     model = get_model(offload)
     if not model.loaded:
-        prog("Loading FlashWorld onto the GPU (first run takes a minute or two)", 0.03)
+        prog("Warming up the world model (the first run takes a minute or two)", 0.03)
         model.load()
     text = (prompt or "").strip()
     cap_src = "prompt" if text else None
@@ -932,7 +932,7 @@ def pick_best_image(paths: Sequence[str | Path]) -> Path:
     if len(paths) == 1:
         return Path(paths[0])
     try:
-        from common.select import best_photo  # the shared pipeline helper when available
+        from common.frame_pick import best_photo  # the shared pipeline helper when available
 
         return Path(best_photo([Path(p) for p in paths])[0])
     except Exception:
@@ -954,7 +954,7 @@ def pick_best_image(paths: Sequence[str | Path]) -> Path:
 def best_video_frame(video: str | Path, out_png: str | Path, samples: int = 40) -> Path:
     """The sharpest, steadiest frame of a video, saved as PNG."""
     try:
-        from common.select import best_video_frame as shared_pick
+        from common.frame_pick import best_video_frame as shared_pick
 
         pick = shared_pick(Path(video))
         from PIL import Image
@@ -974,7 +974,13 @@ def best_video_frame(video: str | Path, out_png: str | Path, samples: int = 40) 
         except Exception:
             pass
         fps = max(0.5, min(8.0, samples / dur)) if dur > 0 else 2.0
-        subprocess.run(["ffmpeg", "-v", "error", "-i", str(video), "-vf", f"fps={fps:.3f}", "-frames:v", str(samples),
+        try:  # HDR (iPhone HLG/PQ) clips are tone-mapped to SDR; empty for SDR video
+            from common.media import sdr_filters
+
+            tone = sdr_filters(video)
+        except Exception:
+            tone = []
+        subprocess.run(["ffmpeg", "-v", "error", "-i", str(video), "-vf", ",".join([f"fps={fps:.3f}", *tone]), "-frames:v", str(samples),
                         str(tmpd / "%04d.png")], check=True, timeout=600)
         frames = sorted(tmpd.glob("*.png"))
         if not frames:

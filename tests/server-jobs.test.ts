@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Backend, JobResult, Scene, SceneMode } from '../shared/types.ts';
 import { localDriver, pidAlive } from '../server/backends/local.ts';
-import { sleep, type BackendDriver, type RunContext } from '../server/backends/types.ts';
-import { composeError, JobRunner, parseBackendOrder } from '../server/jobs.ts';
+import { ProductError, sleep, type BackendDriver, type RunContext } from '../server/backends/types.ts';
+import { GENERIC_FAILURE, NOTHING_AVAILABLE } from '../server/copy.ts';
+import { composeError, JobRunner, parseBackendOrder, userError } from '../server/jobs.ts';
 import { SceneStore } from '../server/store.ts';
 
 const roots: string[] = [];
@@ -176,7 +177,13 @@ describe('job state machine', () => {
     await h.runner.idle();
     let s = (await h.store.get('err-aaaaa'))!;
     expect(s.status).toBe('failed');
-    expect(s.error).toBe('Fake hf-space failed: GPU crashed. Not available: Fake hpg-worker: offline. Fake local: not installed (run scripts/setup-local.sh).');
+    // The scene gets one product sentence and keeps the last real step; the technical account goes to log.txt.
+    expect(s.error).toBe(GENERIC_FAILURE.rentfree);
+    expect(s.stage).toBe('Starting'); // the space failed right after it started
+    const failLog = await Bun.file(join(h.store.sceneDir('err-aaaaa'), 'log.txt')).text();
+    expect(failLog).toContain(
+      'FAILED: Fake hf-space failed: GPU crashed. Not available: Fake hpg-worker: offline. Fake local: not installed (run scripts/setup-local.sh).',
+    );
 
     spaceFails = false;
     const r = await h.runner.retry('err-aaaaa');
@@ -196,7 +203,39 @@ describe('job state machine', () => {
     await addScene(h.store, 'tw-aaaaa', 'thirdwheel');
     h.runner.enqueue('tw-aaaaa');
     await h.runner.idle();
-    expect((await h.store.get('tw-aaaaa'))?.error).toContain('No backend is configured for thirdwheel');
+    expect((await h.store.get('tw-aaaaa'))?.error).toBe("This server can't build Video scenes.");
+    expect(await Bun.file(join(h.store.sceneDir('tw-aaaaa'), 'log.txt')).text()).toContain('No backend is configured for thirdwheel');
+  });
+
+  test("a backend's product sentence becomes the scene error; nothing available says so plainly", async () => {
+    const space = fake({ name: 'hf-space', onRun: () => { throw new ProductError('The free cloud GPU is used up for now. Try again later.', 'quota 90s vs 0s'); } });
+    const local = fake({ name: 'local', available: 'not installed' });
+    const h = await harness([space, local]);
+    await addScene(h.store, 'pe-aaaaa');
+    h.runner.enqueue('pe-aaaaa');
+    await h.runner.idle();
+    expect((await h.store.get('pe-aaaaa'))?.error).toBe('The free cloud GPU is used up for now. Try again later.');
+    expect(await Bun.file(join(h.store.sceneDir('pe-aaaaa'), 'log.txt')).text()).toContain('quota 90s vs 0s');
+
+    const h2 = await harness([fake({ name: 'hpg-worker', available: 'offline' }), fake({ name: 'local', available: 'not installed' })]);
+    await addScene(h2.store, 'na-aaaaa');
+    h2.runner.enqueue('na-aaaaa');
+    await h2.runner.idle();
+    expect((await h2.store.get('na-aaaaa'))?.error).toBe(NOTHING_AVAILABLE);
+    expect(userError('thirdwheel', [{ label: 'x', reason: 'y' }], [])).toBe(GENERIC_FAILURE.thirdwheel);
+  });
+
+  test('retry can rebuild the same inputs in another mode', async () => {
+    const local = fake({ name: 'local' });
+    const h = await harness([local]);
+    await addScene(h.store, 'mo-aaaaa', 'reconstruct', { status: 'failed', error: 'x' });
+    const r = await h.runner.retry('mo-aaaaa', undefined, 'rentfree');
+    expect(r?.mode).toBe('rentfree');
+    await h.runner.idle();
+    const s = (await h.store.get('mo-aaaaa'))!;
+    expect(s.status).toBe('ready');
+    const job = await Bun.file(join(h.root, 'jobs', 'mo-aaaaa', 'job.json')).json();
+    expect(job.mode).toBe('rentfree');
   });
 
   test('bad results are rejected with a precise message', async () => {
@@ -205,21 +244,24 @@ describe('job state machine', () => {
     await addScene(h.store, 'bad-aaaaa');
     h.runner.enqueue('bad-aaaaa');
     await h.runner.idle();
-    expect((await h.store.get('bad-aaaaa'))?.error).toBe('Fake local failed: the job did not produce world.spz.');
+    expect((await h.store.get('bad-aaaaa'))?.error).toBe(GENERIC_FAILURE.rentfree);
+    expect(await Bun.file(join(h.store.sceneDir('bad-aaaaa'), 'log.txt')).text()).toContain('Fake local failed: the job did not produce world.spz.');
 
     const unsafe = fake({ name: 'local', result: { ...WORLD_RESULT, world: { ...WORLD_RESULT.world!, file: '../../escape.spz' } } });
     const h2 = await harness([unsafe]);
     await addScene(h2.store, 'bad-bbbbb');
     h2.runner.enqueue('bad-bbbbb');
     await h2.runner.idle();
-    expect((await h2.store.get('bad-bbbbb'))?.error).toContain('unsafe path');
+    expect((await h2.store.get('bad-bbbbb'))?.error).toBe(GENERIC_FAILURE.rentfree);
+    expect(await Bun.file(join(h2.store.sceneDir('bad-bbbbb'), 'log.txt')).text()).toContain('unsafe path');
 
     const noVideo = fake({ name: 'local' });
     const h3 = await harness([noVideo]);
     await addScene(h3.store, 'bad-ccccc', 'thirdwheel');
     h3.runner.enqueue('bad-ccccc');
     await h3.runner.idle();
-    expect((await h3.store.get('bad-ccccc'))?.error).toContain('no video layer');
+    expect((await h3.store.get('bad-ccccc'))?.error).toBe(GENERIC_FAILURE.thirdwheel);
+    expect(await Bun.file(join(h3.store.sceneDir('bad-ccccc'), 'log.txt')).text()).toContain('no video layer');
   });
 
   test('one job at a time per lane, other lanes in parallel, FIFO with queue stage', async () => {
@@ -234,10 +276,13 @@ describe('job state machine', () => {
     let waiting: Scene | undefined;
     await waitFor(async () => {
       const all = await Promise.all(['q1-aaaaa', 'q2-aaaaa', 'q3-aaaaa'].map((id) => h.store.get(id)));
-      waiting = all.find((s) => s?.stage?.startsWith('Waiting for Fake local (2 ahead)')) ?? undefined;
+      waiting = all.find((s) => s?.stage === 'Waiting in line (2 ahead)') ?? undefined;
       return !!waiting;
     });
     expect(waiting?.status).toBe('queued');
+    // The count follows the line: once the first job is done, the last one is told it is next but one.
+    const last = waiting!.id;
+    await waitFor(async () => (await h.store.get(last))?.stage === 'Waiting in line (1 ahead)');
     await h.runner.idle();
     expect(local.maxConcurrent).toBe(1);
     expect([...local.runs].sort()).toEqual(['q1-aaaaa', 'q2-aaaaa', 'q3-aaaaa']);
@@ -366,7 +411,7 @@ echo "finished"`);
 
   test('a failing pipeline surfaces its own error text', async () => {
     const p = await fakePython(`
-echo '{"stage":"Estimating depth","progress":0.2,"error":"Video Depth Anything weights are missing: run scripts/setup-local.sh"}' > "$JOB/progress.json"
+echo '{"stage":"Estimating depth","progress":0.2,"error":"We couldn'"'"'t load the depth model. Try again in a minute.","detail":"depth weights are missing: run scripts/setup-local.sh"}' > "$JOB/progress.json"
 echo "Traceback: boom" >&2
 touch "$JOB/FAILED"
 exit 3`);
@@ -376,8 +421,11 @@ exit 3`);
     await h.runner.idle();
     const s = (await h.store.get('lf-aaaaa'))!;
     expect(s.status).toBe('failed');
-    expect(s.error).toBe('Local pipeline failed: Video Depth Anything weights are missing: run scripts/setup-local.sh.');
-    expect(await Bun.file(join(h.store.sceneDir('lf-aaaaa'), 'log.txt')).text()).toContain('Traceback: boom');
+    expect(s.error).toBe("We couldn't load the depth model. Try again in a minute.");
+    expect(s.stage).toBe('Estimating depth');
+    const log = await Bun.file(join(h.store.sceneDir('lf-aaaaa'), 'log.txt')).text();
+    expect(log).toContain('Traceback: boom');
+    expect(log).toContain('depth weights are missing: run scripts/setup-local.sh');
   });
 
   test('a crash without markers reports the exit code and the last output', async () => {
@@ -386,7 +434,8 @@ exit 3`);
     await addScene(h.store, 'lc-aaaaa', 'thirdwheel');
     h.runner.enqueue('lc-aaaaa');
     await h.runner.idle();
-    expect((await h.store.get('lc-aaaaa'))?.error).toBe(
+    expect((await h.store.get('lc-aaaaa'))?.error).toBe(GENERIC_FAILURE.thirdwheel);
+    expect(await Bun.file(join(h.store.sceneDir('lc-aaaaa'), 'log.txt')).text()).toContain(
       'Local pipeline failed: the local pipeline stopped without finishing (exit 139): Segmentation fault.',
     );
   });
@@ -405,6 +454,31 @@ exit 3`);
     expect(pidAlive(child)).toBe(true);
     await h.runner.cancel('lk-aaaaa');
     await waitFor(() => !pidAlive(state.pid) && !pidAlive(child), 3000);
+  });
+
+  test('after a restart, a pipeline that already failed is reported once, on its own backend only', async () => {
+    const p = await fakePython('exit 0');
+    const space = fake({ name: 'hf-space' });
+    const h = await harness([space, localDriver({ ...p, cwd: bin, pollMs: 50 })], ['hf-space', 'local']);
+    await addScene(h.store, 'rf-aaaaa', 'rentfree', { status: 'running', backend: 'local' });
+    const jobDir = join(h.root, 'jobs', 'rf-aaaaa');
+    await mkdir(join(jobDir, 'out'), { recursive: true });
+    await writeFile(join(jobDir, 'job.json'), JSON.stringify({ id: 'rf-aaaaa-a1', mode: 'rentfree', params: { attempt: 1 } }));
+    await writeFile(
+      join(jobDir, 'state.json'),
+      JSON.stringify({ sceneId: 'rf-aaaaa', jobId: 'rf-aaaaa-a1', attempt: 1, backend: 'local', pid: 4194000, only: 'local' }),
+    );
+    const user = 'This photo is too small (1x1). Use one at least 320 px on the short side.';
+    await writeFile(join(jobDir, 'progress.json'), JSON.stringify({ stage: 'Measuring the depth of the photo', progress: 0.1, error: user, detail: 'input photo is 1x1', done: true }));
+    await writeFile(join(jobDir, 'FAILED'), `${user}\ninput photo is 1x1\n`);
+    expect(await h.runner.recover()).toEqual(['rf-aaaaa']);
+    await h.runner.idle();
+    const s = (await h.store.get('rf-aaaaa'))!;
+    expect(s.status).toBe('failed');
+    expect(s.error).toBe(user);
+    // Not started again anywhere: the backend restriction survived the restart and the result was reported as is.
+    expect(space.runs).toEqual([]);
+    expect((await Bun.file(join(jobDir, 'state.json')).json()).attempt).toBe(1);
   });
 
   test('after a restart the runner re-attaches to a pipeline that is still running', async () => {

@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 import splat_io as sio
-from conftest import SAMPLES, random_splats, synthetic_room
+from gpu_helpers import SAMPLES, random_splats, synthetic_room
 
 
 def _quat_close(a: np.ndarray, b: np.ndarray, tol: float) -> bool:

@@ -115,7 +115,7 @@ describe('output parsing', () => {
   test('batch poll: pending, running, completed, failed', () => {
     const pending = parseBatchPoll('::tw:squeue::\nPENDING|Priority|0:00\n::tw:sacct::\nPENDING|0:0|00:00:00\n::tw:progress::\n\n::tw:markers::\n::tw:failed::\n\n::tw:log::\n::tw:end::\n');
     expect(pending).toMatchObject({ state: 'PENDING', reason: 'Priority', terminal: false, done: false, failed: false });
-    expect(batchStage(pending)).toBe('Waiting for a HiPerGator GPU (other jobs first)');
+    expect(batchStage(pending)).toBe('Waiting for a GPU (other jobs first)');
     const running = parseBatchPoll('::tw:squeue::\nRUNNING|None|1:02\n::tw:sacct::\nRUNNING|0:0|00:01:02\n::tw:progress::\n{"stage":"Generating the world","progress":0.4}\n::tw:markers::\n::tw:end::');
     expect(running).toMatchObject({ state: 'RUNNING', terminal: false, progress: { stage: 'Generating the world', progress: 0.4 } });
     expect(running.reason).toBeUndefined();
@@ -319,10 +319,61 @@ echo "$ID;hipergator"
     expect(s.status).toBe('ready');
     expect(s.backend).toBe('hpg-worker');
     expect(await Bun.file(join(store.sceneDir(id), 'world.spz')).text()).toBe('WORKER-SPZ');
-    expect(stages).toContain('uploading:Sending to HiPerGator');
+    expect(stages).toContain('uploading:Sending to the GPU cluster');
     expect(stages).toContain('running:Generating the world');
     expect(stages.some((x) => x.startsWith('downloading:'))).toBe(true);
     expect(await readdir(join(jobs, 'done'))).toEqual([`${id}-a1`]);
+  });
+
+  test('hpg-worker: queue time while the worker is still loading its models does not count against the claim timeout', async () => {
+    const jobs = join(lcfg.root, 'jobs');
+    await mkdir(join(jobs, 'running'), { recursive: true });
+    await mkdir(join(jobs, 'done'), { recursive: true });
+    const t0 = Date.now();
+    // Loading for 1.2 s, then idle: the claim timeout is 0.4 s, so only the warm-up allowance keeps the job.
+    const status = () => (Date.now() - t0 < 1200 ? 'loading' : 'idle');
+    const beat = () => writeFile(join(jobs, 'worker.json'), JSON.stringify({ time: Date.now() / 1000, host: 'c1', gpu: 'GPU', status: status() }));
+    await beat();
+    const claimed = new Set<string>();
+    const timer = setInterval(async () => {
+      await beat();
+      if (status() === 'loading') return;
+      for (const name of await readdir(join(jobs, 'queue')).catch(() => [])) {
+        if (claimed.has(name)) continue;
+        claimed.add(name);
+        const dir = join(jobs, 'running', name);
+        await rename(join(jobs, 'queue', name), dir);
+        await mkdir(join(dir, 'out'), { recursive: true });
+        await writeFile(join(dir, 'out', 'world.spz'), 'SPZ');
+        await writeFile(join(dir, 'out', 'scene.json'), JSON.stringify({ world: { file: 'world.spz', transform: { position: [0, 0, 0], quaternion: [0, 0, 0, 1], scale: 1 }, floorY: null, source: 'flashworld' } }));
+        await writeFile(join(dir, 'DONE'), '');
+        await rename(dir, join(jobs, 'done', name));
+      }
+    }, 100);
+    try {
+      const store = new SceneStore(join(base, 'warm-scenes'));
+      const id = 'warm-aaaaa';
+      await mkdir(join(store.sceneDir(id), 'input'), { recursive: true });
+      await writeFile(join(store.sceneDir(id), 'input', '00.jpg'), 'photo');
+      await store.save({ id, name: id, mode: 'rentfree', status: 'queued', createdAt: new Date().toISOString(), updatedAt: '', input: { files: ['input/00.jpg'] } });
+      const probe = { online: async () => ({ online: true }), worker: () => workerAlive(lcfg) };
+      const stages: string[] = [];
+      const runner = new JobRunner({
+        store,
+        jobsDir: join(base, 'warm-jobs'),
+        drivers: [hpgWorkerDriver({ probe, cfg: () => lcfg, pollMs: 100, claimTimeoutMs: 400, loadingTimeoutMs: 10_000 })],
+        emit: (s) => s.stage && stages.push(s.stage),
+        reportIntervalMs: 10,
+      });
+      runner.enqueue(id);
+      await runner.idle();
+      const s = (await store.get(id))!;
+      expect(s.error).toBeUndefined();
+      expect(s.status).toBe('ready');
+      expect(stages).toContain('Waiting for the GPU to warm up');
+    } finally {
+      clearInterval(timer);
+    }
   });
 
   test('hpg-worker is unavailable when the heartbeat is stale', async () => {
@@ -343,7 +394,7 @@ echo "$ID;hipergator"
     expect(s.caption).toBe('from slurm');
     expect(s.world?.floorY).toBe(0);
     expect(await Bun.file(join(store.sceneDir(id), 'world.spz')).text()).toBe('SPZ');
-    expect(stages).toContain('queued:Waiting for a HiPerGator GPU (GPUs busy)');
+    expect(stages).toContain('queued:Waiting for a GPU (all busy)');
     expect(stages).toContain('running:Generating the world');
     const state = await Bun.file(join(base, 'hpg-batch-jobs', id, 'state.json')).json();
     expect(state.slurmId).toBe('4242');
@@ -372,7 +423,10 @@ echo "$ID;hipergator"
       await runner.idle();
       const s = (await store.get(id))!;
       expect(s.status).toBe('failed');
-      expect(s.error).toContain('no HiPerGator GPU became free within 0 min (Slurm: Resources); the request was cancelled');
+      expect(s.error).toBe('No GPU became free in time. Try again in a few minutes.');
+      expect(await Bun.file(join(store.sceneDir(id), 'log.txt')).text()).toContain(
+        'no HiPerGator GPU became free within 0 min (Slurm: Resources); the request was cancelled',
+      );
       expect((await Bun.file(join(base, 'slurm-4242')).text()).trim()).toBe('CANCELLED');
     } finally {
       await rm(join(base, 'stay-pending'), { force: true });

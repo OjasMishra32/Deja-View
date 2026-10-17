@@ -13,7 +13,7 @@ from PIL import Image
 
 import anysplat_run as asr
 import splat_io as sio
-from conftest import synthetic_room
+from gpu_helpers import synthetic_room
 
 
 def test_choose_views():

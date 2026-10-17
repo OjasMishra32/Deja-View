@@ -1,12 +1,14 @@
-// Third Wheel video layer: plays a tw-pack-v1 RGB + depth + mask video as a 3D relief placed at
-// the video camera's pose (see VideoLayer in shared/types.ts).
+// Video layer: plays a tw-pack-v1 RGB + depth + mask video as a 3D relief placed at the video
+// camera's pose (see VideoLayer in shared/types.ts).
 //
 // Pipeline per video frame:
 //   1. One THREE.VideoTexture holds the packed frame (raw values; RGB is linearised in-shader).
 //   2. A small GPU pre-pass evaluates every grid vertex once: reads depth and mask around it,
 //      pulls the silhouette ring onto the person, snaps blurred occlusion ramps (arm over torso)
 //      to the nearer layer, smooths 8-bit terracing elsewhere. Result: a (cols+1) x (rows+1)
-//      texture of processed inverse depth.
+//      texture of processed inverse depth. A second pre-pass finds, behind every occluder (an
+//      arm over the torso, a blender held or standing in front of the person), the person on both
+//      sides of it, and stores the depth and colour of the person probably hidden there.
 //   3. The grid mesh's vertex shader unprojects that depth with the pinhole intrinsics into the
 //      OpenGL camera frame (x right, y up, looking down -Z) and compares neighbouring depths to
 //      pass an edge factor.
@@ -15,6 +17,11 @@
 //      the processed depths and drops it if the current view sees it stretched: a triangle that
 //      bridges an occlusion step lies along the video camera's rays, so it is a sliver from where
 //      the video was shot (and fills the crack there) but a rubber sheet from anywhere else.
+//
+// Back sheet: a second grid at that hidden depth, drawn only where it exists. From the video
+// camera it lies exactly behind the occluder; from anywhere else it closes what would otherwise be
+// a gap cut through the person (from a standing eye above a camera at table height, a blender in
+// front of the cook cuts a column through her torso).
 //
 // Compositing with the splat world (Spark draws splats in the transparent pass, depth-tested,
 // without depth writes):
@@ -152,6 +159,57 @@ export function resolveSceneFile(baseUrl: string, file: string): string {
   return base + file.replace(/^\.\//, '');
 }
 
+/** Samples along one search direction from a vertex: index k is (k + 1) steps away. */
+export interface SearchLine {
+  mask: ArrayLike<number>;
+  /** Inverse depth of each sample. */
+  inv: ArrayLike<number>;
+}
+
+/**
+ * Back-sheet search along one direction (mirrors findPerson in the fill pre-pass, which reads each
+ * depth two cells further into the person): the first person sample farther than `limit`
+ * (inverse depth), averaged with up to two following samples of the same surface.
+ */
+export function findHiddenAlong(line: SearchLine, limit: number, step = 1): { dist: number; inv: number } | null {
+  const n = Math.min(line.mask.length, line.inv.length);
+  for (let k = 0; k < n; k++) {
+    if (line.mask[k] < 0.5) continue;
+    const iq = line.inv[k];
+    if (iq > limit) continue;
+    let sum = iq, cnt = 1;
+    for (let e = 1; e <= 2 && k + e < n; e++) {
+      const ir = line.inv[k + e];
+      if (line.mask[k + e] < 0.5 || ir > limit || Math.abs(ir - iq) > 0.15 * iq) break;
+      sum += ir;
+      cnt++;
+    }
+    return { dist: (k + 1) * step, inv: sum / cnt };
+  }
+  return null;
+}
+
+/**
+ * Inverse depth of the person hidden behind a vertex of inverse depth c, from the four search
+ * lines (+x, -x, +y, -y), or null when nothing is hidden there (mirrors fillBehind).
+ */
+export function hiddenBehind(
+  c: number,
+  lines: [SearchLine, SearchLine, SearchLine, SearchLine],
+  t: Pick<typeof TW_TUNING, 'fillOcclusion' | 'fillMaxSpan' | 'fillPair' | 'fillStep'> = TW_TUNING,
+): number | null {
+  const limit = c / (1 + t.fillOcclusion);
+  const f = lines.map((l) => findHiddenAlong(l, limit, t.fillStep));
+  const pair = (a: typeof f[number], b: typeof f[number]) =>
+    !!a && !!b && a.dist + b.dist <= t.fillMaxSpan && Math.abs(a.inv - b.inv) <= t.fillPair * Math.max(a.inv, b.inv);
+  const px = pair(f[0], f[1]) ? 1 : 0;
+  const py = pair(f[2], f[3]) ? 1 : 0;
+  if (px + py === 0) return null;
+  const w = [px, px, py, py].map((p, i) => (p && f[i] ? p / Math.max(f[i]!.dist, 1) : 0));
+  const sw = w.reduce((s, v) => s + v, 0);
+  return f.reduce((s, h, i) => s + (h ? h.inv * w[i] : 0), 0) / sw;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Tuning. Values are relative, so they hold for any resolution and metric scale.
 
@@ -193,6 +251,24 @@ export const TW_TUNING = {
   silHigh: 3.8,
   anyLow: 6,
   anyHigh: 7.5,
+  /**
+   * Back sheet: a vertex with the person on both sides (within fillSteps x fillStep grid cells,
+   * left/right or above/below, at most fillMaxSpan cells apart) who are farther than the vertex by
+   * more than fillOcclusion (relative inverse depth) is an occluder in front of the person; the
+   * back sheet carries the person's depth and colour there. Gaps to the wall (farther than the
+   * person) never get one.
+   */
+  fillSteps: 24,
+  fillStep: 2,
+  fillOcclusion: 0.12,
+  fillMaxSpan: 96,
+  /** The two sides of a pair must agree in inverse depth within this fraction. */
+  fillPair: 0.25,
+  /** Relative step between neighbouring back-sheet vertices above which no triangle joins them. */
+  backStep: 0.3,
+  /** Back-sheet fragments seen this much more face-on than from the video camera dissolve (dithered). */
+  backStretchLow: 4,
+  backStretchHigh: 6,
   /** View-angle fade: full opacity up to fadeStart degrees off the video axis, fadeMin at fadeEnd. */
   fadeStartDeg: 80,
   fadeEndDeg: 155,
@@ -248,14 +324,77 @@ const PREPASS_FRAG = /* glsl */ `
 ${COMMON}
 uniform float uSplit;
 uniform float uSmoothTol;
+uniform float uFillStep;
+uniform float uFillOccl;
+uniform float uFillMaxSpan;
+uniform float uFillPair;
 
 float invAt(vec2 st) {
   float v = lumaOf(texture2D(uTex, bandUv(uDepthRect, st)).rgb);
   return uInvDepth.x + v * uInvDepth.y;
 }
 
+// Walks from st along dir (grid cells) to the first person sample farther than inverse depth
+// limit. Returns (found, distance in cells, its inverse depth) and the colour there.
+vec3 findPerson(vec2 st, vec2 dir, float limit, out vec3 col) {
+  col = vec3(0.0);
+  for (int k = 1; k <= TW_FILL_STEPS; k++) {
+    vec2 p = st + dir * (float(k) * uFillStep) / uGrid;
+    if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0) break;
+    if (maskAt(p) < 0.5) continue;
+    // two cells further in, away from the blend at the outline, if that is still the person
+    vec2 q = clamp(p + dir * 2.0 / uGrid, vec2(0.0), vec2(1.0));
+    if (maskAt(q) < 0.5) q = p;
+    float iq = invAt(q);
+    if (iq > limit) continue;  // the occluder itself (or something as near): keep looking
+    // average with the next two samples along the way when they are the same surface, so
+    // neighbouring vertices agree on the hidden depth
+    col = texture2D(uTex, bandUv(uRgbRect, q)).rgb;
+    float sum = iq, n = 1.0;
+    for (int e = 1; e <= 2; e++) {
+      vec2 r = clamp(q + dir * (float(e) * uFillStep) / uGrid, vec2(0.0), vec2(1.0));
+      float ir = invAt(r);
+      if (maskAt(r) < 0.5 || ir > limit || abs(ir - iq) > 0.15 * iq) break;
+      sum += ir;
+      col += texture2D(uTex, bandUv(uRgbRect, r)).rgb;
+      n += 1.0;
+    }
+    col /= n;
+    return vec3(1.0, float(k) * uFillStep, sum / n);
+  }
+  return vec3(0.0);
+}
+
+// Inverse depth (x) and colour (yzw) of the person hidden behind st, or x = 0 when there is none.
+vec4 fillBehind(vec2 st, float c) {
+  float limit = c / (1.0 + uFillOccl);
+  vec3 c0, c1, c2, c3;
+  vec3 a0 = findPerson(st, vec2(1.0, 0.0), limit, c0);
+  vec3 a1 = findPerson(st, vec2(-1.0, 0.0), limit, c1);
+  vec3 a2 = findPerson(st, vec2(0.0, 1.0), limit, c2);
+  vec3 a3 = findPerson(st, vec2(0.0, -1.0), limit, c3);
+  // a pair counts when both sides are one surface (similar depth): a hand and the torso behind
+  // it at different depths would otherwise be bridged by a slab where there is only wall
+  float px = a0.x * a1.x * step(a0.y + a1.y, uFillMaxSpan) * step(abs(a0.z - a1.z), uFillPair * max(a0.z, a1.z));
+  float py = a2.x * a3.x * step(a2.y + a3.y, uFillMaxSpan) * step(abs(a2.z - a3.z), uFillPair * max(a2.z, a3.z));
+  if (px + py < 0.5) return vec4(0.0);
+  // (distances are 0 where nothing was found: guard the division, or the 0/0 poisons the sum)
+  float w0 = px / max(a0.y, 1.0), w1 = px / max(a1.y, 1.0), w2 = py / max(a2.y, 1.0), w3 = py / max(a3.y, 1.0);
+  float sw = w0 + w1 + w2 + w3;
+  float pinv = (a0.z * w0 + a1.z * w1 + a2.z * w2 + a3.z * w3) / sw;
+  return vec4(pinv, (c0 * w0 + c1 * w1 + c2 * w2 + c3 * w3) / sw);
+}
+
 void main() {
   vec2 st = floor(gl_FragCoord.xy) / uGrid;
+#ifdef TW_FILL_COLOR
+  // Back sheet: rgb = colour of the person hidden behind this vertex, a = their inverse depth
+  // (8 bits over the near/far range, at least 1/255), or a = 0 when nothing is hidden here.
+  vec4 behind = fillBehind(st, invAt(st));
+  float ub = behind.x > 0.0 ? clamp((behind.x - uInvDepth.x) / uInvDepth.y, 1.0 / 255.0, 1.0) : 0.0;
+  gl_FragColor = vec4(behind.yzw, ub);
+  return;
+#endif
   vec2 dx = vec2(1.0 / uGrid.x, 0.0);
   vec2 dy = vec2(0.0, 1.0 / uGrid.y);
 
@@ -459,6 +598,88 @@ void main() {
 }
 `;
 
+// Back sheet: the person hidden behind occluders, at the depth and colour the fill pre-pass found.
+const BACK_VERT = /* glsl */ `
+${COMMON}
+uniform sampler2D uFill;
+uniform float uBackStep;
+uniform mat4 uWorldToLocal;
+
+varying vec3 vRgb;
+varying float vHas;   // 1 where this vertex has something hidden behind it
+varying float vEdge;  // 1 where the back sheet jumps in depth to a neighbour
+varying vec3 vP;      // position in the video camera frame
+varying vec3 vToEye;  // from this point to the eye, in the video camera frame
+
+void main() {
+  vec2 st = position.xy;
+  ivec2 ij = ivec2(floor(st * uGrid + 0.5));
+  // smoothed over the 3x3 vertices that have a hidden surface (a vertex without one borrows it
+  // when most neighbours have it, which closes one-vertex gaps); a step over uBackStep to a
+  // neighbour means two different surfaces, and no triangle of the sheet is drawn across it
+  float sum = 0.0, cnt = 0.0;
+  vec3 rgb = vec3(0.0);
+  // (5 rows tall: the searches run along rows, so neighbouring rows disagree the most)
+  for (int dy = -2; dy <= 2; dy++) {
+    for (int dx = -1; dx <= 1; dx++) {
+      vec4 tq = texelFetch(uFill, clamp(ij + ivec2(dx, dy), ivec2(0), ivec2(uGrid)), 0);
+      if (tq.a <= 0.0) continue;
+      float w = dx == 0 && dy == 0 ? 3.0 : abs(dy) == 2 ? 0.5 : 1.0;
+      sum += (uInvDepth.x + tq.a * uInvDepth.y) * w;
+      rgb += tq.rgb * w;
+      cnt += w;
+    }
+  }
+  float inv = cnt > 0.0 ? sum / cnt : 1.0;
+  float j = 0.0;
+  for (int k = 0; k < 4; k++) {
+    ivec2 o = k == 0 ? ivec2(1, 0) : k == 1 ? ivec2(-1, 0) : k == 2 ? ivec2(0, 1) : ivec2(0, -1);
+    vec4 tq = texelFetch(uFill, clamp(ij + o, ivec2(0), ivec2(uGrid)), 0);
+    if (tq.a > 0.0) j = max(j, abs(uInvDepth.x + tq.a * uInvDepth.y - inv) / inv);
+  }
+  vHas = cnt >= 6.0 ? 1.0 : 0.0;
+  vRgb = cnt > 0.0 ? rgb / cnt : vec3(0.0);
+  vEdge = step(uBackStep, j);
+  vec3 p = unproject(st, inv);
+  vP = p;
+  vToEye = (uWorldToLocal * vec4(cameraPosition, 1.0)).xyz - p;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+}
+`;
+
+const BACK_FRAG = /* glsl */ `
+uniform vec2 uBackStretch;
+
+varying vec3 vRgb;
+varying float vHas;
+varying float vEdge;
+varying vec3 vP;
+varying vec3 vToEye;
+
+vec3 srgbToLinear(vec3 c) {
+  return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
+}
+
+void main() {
+  // only whole triangles of the sheet, and none that bridge a step in it
+  if (vHas < 0.999 || vEdge > 0.001) discard;
+  // a guessed surface: never show it much more face-on than the video camera saw that spot
+  vec3 n = cross(dFdx(vP), dFdy(vP));
+  float nl = length(n);
+  if (nl > 0.0) {
+    n /= nl;
+    float stretch = abs(dot(n, normalize(vToEye))) / max(abs(dot(n, normalize(vP))), 1e-3);
+    if (stretch > mix(uBackStretch.x, uBackStretch.y, fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453))) discard;
+  }
+#ifdef TW_DEBUG
+  gl_FragColor = vec4(0.1, 0.85, 0.95, 1.0);
+#else
+  gl_FragColor = vec4(srgbToLinear(vRgb), 1.0);
+#endif
+  #include <colorspace_fragment>
+}
+`;
+
 // ---------------------------------------------------------------------------------------------
 
 /**
@@ -517,10 +738,10 @@ function smoothstep(e0: number, e1: number, x: number): number {
 }
 
 const MEDIA_ERRORS: Record<number, string> = {
-  1: 'loading was aborted',
-  2: 'a network error interrupted the download',
-  3: 'the browser could not decode it',
-  4: 'the format is not supported or the file is missing',
+  1: 'loading the video was cancelled',
+  2: 'a network error interrupted the video download',
+  3: 'this browser could not decode the video',
+  4: 'the video file is missing or in a format this browser cannot play',
 };
 
 export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: THREE.WebGLRenderer): VideoLayerHandle {
@@ -564,6 +785,17 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
     stencilBuffer: false,
   });
   proc.texture.colorSpace = THREE.NoColorSpace;
+  // Colour of the person where they are filled in behind an object, one texel per grid vertex.
+  const fillRt = new THREE.WebGLRenderTarget(cols + 1, rows + 1, {
+    format: THREE.RGBAFormat,
+    type: THREE.UnsignedByteType,
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+    generateMipmaps: false,
+    depthBuffer: false,
+    stencilBuffer: false,
+  });
+  fillRt.texture.colorSpace = THREE.NoColorSpace;
 
   const shared = {
     uTex: { value: texture as THREE.Texture },
@@ -578,9 +810,27 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
     uGrid: { value: new THREE.Vector2(cols, rows) },
     uSplit: { value: T.splitThreshold },
   };
+  const prepassUniforms = {
+    ...shared,
+    uSmoothTol: { value: T.smoothTolerance },
+    uFillStep: { value: T.fillStep },
+    uFillOccl: { value: T.fillOcclusion },
+    uFillMaxSpan: { value: T.fillMaxSpan },
+    uFillPair: { value: T.fillPair },
+  };
   const prepassMat = new THREE.ShaderMaterial({
     name: 'ThirdWheelDepthPrepass',
-    uniforms: { ...shared, uSmoothTol: { value: T.smoothTolerance } },
+    uniforms: prepassUniforms,
+    defines: { TW_FILL_STEPS: T.fillSteps },
+    vertexShader: PREPASS_VERT,
+    fragmentShader: PREPASS_FRAG,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const fillMat = new THREE.ShaderMaterial({
+    name: 'ThirdWheelFillColour',
+    uniforms: prepassUniforms,
+    defines: { TW_FILL_STEPS: T.fillSteps, TW_FILL_COLOR: 1 },
     vertexShader: PREPASS_VERT,
     fragmentShader: PREPASS_FRAG,
     depthTest: false,
@@ -646,9 +896,31 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
   fringe.frustumCulled = false;
   fringe.renderOrder = 100; // after the SparkRenderer (renderOrder 0) in the transparent pass
 
+  const backMat = new THREE.ShaderMaterial({
+    name: 'ThirdWheelBack',
+    uniforms: {
+      ...shared,
+      uFill: { value: fillRt.texture as THREE.Texture },
+      uBackStep: { value: T.backStep },
+      uBackStretch: { value: new THREE.Vector2(T.backStretchLow, T.backStretchHigh) },
+      uWorldToLocal: uniforms.uWorldToLocal,
+    },
+    vertexShader: BACK_VERT,
+    fragmentShader: BACK_FRAG,
+    defines: debug ? { TW_DEBUG: 1 } : {},
+    side: THREE.DoubleSide,
+    transparent: false,
+    depthWrite: true,
+    depthTest: true,
+  });
+  const back = new THREE.Mesh(geometry, backMat);
+  back.name = 'tw-back';
+  back.frustumCulled = false;
+  back.renderOrder = 0;
+
   const object = new THREE.Group();
   object.name = 'ThirdWheelVideo';
-  object.add(core, fringe);
+  object.add(back, core, fringe);
   const [px, py, pz] = layer.cameraPose.position;
   const [qx, qy, qz, qw] = layer.cameraPose.quaternion;
   object.position.set(px, py, pz);
@@ -658,7 +930,7 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
   // Where the person is, in the video camera frame. Refined from the mask a few times a second.
   const subject = new THREE.Vector3(0, 0, -2);
   let subjectKnown = false;
-  object.userData.thirdWheel = { subject, uniforms, fringeUniforms, tuning: T, url, grid: [cols, rows] };
+  object.userData.thirdWheel = { subject, uniforms, fringeUniforms, tuning: T, url, grid: [cols, rows], targets: { proc, fill: fillRt } };
 
   let userOpacity = 1;
   let viewFade = 1;
@@ -677,6 +949,8 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
     const fading = o < 0.995;
     uniforms.uOpacity.value = o;
     core.visible = !fading;
+    // the back sheet is opaque: it only shows with the person at full opacity
+    back.visible = !fading;
     // While fading, the blended pass draws everything and writes depth for self-occlusion.
     fringeUniforms.uCut.value = fading ? 2 : T.coreCut;
     fringeMat.depthWrite = fading;
@@ -706,7 +980,12 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
     renderer.xr.enabled = false;
     renderer.autoClear = false;
     renderer.setRenderTarget(proc);
+    prepassQuad.material = prepassMat;
     renderer.render(prepassScene, prepassCam);
+    renderer.setRenderTarget(fillRt);
+    prepassQuad.material = fillMat;
+    renderer.render(prepassScene, prepassCam);
+    prepassQuad.material = prepassMat;
     renderer.setRenderTarget(prevTarget);
     renderer.autoClear = prevAutoClear;
     renderer.xr.enabled = prevXr;
@@ -793,7 +1072,8 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
       () => {
         if (ready_) return;
         const code = video.error?.code ?? 0;
-        reject(new Error(`Third Wheel video failed to load (${url}): ${MEDIA_ERRORS[code] ?? 'unknown error'}`));
+        console.warn(`[thirdwheel] ${url}: media error ${code}`);
+        reject(new Error(`The room still works, but ${MEDIA_ERRORS[code] ?? 'the video stopped loading for an unknown reason'}.`));
       },
       { once: true },
     );
@@ -894,11 +1174,14 @@ export function createVideoLayer(layer: VideoLayer, baseUrl: string, renderer: T
       object.removeFromParent();
       texture.dispose();
       proc.dispose();
+      fillRt.dispose();
       geometry.dispose();
       prepassQuad.geometry.dispose();
       prepassMat.dispose();
+      fillMat.dispose();
       coreMat.dispose();
       fringeMat.dispose();
+      backMat.dispose();
     },
   };
   return handle;

@@ -1,4 +1,4 @@
-/* ThirdWheel: landing, gallery and capture. Dark, one accent. */
+/* Déjà View: landing, gallery and capture. Dark, one accent, and an echo of everything. */
 
 :root {
   --bg: #0b0b0d;
@@ -132,6 +132,25 @@ select {
   color: var(--muted);
 }
 
+.skip {
+  position: fixed;
+  left: 12px;
+  top: 10px;
+  z-index: 300;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+  text-decoration: none;
+  translate: 0 -160%;
+  transition: translate 0.2s var(--ease);
+}
+
+.skip:focus-visible {
+  translate: 0 0;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -241,7 +260,7 @@ select {
   z-index: 50;
   backdrop-filter: blur(14px) saturate(140%);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
-  background: rgba(11, 11, 13, 0.72);
+  background: rgba(11, 11, 13, 0.86);
   border-bottom: 1px solid var(--line);
 }
 
@@ -257,14 +276,21 @@ select {
   align-items: center;
   gap: 10px;
   font-weight: 800;
-  font-size: 20px;
-  letter-spacing: -0.03em;
+  font-size: 21px;
+  letter-spacing: -0.035em;
   text-decoration: none;
+  white-space: nowrap;
 }
 
-.brand svg {
-  width: 34px;
-  height: 18px;
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  transition: transform 0.35s var(--ease);
+}
+
+.brand:hover .brand-mark {
+  transform: rotate(-6deg) scale(1.04);
 }
 
 .topnav {
@@ -348,11 +374,48 @@ select {
 
 .hero h1 {
   margin: 18px 0 0;
-  font-size: clamp(46px, 7.2vw, 108px);
+  font-size: clamp(54px, 7.4vw, 112px);
   line-height: 0.9;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.034em;
   font-weight: 800;
   font-variation-settings: 'wdth' 88;
+}
+
+/* Déjà vu: each line of the statement has an outlined double that slides out of register. */
+.echo {
+  position: relative;
+  isolation: isolate;
+}
+
+.echo::before {
+  content: attr(data-echo);
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: -1;
+  white-space: nowrap;
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(212, 255, 58, 0.42);
+  animation: echo 1.4s 0.55s var(--ease) both;
+  pointer-events: none;
+}
+
+@keyframes echo {
+  from {
+    translate: 0 0;
+    opacity: 0;
+  }
+  to {
+    translate: 0.05em 0.03em;
+    opacity: 1;
+  }
+}
+
+.hero h1 .kicker {
+  margin-top: 0.16em;
+  font-size: 0.5em;
+  letter-spacing: -0.035em;
+  line-height: 1;
 }
 
 .hero h1 .line {
@@ -376,7 +439,7 @@ select {
 }
 
 .hero h1 .line:nth-child(3) > span {
-  animation-delay: 0.16s;
+  animation-delay: 0.2s;
 }
 
 @keyframes rise {
@@ -393,11 +456,11 @@ select {
 
 .squiggle {
   position: absolute;
-  left: -2%;
-  right: -2%;
-  bottom: -0.12em;
-  width: 104%;
-  height: 0.22em;
+  left: -1%;
+  right: -1%;
+  bottom: -0.16em;
+  width: 102%;
+  height: 0.26em;
   overflow: visible;
 }
 
@@ -855,13 +918,13 @@ section {
   color: var(--text);
 }
 
-.badge.mode-rentfree {
+.badge.mode-photo {
   background: var(--accent);
   color: var(--accent-ink);
   border-color: var(--accent);
 }
 
-.badge.mode-thirdwheel {
+.badge.mode-video {
   color: var(--accent);
   border-color: rgba(212, 255, 58, 0.55);
 }
@@ -955,6 +1018,10 @@ section {
 .stage-line b {
   color: var(--text);
   font-weight: 500;
+}
+
+.error-box > span {
+  display: block;
 }
 
 .error-box {
@@ -1181,23 +1248,39 @@ kbd {
   gap: 12px;
 }
 
+.footer-brand {
+  color: var(--muted);
+}
+
+/* Sign-off: the name drawn as an outline that fills in from left to right, the way a remembered
+   place comes back. The filled copy sits exactly on the outline, so the two never misregister. */
 .bigword {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
   margin: clamp(48px, 8vw, 110px) 0 0;
-  font-size: clamp(64px, 17vw, 260px);
-  line-height: 0.8;
+  padding: 0.16em 0.04em 0.22em 0; /* room for the accents above and the j below */
+  font-size: clamp(56px, 25.4vw, 380px); /* spans the column at every width */
+  line-height: 0.84;
   font-weight: 800;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.04em;
   font-variation-settings: 'wdth' 80;
   color: transparent;
-  -webkit-text-stroke: 1px rgba(255, 255, 255, 0.12);
+  -webkit-text-stroke: 1px rgba(243, 241, 234, 0.16);
   white-space: nowrap;
   user-select: none;
   overflow: hidden;
 }
 
-.bigword span {
-  -webkit-text-stroke: 0;
+.bigword::after {
+  content: attr(data-word);
+  position: absolute;
+  inset: 0;
+  padding: inherit;
   color: var(--accent);
+  -webkit-text-stroke: 0;
+  -webkit-mask-image: linear-gradient(100deg, transparent 22%, rgba(0, 0, 0, 0.35) 48%, #000 82%);
+  mask-image: linear-gradient(100deg, transparent 22%, rgba(0, 0, 0, 0.35) 48%, #000 82%);
 }
 
 .toast {
@@ -1279,7 +1362,7 @@ kbd {
 
 .mode-pick {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1327,6 +1410,7 @@ kbd {
 }
 
 .mode-opt svg {
+  flex: none;
   width: 30px;
   height: 30px;
   color: var(--accent);
@@ -1418,16 +1502,30 @@ kbd {
 }
 
 .pv .pv-ph {
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   width: 100%;
   height: 100%;
+  padding-bottom: 22px;
   color: var(--dim);
+  background:
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.025) 0 10px, transparent 10px 20px),
+    var(--surface-2);
 }
 
 .pv .pv-ph svg {
   width: 34%;
-  max-width: 44px;
+  max-width: 40px;
+}
+
+.pv .pv-ph span {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .side-card .lan-url {
@@ -1712,8 +1810,13 @@ kbd {
     align-items: flex-start;
   }
 
-  .submit-row .btn {
+  .submit-row .btn,
+  .cta-row .btn {
     width: 100%;
+  }
+
+  .mode .btn {
+    align-self: stretch;
   }
 
   .hero-art .tag.made {

@@ -3,10 +3,24 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>ThirdWheel</title>
-    <meta name="description" content="Snap any room and live in it rent free. Film your friend cooking and third-wheel it in VR." />
+    <title>Déjà View</title>
+    <meta name="description" content="You've seen this before. Now walk around in it. One photo becomes a world you walk into; one video becomes a room with the real footage in 3D." />
+    <meta name="application-name" content="Déjà View" />
     <meta name="theme-color" content="#0b0b0d" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Déjà View" />
+    <meta property="og:title" content="Déjà View" />
+    <meta property="og:description" content="You've seen this before. Now walk around in it." />
+    <meta property="og:image" content="/public/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Déjà View: You've seen this before. Now walk around in it." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Déjà View" />
+    <meta name="twitter:description" content="You've seen this before. Now walk around in it." />
+    <meta name="twitter:image" content="/public/og.png" />
     <link rel="icon" href="./public/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./public/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -16,18 +30,19 @@
     <link rel="stylesheet" href="./src/styles.css" />
   </head>
   <body>
+    <a class="skip" href="#main">Skip to content</a>
     <header class="topbar">
       <div class="wrap">
-        <a class="brand" href="/" aria-label="ThirdWheel home">
-          <svg viewBox="0 0 34 18" aria-hidden="true">
-            <circle cx="5" cy="9" r="4.5" fill="currentColor" />
-            <circle cx="17" cy="9" r="4.5" fill="currentColor" />
-            <circle cx="29" cy="9" r="3.9" fill="none" stroke="#d4ff3a" stroke-width="2.2" />
+        <a class="brand" href="/" aria-label="Déjà View home">
+          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+            <rect x="9.5" y="4.5" width="18" height="18" rx="4.5" fill="none" stroke="#d4ff3a" stroke-width="2.2" />
+            <rect x="4" y="9.5" width="18" height="18" rx="4.5" fill="currentColor" />
+            <circle cx="13" cy="18.5" r="3.1" fill="#0b0b0d" />
           </svg>
-          ThirdWheel
+          <span class="wordmark">Déjà View</span>
         </a>
         <nav class="topnav" aria-label="Sections">
-          <a href="#modes">Modes</a>
+          <a href="#modes">How it works</a>
           <a href="#gallery">Gallery</a>
           <a href="#headset">Headset</a>
         </nav>
@@ -39,29 +54,30 @@
       </div>
     </header>
 
-    <main>
+    <main id="main">
       <section class="hero">
         <div class="wrap">
           <div class="hero-grid">
-            <div>
+            <div class="hero-copy">
               <div class="eyebrow">Photo or video in &middot; walkable world out</div>
-              <h1>
-                <span class="line"><span>Snap any room.</span></span>
-                <span class="line"><span>Live in it</span></span>
-                <span class="line"
+              <h1 aria-label="You've seen this before. Now walk around in it.">
+                <span class="line" aria-hidden="true"><span class="echo" data-echo="You've seen">You've seen</span></span>
+                <span class="line" aria-hidden="true"><span class="echo" data-echo="this before.">this before.</span></span>
+                <span class="line kicker" aria-hidden="true"
                   ><span
                     ><span class="accent-word"
-                      >rent free.<svg class="squiggle" viewBox="0 0 300 20" preserveAspectRatio="none" aria-hidden="true">
+                      >Now walk around in it.<svg class="squiggle" viewBox="0 0 300 20" preserveAspectRatio="none" aria-hidden="true">
                         <path d="M3 13 C 40 3, 70 19, 105 10 S 170 3, 205 11 S 265 18, 297 7" /></svg></span></span
                 ></span>
               </h1>
               <p class="lede">
-                One photo in, the whole room out: <strong>the corners you missed, the wall behind you, the ceiling nobody
-                photographs.</strong> Walk it on a Quest 3S or right here in the browser.
+                <strong>One photo becomes the whole room</strong>, the corners you missed and the wall behind you included.
+                <strong>One video becomes the room it was shot in</strong>, with the real footage standing there in 3D. Walk
+                around in a VR headset or right here in the browser.
               </p>
               <div class="cta-row">
-                <a class="btn btn-primary" href="/capture?mode=rentfree">Make a world <span class="arrow">&rarr;</span></a>
-                <a class="btn" href="/capture?mode=thirdwheel">Third-wheel a video</a>
+                <a class="btn btn-primary" href="/capture?mode=photo">Start with a photo <span class="arrow">&rarr;</span></a>
+                <a class="btn" href="/capture?mode=video">Start with a video</a>
               </div>
             </div>
             <div class="hero-art" aria-hidden="true">
@@ -73,9 +89,9 @@
 
           <div class="health" id="health" aria-live="polite">
             <span class="label">Compute</span>
-            <span class="health-item" data-k="gpu"><span class="dot"></span><span><b>GPU (HiPerGator)</b> <span class="v">checking</span></span></span>
-            <span class="health-item" data-k="worker"><span class="dot"></span><span><b>Warm worker</b> <span class="v">checking</span></span></span>
-            <span class="health-item" data-k="fallbacks"><span class="dot"></span><span><b>Fallbacks</b> <span class="v">checking</span></span></span>
+            <span class="health-item" data-k="gpu"><span class="dot"></span><span><b>GPU cluster</b> <span class="v">checking</span></span></span>
+            <span class="health-item" data-k="worker"><span class="dot"></span><span><b>Warm GPU</b> <span class="v">checking</span></span></span>
+            <span class="health-item" data-k="fallbacks"><span class="dot"></span><span><b>Backup</b> <span class="v">checking</span></span></span>
             <span class="lan health-item"><span class="label">Same Wi-Fi</span><a class="mono" id="lan-inline" href="#headset">finding address</a></span>
           </div>
         </div>
@@ -86,9 +102,9 @@
           <div class="section-head">
             <div>
               <div class="eyebrow">Two modes</div>
-              <h2>Pick your flavour<br />of trespassing.</h2>
+              <h2>Two ways back<br />into a moment.</h2>
             </div>
-            <p>Both end the same way: you, standing somewhere you weren't, looking around like you pay rent there.</p>
+            <p>Both end the same way: you, standing somewhere you have only ever seen in a picture, finally able to look around.</p>
           </div>
 
           <div class="modes">
@@ -106,36 +122,36 @@
                   <circle cx="32" cy="6" r="1.3" fill="currentColor" stroke="none" />
                   <circle cx="32" cy="58" r="1.6" fill="currentColor" stroke="none" />
                 </svg>
-                <span class="chip accent">Photo &middot; game clip &middot; prompt</span>
+                <span class="chip accent">One photo &middot; or a prompt</span>
               </div>
-              <h3>Rent Free. <em>Snap any room.</em></h3>
+              <h3>Photo. <em>One shot, the whole room.</em></h3>
               <p>
-                Point, shoot, move in. A world model fills in everything the camera never saw, so you can actually turn
-                around. Game clips work too: we pull the sharpest, steadiest frame. No photo? Describe a room and it
-                gets built anyway.
+                Point, shoot, walk in. A world model fills in everything the camera never saw, so you can actually turn
+                around. No photo? Describe a room and it gets built anyway. A calm clip works too: the sharpest, steadiest
+                frame is the one that gets used.
               </p>
               <ul class="tips">
                 <li class="tips-title">How to shoot</li>
-                <li><span>01</span><span><b>Back into a corner and shoot wide.</b> Get floor and ceiling in the frame.</span></li>
+                <li><span>01</span><span><b>Back into a corner and shoot wide.</b> Get the floor and the ceiling in the frame.</span></li>
                 <li><span>02</span><span><b>Lights on, no zoom, landscape.</b> Hold still for a beat before you tap.</span></li>
-                <li><span>03</span><span><b>Game clips: keep the camera calm.</b> Slow pans, no menus, no motion blur.</span></li>
+                <li><span>03</span><span><b>Clips: keep the camera calm.</b> Slow pans, no menus, no motion blur.</span></li>
               </ul>
-              <a class="btn btn-primary" href="/capture?mode=rentfree">Start Rent Free <span class="arrow">&rarr;</span></a>
+              <a class="btn btn-primary" href="/capture?mode=photo">Start with a photo <span class="arrow">&rarr;</span></a>
             </article>
 
             <article class="mode">
               <div class="mode-top">
-                <svg class="mode-glyph" viewBox="0 0 64 64" aria-hidden="true">
-                  <circle cx="13" cy="32" r="9" fill="currentColor" fill-opacity=".9" />
-                  <circle cx="32" cy="32" r="9" fill="currentColor" fill-opacity=".9" />
-                  <circle cx="51" cy="32" r="8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-dasharray="3 3.2" />
+                <svg class="mode-glyph" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="6" y="14" width="38" height="28" rx="4" stroke-dasharray="3 3.4" />
+                  <rect x="18" y="22" width="40" height="30" rx="4" fill="currentColor" fill-opacity=".15" />
+                  <path d="M34 30.5v13l11-6.5z" fill="currentColor" stroke="none" />
                 </svg>
-                <span class="chip accent">One video</span>
+                <span class="chip accent">One still-camera video</span>
               </div>
-              <h3>Third Wheel. <em>Film your friend cooking.</em></h3>
+              <h3>Video. <em>The real footage, in the room.</em></h3>
               <p>
-                Prop up your phone and hit record. The kitchen becomes a room you can walk around, and your friend is the
-                real footage lifted into 3D, sizzle and all. You stand right there. Slightly too close. As is tradition.
+                Prop up your phone and hit record. The room becomes a space you can walk around, and the people in it are
+                the real footage lifted into 3D, sound and all. You stand right there. Slightly too close.
               </p>
               <ul class="tips">
                 <li class="tips-title">How to shoot</li>
@@ -143,7 +159,7 @@
                 <li><span>02</span><span><b>Whole person in frame, 1 to 3 m away.</b> Feet included, please.</span></li>
                 <li><span>03</span><span><b>10 to 30 seconds, good light.</b> Nobody walking through the shot.</span></li>
               </ul>
-              <a class="btn btn-primary" href="/capture?mode=thirdwheel">Start Third Wheel <span class="arrow">&rarr;</span></a>
+              <a class="btn btn-primary" href="/capture?mode=video">Start with a video <span class="arrow">&rarr;</span></a>
             </article>
           </div>
         </div>
@@ -171,13 +187,13 @@
         <div class="wrap">
           <div class="duo">
             <div class="panel">
-              <div class="eyebrow">Phone or Quest</div>
+              <div class="eyebrow">Phone or headset</div>
               <h3>Same Wi-Fi? Open this.</h3>
               <div class="lan-box">
                 <div class="qr" id="qr" aria-hidden="true"></div>
                 <div>
                   <a class="lan-url" id="lan-url" href="#">finding this laptop&hellip;</a>
-                  <p class="lan-note" id="lan-note">Scan with your phone camera, or type it into the Quest browser.</p>
+                  <p class="lan-note" id="lan-note">Scan it with your phone camera, or type it into the headset browser.</p>
                   <div class="lan-actions">
                     <button class="btn btn-sm" id="lan-copy" type="button">Copy link</button>
                     <a class="btn btn-sm" id="lan-capture" href="/capture">Capture page</a>
@@ -208,7 +224,7 @@
                   </dl>
                 </div>
                 <div>
-                  <h4>Quest 3S</h4>
+                  <h4>VR headset</h4>
                   <dl>
                     <div><dt>Left stick</dt><dd>walk</dd></div>
                     <div><dt>Right stick</dt><dd>snap turn; push forward to teleport</dd></div>
@@ -222,14 +238,14 @@
       </section>
 
       <div class="wrap">
-        <div class="bigword" aria-hidden="true">Third<span>Wheel</span></div>
+        <div class="bigword" aria-hidden="true" data-word="Déjà View">Déjà View</div>
       </div>
     </main>
 
     <footer class="footer">
       <div class="wrap">
-        <span>Made at SwampHacks XII. Nobody's kitchen was harmed.</span>
-        <span>One photo or one video in &middot; a room you can walk around &middot; headset or browser</span>
+        <span class="footer-brand">Déjà View &middot; made at SwampHacks XII</span>
+        <span>You've seen this before. Now walk around in it.</span>
       </div>
     </footer>
 

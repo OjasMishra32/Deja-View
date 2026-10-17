@@ -225,7 +225,7 @@ function virtualScene(id: string): Scene | null {
       return { ...base, name: 'Still cooking', world: { file: 'world.spz', transform: opencv, floorY: null, source: 'marble-sample' } };
     }
     case 'viewer-test-failed':
-      return { ...base, status: 'failed', name: 'Broken job', error: 'FlashWorld ran out of GPU memory (test scene).' };
+      return { ...base, status: 'failed', name: 'Broken job', error: 'The GPU ran out of memory while building this world (test scene). Try again in a minute.' };
     case 'viewer-test-noworld':
       return { ...base, name: 'No world here' };
   }

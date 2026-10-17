@@ -3,10 +3,21 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>New world · ThirdWheel</title>
-    <meta name="description" content="Take a photo or a video and turn it into a world you can walk around." />
+    <title>New world · Déjà View</title>
+    <meta name="description" content="You've seen this before. Now walk around in it. Turn one photo or one video into a world you can walk around." />
+    <meta name="application-name" content="Déjà View" />
     <meta name="theme-color" content="#0b0b0d" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Déjà View" />
+    <meta property="og:title" content="Make a world · Déjà View" />
+    <meta property="og:description" content="You've seen this before. Now walk around in it." />
+    <meta property="og:image" content="/public/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Déjà View: You've seen this before. Now walk around in it." />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" href="./public/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./public/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -16,15 +27,16 @@
     <link rel="stylesheet" href="./src/styles.css" />
   </head>
   <body>
+    <a class="skip" href="#capture-form">Skip to the form</a>
     <header class="topbar">
       <div class="wrap">
-        <a class="brand" href="/" aria-label="ThirdWheel home">
-          <svg viewBox="0 0 34 18" aria-hidden="true">
-            <circle cx="5" cy="9" r="4.5" fill="currentColor" />
-            <circle cx="17" cy="9" r="4.5" fill="currentColor" />
-            <circle cx="29" cy="9" r="3.9" fill="none" stroke="#d4ff3a" stroke-width="2.2" />
+        <a class="brand" href="/" aria-label="Déjà View home">
+          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+            <rect x="9.5" y="4.5" width="18" height="18" rx="4.5" fill="none" stroke="#d4ff3a" stroke-width="2.2" />
+            <rect x="4" y="9.5" width="18" height="18" rx="4.5" fill="currentColor" />
+            <circle cx="13" cy="18.5" r="3.1" fill="#0b0b0d" />
           </svg>
-          ThirdWheel
+          <span class="wordmark">Déjà View</span>
         </a>
         <div class="spacer"></div>
         <a class="btn btn-sm" href="/#gallery">Gallery</a>
@@ -36,41 +48,34 @@
         <div class="capture-grid">
           <form id="capture-form" novalidate>
             <div class="capture-head">
-              <div class="eyebrow" id="cap-eyebrow">New world</div>
-              <h1 id="cap-title">Snap it. Move in.</h1>
-              <p id="cap-lede">One photo of a room, a calm game clip, or just a description. We build the rest of the room around it.</p>
+              <div class="eyebrow" id="cap-eyebrow">New world · Photo</div>
+              <h1 id="cap-title">One photo. The whole room.</h1>
+              <p id="cap-lede">Take one photo of a room, or just describe one. The parts the camera missed get built around it, so you can turn around and walk in.</p>
             </div>
 
             <div class="step">
               <div class="step-label"><span class="num">1</span>Pick a mode</div>
               <div class="mode-pick" role="radiogroup" aria-label="Mode">
-                <button type="button" class="mode-opt" role="radio" data-mode="rentfree" aria-checked="true">
+                <button type="button" class="mode-opt" role="radio" data-mode="photo" aria-checked="true">
                   <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
                     <path d="M10 8H7v3M22 8h3v3M10 24H7v-3M22 24h3v-3" />
                     <rect x="11" y="12" width="10" height="8" rx="1" fill="currentColor" fill-opacity=".2" />
                   </svg>
-                  <span class="txt"><span class="t">Rent Free</span><span class="d">Photo, game clip, or just a prompt</span></span>
+                  <span class="txt"><span class="t">Photo</span><span class="d">One photo becomes a world you walk into</span></span>
                 </button>
-                <button type="button" class="mode-opt" role="radio" data-mode="thirdwheel" aria-checked="false">
-                  <svg viewBox="0 0 32 32" aria-hidden="true">
-                    <circle cx="6" cy="16" r="4.5" fill="currentColor" />
-                    <circle cx="16" cy="16" r="4.5" fill="currentColor" />
-                    <circle cx="26" cy="16" r="4" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="2 2" />
+                <button type="button" class="mode-opt" role="radio" data-mode="video" aria-checked="false">
+                  <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="7" width="19" height="14" rx="2.5" stroke-dasharray="2.4 2.4" />
+                    <rect x="9" y="11" width="20" height="15" rx="2.5" fill="currentColor" fill-opacity=".2" />
+                    <path d="M17 15.2v6.6l5.5-3.3z" fill="currentColor" stroke="none" />
                   </svg>
-                  <span class="txt"><span class="t">Third Wheel</span><span class="d">One video from a propped-up phone</span></span>
-                </button>
-                <button type="button" class="mode-opt" role="radio" data-mode="reconstruct" aria-checked="false">
-                  <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-                    <circle cx="16" cy="16" r="10" stroke-dasharray="3 3" />
-                    <circle cx="16" cy="16" r="3" fill="currentColor" />
-                  </svg>
-                  <span class="txt"><span class="t">Reconstruct</span><span class="d">8+ photos, an exact copy</span></span>
+                  <span class="txt"><span class="t">Video</span><span class="d">A still-camera video becomes a room with the real footage in 3D</span></span>
                 </button>
               </div>
             </div>
 
             <div class="step dropzone" id="dropzone">
-              <div class="step-label"><span class="num">2</span><span id="media-label">Add your shot</span></div>
+              <div class="step-label"><span class="num">2</span><span id="media-label">Add your photo</span></div>
               <div class="pick-row">
                 <label class="pick" id="pick-camera-label">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -84,7 +89,7 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M12 16V4M7 9l5-5 5 5M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4" />
                   </svg>
-                  <span><span id="pick-files-text">Choose photos or a clip</span><small id="pick-files-hint">Or drop files here</small></span>
+                  <span><span id="pick-files-text">Choose a photo</span><small id="pick-files-hint">A short clip works too. Or drop it here</small></span>
                   <input id="pick-files" type="file" accept="image/*,video/*" multiple />
                 </label>
               </div>
@@ -95,10 +100,10 @@
               <div class="step-label"><span class="num">3</span>Name it</div>
               <div class="field">
                 <label for="scene-name">Name</label>
-                <input class="input" id="scene-name" name="name" maxlength="80" autocomplete="off" placeholder="Kitchen, rent free" required />
+                <input class="input" id="scene-name" name="name" maxlength="80" autocomplete="off" placeholder="My room" required />
               </div>
               <div class="field">
-                <label for="scene-prompt" id="prompt-label">Prompt <small>optional, or use it instead of a photo</small></label>
+                <label for="scene-prompt" id="prompt-label">Describe it <small>optional; with no photo, this alone builds the room</small></label>
                 <textarea class="textarea" id="scene-prompt" name="prompt" maxlength="500" placeholder="A sunlit kitchen with green tiles and a very judgmental cat"></textarea>
               </div>
             </div>

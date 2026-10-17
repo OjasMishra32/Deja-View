@@ -3,7 +3,7 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from conftest import requires_ffmpeg
+from pipeline_helpers import requires_ffmpeg
 
 from common.media import iter_frames, probe
 from tw.pack import (

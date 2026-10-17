@@ -196,13 +196,18 @@ def process_video(
     progress: Progress | None = None,
     log: Callable[[str], None] = print,
     warn: Callable[[str], None] | None = None,
+    notice: Callable[..., None] | None = None,
 ) -> dict:
+    """notice(user, detail): a warning the person should see in the scene caption (common.jobio.Job.notice);
+    `detail` is the technical version for the log. Without it, notices go to `warn`."""
     import cv2
 
     cfg = cfg or TwConfig.for_device()
     focal_35mm = cfg.focal_35mm
     progress = progress or (lambda s, f: None)
     warn = warn or (lambda m: log(f"WARNING: {m}"))
+    if notice is None:
+        notice = lambda user, detail=None: warn(detail or user)  # noqa: E731
     out_dir, work_dir = Path(out_dir), Path(work_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -215,7 +220,10 @@ def process_video(
     start = min(max(cfg.start, 0.0), max(0.0, info.duration - 0.5))
     dur = max(0.1, min(info.duration - start, cfg.max_seconds))
     if info.duration - start > cfg.max_seconds + 0.05:
-        warn(f"clip is {info.duration:.1f}s; using {dur:.1f}s from {start:.1f}s (maxSeconds={cfg.max_seconds:g})")
+        notice(
+            f"Only {dur:.0f} seconds of the clip were used{f' (from {start:.0f} s)' if start >= 0.5 else ''}.",
+            f"clip is {info.duration:.1f}s; using {dur:.1f}s from {start:.1f}s (maxSeconds={cfg.max_seconds:g})",
+        )
     fps = output_fps(info.fps_fraction, cfg.fps_cap)
     W, H = fit_size(info.width, info.height, cfg.max_long, 16)
     w2, h2 = W // 2, H // 2
@@ -224,7 +232,7 @@ def process_video(
     hf, vf = fov_deg(K, W, H)
     n_est = count_frames(video_path, fps, dur)
     log(
-        f"video: {info.width}x{info.height} {info.fps:.3f} fps {info.duration:.2f}s codec={info.codec} "
+        f"video: {info.width}x{info.height} {info.fps:.3f} fps {info.duration:.2f}s codec={info.codec} hdr={getattr(info, 'hdr', None) or 'no'} "
         f"audio={'yes (' + str(info.audio_codec) + ')' if info.has_audio else 'no'} rotation={info.rotation}"
     )
     log(f"output: {W}x{H} (+ {w2}x{h2} depth/mask band) at {float(fps):.3f} fps, ~{n_est} frames; "
@@ -248,7 +256,9 @@ def process_video(
         if i % 30 == 0:
             progress(None, 0.01 + 0.05 * min(1.0, i / max(n_est, 1)))
     if N < 2:
-        raise RuntimeError("the video has fewer than 2 frames")
+        from common.jobio import JobError
+
+        raise JobError("This video is too short. Use a clip of at least two seconds.", f"the video has {N} frame(s)")
     samples_arr = np.stack(samples)
     timings["decodeSamples"] = time.time() - t0
     log(f"decoded {N} frames, kept {len(samples)} samples for the plate ({timings['decodeSamples']:.1f}s)")
@@ -272,10 +282,12 @@ def process_video(
     moved = summ["p95Frac"] > 0.006
     stabilize = cfg.stabilize == "on" or (cfg.stabilize == "auto" and moved and summ["p95Frac"] < 0.12)
     if moved:
-        warn(
+        notice(
+            "The phone moved a little during the clip; prop it still next time for the steadiest result." if stabilize
+            else "The phone moved a lot during this clip, so the video may not line up with the room. Prop the phone still and film again.",
             f"the camera moved during the clip (95th percentile shift {summ['p95Px']:.1f}px = {summ['p95Frac']:.1%} of the width). "
             + ("Frames are stabilised onto one view; prop the phone still for the best result." if stabilize
-               else "Too much to stabilise; the room and the video may not line up well. Prop the phone still.")
+               else "Too much to stabilise; the room and the video may not line up well. Prop the phone still."),
         )
     else:
         log(f"camera is steady (95th percentile shift {summ['p95Px']:.2f}px)")
@@ -286,14 +298,14 @@ def process_video(
     timings["motion"] = time.time() - t0
 
     t0 = time.time()
-    progress("Building the background plate", 0.12)
+    progress("Finding the room behind everyone", 0.12)
     plate, holes, plate_stats = build_plate(samples_arr, person_samples, log=log)
     del samples_arr, person_samples
     save_jpg(out_dir / "plate.jpg", plate, quality=93)
     timings["plate"] = time.time() - t0
 
     t0 = time.time()
-    progress("Estimating the room depth", 0.15)
+    progress("Measuring the room", 0.15)
     from plate_room import estimate_plate_depth, snap_depth_edges  # pipeline/ is on sys.path
 
     pde = _plate_depth_model(cfg)
@@ -425,6 +437,11 @@ def process_video(
             progress(None, 0.80 + 0.04 * t / N)
     timings["masks"] = time.time() - t0
     log(f"masks: foreground covers {float(coverage.mean()):.1%} of the frame on average (min {float(coverage.min()):.1%}, max {float(coverage.max()):.1%})")
+    if float(coverage.mean()) < 0.002 and float(coverage.max()) < 0.01:
+        notice(
+            "We didn't find anyone moving in this clip, so only the room is shown.",
+            f"foreground covers {float(coverage.mean()):.2%} on average (max {float(coverage.max()):.2%}): nobody moving",
+        )
 
     # ---- pass D: depth ------------------------------------------------------------------------------
     t0 = time.time()

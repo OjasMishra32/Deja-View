@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { SplatMesh, isMobile, isOculus } from '@sparkjsdev/spark';
 import type { VideoLayer, WorldAsset } from '../../../shared/types.ts';
 import { estimateFloor, expandBounds, robustBounds, skyPalette, unionBounds, type Bounds, type RGB, type SkyPalette } from './analysis.ts';
+import { cameraWalkArea, nearestContentDepth, planHiddenFixes, type Frustum } from './camroom.ts';
 import { DEFAULT_BODY, findFreeSpot, lineOfSight, type Body, type GroundOptions, type P3 } from './physics.ts';
 import { VoxelGrid } from './voxels.ts';
 
@@ -22,7 +23,8 @@ export interface LoadOptions {
 
 /** Splat count above which Spark builds a level-of-detail tree for this device. */
 export function lodThreshold(): number {
-  if (isOculus()) return 1_000_000;
+  // a Quest holds 72 Hz with ~500-750k splats: bigger worlds get a level-of-detail tree there
+  if (isOculus()) return 800_000;
   if (isMobile()) return 1_200_000;
   return 3_500_000;
 }
@@ -158,6 +160,8 @@ export function collectSamples(mesh: SplatMesh, toContent: THREE.Matrix4, hugeLi
 }
 
 export interface WorldAnalysis {
+  /** Camera-only rooms: distance along the camera's view to the nearest content (else 0). */
+  nearContent: number;
   /** Floor height in the content frame; the content group is shifted by -floorY. */
   floorY: number;
   floorEstimated: boolean;
@@ -177,8 +181,13 @@ export interface WorldAnalysis {
 
 export interface AnalyseOptions {
   asset: WorldAsset;
-  /** Third Wheel layer: the spawn should look at the footage from near its camera. */
+  /** Video layer: the spawn should look at the footage from near its camera. */
   video?: VideoLayer;
+  /**
+   * Set for a room lifted from one camera (content frame): walking is kept to the region that
+   * camera saw, plus a margin, instead of the whole box around it.
+   */
+  cameraRoom?: Frustum | null;
   flipped: boolean;
   body?: Body;
   /** Lets the UI repaint between heavy stages. */
@@ -223,6 +232,8 @@ export async function analyseWorld(mesh: SplatMesh, toContent: THREE.Matrix4, op
     floorEstimated = true;
   }
   timings.floor = performance.now() - t0;
+  const cameraRoom = opts.flipped ? null : opts.cameraRoom ?? null;
+  const nearContent = cameraRoom ? nearestContentDepth(cameraRoom, samples.pos, samples.count) : 0;
 
   // move samples into the final frame (floor at 0)
   for (let i = 0; i < samples.count; i++) samples.pos[i * 3 + 1] -= floorY;
@@ -312,13 +323,22 @@ export async function analyseWorld(mesh: SplatMesh, toContent: THREE.Matrix4, op
   // the spawn and the space around it always count as inside the world, even for thin worlds
   // (a lifted background plate) whose splats all lie in front of the camera
   const around: Bounds = { min: [free.x - 1.5, free.y, free.z - 1.5], max: [free.x + 1.5, free.y + 2.2, free.z + 1.5] };
-  walkBounds = unionBounds(walkBounds, around);
+  if (cameraRoom) {
+    // only near the camera does a single-view room look right
+    walkBounds = unionBounds(cameraWalkArea(cameraRoom, { floorY, nearContent }), {
+      min: [free.x - 0.1, free.y, free.z - 0.1],
+      max: [free.x + 0.1, free.y + 2.2, free.z + 0.1],
+    });
+  } else {
+    walkBounds = unionBounds(walkBounds, around);
+  }
   bounds = unionBounds(bounds, around);
 
   // ---- palette ----
   const palette = buildPalette(samples, floorY, bounds);
 
   return {
+    nearContent,
     floorY,
     floorEstimated,
     floorConfidence,
@@ -348,4 +368,37 @@ function buildPalette(s: Samples, floorY: number, b: Bounds): { sky: SkyPalette;
   const avg = (a: number[], fb: RGB): RGB => (a[3] > 0 ? [a[0] / a[3], a[1] / a[3], a[2] / a[3]] : fb);
   const all = avg(sums.all, [0.4, 0.4, 0.42]);
   return { sky: skyPalette(avg(sums.up, all), all, avg(sums.down, all)), average: all };
+}
+
+/**
+ * Rooms lifted from one camera: moves the splats the camera never saw (the box behind every object)
+ * onto the surface probably hidden there and gives them its colours, so a step to the side shows a
+ * soft continuation of the wall instead of a smeared ghost of the object in front.
+ * `toView` maps splat file coordinates into the frame of the frustum. Returns how many moved.
+ */
+export function repairHiddenSplats(mesh: SplatMesh, toView: THREE.Matrix4, frustum: Frustum): number {
+  const packed = mesh.packedSplats;
+  if (!packed || !(packed.numSplats > 0)) return 0;
+  const v = new THREE.Vector3();
+  const plan = planHiddenFixes(frustum, {
+    forEach(cb) {
+      packed.forEachSplat((i, c, _s, _q, o, col) => {
+        v.copy(c).applyMatrix4(toView);
+        cb(i, v.x, v.y, v.z, o, col.r, col.g, col.b);
+      });
+    },
+  });
+  if (!plan.fixes.length) return 0;
+  const fromView = toView.clone().invert();
+  const center = new THREE.Vector3();
+  const color = new THREE.Color();
+  for (const fix of plan.fixes) {
+    const s = packed.getSplat(fix.index);
+    center.set(fix.position[0], fix.position[1], fix.position[2]).applyMatrix4(fromView);
+    color.setRGB(fix.rgb[0], fix.rgb[1], fix.rgb[2]);
+    packed.setSplat(fix.index, center, s.scales, s.quaternion, s.opacity, color);
+  }
+  packed.needsUpdate = true;
+  mesh.updateVersion();
+  return plan.fixes.length;
 }

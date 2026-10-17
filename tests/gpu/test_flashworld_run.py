@@ -20,7 +20,7 @@ from PIL import Image, ImageFilter
 
 import flashworld_run as fw
 import splat_io as sio
-from conftest import ROOT, SAMPLES
+from gpu_helpers import ROOT, SAMPLES
 
 EVIDENCE = ROOT / "data" / "evidence" / "gpu"
 BEDROOM = SAMPLES / "sample-painted-bedroom" / "world.spz"
@@ -203,6 +203,8 @@ def test_finish_world_writes_the_contract(tmp_path):
     assert w["spawn"]["position"] == [0.0, 0.0, 0.0] and abs(w["spawn"]["yaw"]) < 0.05
     assert w["transform"]["scale"] == pytest.approx(1.45 / 1.121, rel=0.03)
     assert scene["thumb"] == "thumb.jpg" and isinstance(scene["caption"], str)
+    # The gallery shows the caption as is: product copy, no model names.
+    assert scene["caption"] in ("Generated from one photo: the rest of the room was imagined.", "Generated from your prompt.")
     # The floor lands at y = 0 in the viewer frame.
     world = sio.apply_transform(sio.read_spz(out / "world.spz").means, w["transform"])
     ys = world[:, 1]

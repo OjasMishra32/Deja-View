@@ -2,35 +2,77 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { HealthInfo, Scene } from '../shared/types.ts';
-import { lanUrls, sceneAssetUrl, sceneBaseUrl, sortScenes, summarizeHealth, viewUrl } from '../web/src/api.ts';
-import { findExifSegment, fitWithin, formatBytes, insertApp1, kindOf, resetExifOrientation, validateSelection } from '../web/src/capture.ts';
+import {
+  ApiError,
+  MODE_NAME,
+  errorFromBody,
+  errorText,
+  hideServerPaths,
+  lanUrls,
+  modeKind,
+  sceneAssetUrl,
+  sceneBaseUrl,
+  sortScenes,
+  summarizeHealth,
+  uploadStatusMessage,
+  viewUrl,
+} from '../web/src/api.ts';
+import {
+  findExifSegment,
+  fitWithin,
+  formMessage,
+  formatBytes,
+  insertApp1,
+  kindOf,
+  modeFromParam,
+  previewTile,
+  previewTime,
+  resetExifOrientation,
+  uploadErrorMessage,
+  validateSelection,
+  type FormState,
+} from '../web/src/capture.ts';
 import { qrMatrix } from '../web/src/gallery.ts';
+
+/** Names that must never reach a person: old product names and the projects the pipeline is built on. */
+const FORBIDDEN = /third ?wheel|rent ?free|flashworld|anysplat|hugging ?face|hf space|video depth anything|hipergator/i;
 
 describe('capture validation', () => {
   const sel = (images: number, videos: number, prompt = '') => ({ images, videos, prompt });
 
-  test('Third Wheel needs exactly one video', () => {
-    expect(validateSelection('thirdwheel', sel(0, 1))).toBeNull();
-    expect(validateSelection('thirdwheel', sel(0, 0))).toMatch(/one video/i);
-    expect(validateSelection('thirdwheel', sel(0, 2))).toMatch(/one video/i);
-    expect(validateSelection('thirdwheel', sel(1, 1))).toMatch(/not photos/i);
-    expect(validateSelection('thirdwheel', sel(0, 0, 'a kitchen'))).not.toBeNull();
+  test('Video needs exactly one video', () => {
+    expect(validateSelection('video', sel(0, 1))).toBeNull();
+    expect(validateSelection('video', sel(0, 0))).toMatch(/one video/i);
+    expect(validateSelection('video', sel(0, 2))).toMatch(/one video/i);
+    expect(validateSelection('video', sel(1, 1))).toMatch(/not photos/i);
+    expect(validateSelection('video', sel(0, 0, 'a kitchen'))).not.toBeNull();
   });
 
-  test('Rent Free takes photos, one clip, or a prompt alone', () => {
-    expect(validateSelection('rentfree', sel(1, 0))).toBeNull();
-    expect(validateSelection('rentfree', sel(3, 0))).toBeNull();
-    expect(validateSelection('rentfree', sel(0, 1))).toBeNull();
-    expect(validateSelection('rentfree', sel(0, 0, 'a lighthouse kitchen'))).toBeNull();
-    expect(validateSelection('rentfree', sel(0, 0, '   '))).not.toBeNull();
-    expect(validateSelection('rentfree', sel(1, 1))).toMatch(/not both/i);
-    expect(validateSelection('rentfree', sel(0, 2))).not.toBeNull();
+  test('Photo takes photos, one clip, or a prompt alone', () => {
+    expect(validateSelection('photo', sel(1, 0))).toBeNull();
+    expect(validateSelection('photo', sel(3, 0))).toBeNull();
+    expect(validateSelection('photo', sel(0, 1))).toBeNull();
+    expect(validateSelection('photo', sel(0, 0, 'a lighthouse kitchen'))).toBeNull();
+    expect(validateSelection('photo', sel(0, 0, '   '))).not.toBeNull();
+    expect(validateSelection('photo', sel(1, 1))).toMatch(/not both/i);
+    expect(validateSelection('photo', sel(0, 2))).not.toBeNull();
   });
 
-  test('Reconstruct needs 8+ photos or a video', () => {
-    expect(validateSelection('reconstruct', sel(8, 0))).toBeNull();
-    expect(validateSelection('reconstruct', sel(0, 1))).toBeNull();
-    expect(validateSelection('reconstruct', sel(7, 0))).toMatch(/at least 8/);
+  test('capture links pick Photo or Video, including links that use the old mode ids', () => {
+    expect(modeFromParam('photo')).toBe('photo');
+    expect(modeFromParam('video')).toBe('video');
+    expect(modeFromParam('thirdwheel')).toBe('video');
+    expect(modeFromParam('rentfree')).toBe('photo');
+    expect(modeFromParam(null)).toBe('photo');
+    expect(modeFromParam('nonsense')).toBe('photo');
+  });
+
+  test('validation messages only name the two modes', () => {
+    for (const mode of ['photo', 'video'] as const)
+      for (const s of [sel(0, 0), sel(1, 1), sel(0, 2), sel(2, 0)]) {
+        const msg = validateSelection(mode, s);
+        if (msg) expect(msg).not.toMatch(FORBIDDEN);
+      }
   });
 
   test('media kind from MIME type or extension (iOS sometimes sends no type)', () => {
@@ -129,7 +171,10 @@ describe('api helpers', () => {
     const s = summarizeHealth(h);
     expect(s.gpu.ok).toBe(false);
     expect(s.worker.detail).toBe('asleep');
-    expect(s.fallbacks).toMatchObject({ ok: true, detail: 'HF Space' });
+    expect(s.fallbacks).toMatchObject({ ok: true, detail: 'cloud GPU' });
+    h.local = { python: true };
+    expect(summarizeHealth(h).fallbacks.detail).toBe('cloud GPU + this laptop');
+    for (const item of Object.values(summarizeHealth(h))) expect(`${item.label} ${item.detail}`).not.toMatch(FORBIDDEN);
     h.hpg = { online: true, user: 'u', worker: { alive: true, gpu: 'RTX PRO 6000', host: 'c1' } };
     expect(summarizeHealth(h).worker.detail).toBe('RTX PRO 6000 on c1');
     expect(summarizeHealth(undefined).gpu.detail).toBe('checking');
@@ -161,7 +206,7 @@ describe('QR encoder', () => {
   test('picks the smallest version and draws the function patterns', () => {
     for (const [text, version] of [
       ['http://10.0.0.5:8787', 2],
-      ['https://192.168.100.200:8787/capture?mode=thirdwheel', 3],
+      ['https://192.168.100.200:8787/capture?mode=video', 3],
     ] as const) {
       const m = qrMatrix(text);
       const size = version * 4 + 17;
@@ -208,5 +253,121 @@ describe('QR encoder', () => {
 
   test('rejects text that does not fit version 10', () => {
     expect(() => qrMatrix('x'.repeat(400))).toThrow();
+  });
+});
+
+describe('upload errors stay on the capture page', () => {
+  const base: FormState = {
+    mode: 'video',
+    selection: { images: 0, videos: 1, prompt: '' },
+    triedSubmit: true,
+    uploadError: null,
+    pickNotes: [],
+  };
+
+  test("a rejected upload's message survives revalidation of a valid selection", () => {
+    // Regression: revalidate() used to clear the message because the selection itself was valid.
+    const uploadError = { message: 'That video could not be read. Try exporting it again as MP4.', details: '' };
+    expect(formMessage({ ...base, uploadError })).toEqual(uploadError);
+    expect(formMessage({ ...base, mode: 'photo', selection: { images: 1, videos: 0, prompt: '' }, uploadError })).toEqual(uploadError);
+  });
+
+  test('a problem with the selection comes first, then the upload error, then pick notes', () => {
+    const uploadError = { message: 'Server said no.', details: '' };
+    expect(formMessage({ ...base, selection: { images: 0, videos: 0, prompt: '' }, uploadError })?.message).toMatch(/one video/i);
+    expect(formMessage({ ...base, uploadError, pickNotes: ['notes.txt: not a photo or a video, skipped.'] })).toEqual(uploadError);
+    expect(formMessage({ ...base, pickNotes: ['a', 'b'] })).toEqual({ message: 'a b', details: '' });
+    expect(formMessage(base)).toBeNull();
+  });
+
+  test('no nagging before the first submit, except picks that can never work in Video', () => {
+    expect(formMessage({ ...base, triedSubmit: false, selection: { images: 0, videos: 0, prompt: '' } })).toBeNull();
+    expect(formMessage({ ...base, triedSubmit: false, selection: { images: 2, videos: 0, prompt: '' } })?.message).toMatch(/not photos/i);
+  });
+
+  test('the server message and its details are kept as sent', () => {
+    const err = new ApiError('That file is not a photo we can read.', 400, {}, 'cv2.imdecode returned None');
+    expect(uploadErrorMessage(err)).toEqual({ message: 'That file is not a photo we can read.', details: 'cv2.imdecode returned None' });
+    expect(uploadErrorMessage(new Error(''))).toEqual({ message: 'The upload did not go through. Try again.', details: '' });
+  });
+
+  test('error bodies: message from error or message, technical details kept apart, HTML pages ignored', () => {
+    expect(errorFromBody({ error: 'Video mode needs one video.' })).toEqual({ message: 'Video mode needs one video.', details: '' });
+    expect(errorFromBody({ error: 'No.', details: ['line 1', 'line 2'] })).toEqual({ message: 'No.', details: 'line 1\nline 2' });
+    expect(errorFromBody({ detail: 'Only detail' })).toEqual({ message: 'Only detail', details: '' });
+    expect(errorFromBody('<html><body>502 Bad Gateway</body></html>').message).toBeUndefined();
+    expect(errorFromBody('Plain text reason')).toEqual({ message: 'Plain text reason', details: '' });
+  });
+
+  test('status fallbacks read as product sentences', () => {
+    expect(uploadStatusMessage(413)).toMatch(/too big/i);
+    expect(uploadStatusMessage(502, 'Bad Gateway')).toMatch(/problem/i);
+    for (const code of [400, 413, 415, 429, 500]) expect(uploadStatusMessage(code)).not.toMatch(FORBIDDEN);
+  });
+});
+
+describe('error text', () => {
+  test('absolute server paths shrink to the file name, spaces in folder names included', () => {
+    expect(hideServerPaths('/Users/me/Library/Application Support/Claude/x/data/jobs/abc/out/world.spz not found')).toBe('world.spz not found');
+    expect(hideServerPaths('Could not open /blue/group/user/jobs/running/s1/input/video.mp4.')).toBe('Could not open video.mp4.');
+    expect(hideServerPaths('C:\\Users\\me\\data\\clip.mov is empty')).toBe('clip.mov is empty');
+    expect(hideServerPaths('~/data/scenes/s1/log.txt')).toBe('log.txt');
+  });
+
+  test('ordinary text with slashes is left alone', () => {
+    for (const t of ['Use photo/video mode', 'play / pause', 'see https://example.com/a/b for more', '1/2 done', 'and/or'])
+      expect(hideServerPaths(t)).toBe(t);
+  });
+
+  test('a traceback inside a message folds into details; separate details are shown as sent', () => {
+    const folded = errorText("We couldn't build this world\nTraceback (most recent call last):\n  File \"/srv/app/run.py\", line 3");
+    expect(folded.headline).toBe("We couldn't build this world.");
+    expect(folded.detail).toContain('Traceback');
+    expect(folded.detail).not.toContain('/srv/app');
+    expect(errorText('No GPU is free right now.', 'exit code 137')).toEqual({ headline: 'No GPU is free right now.', detail: 'exit code 137' });
+    expect(errorText('Same text', 'Same text')).toEqual({ headline: 'Same text', detail: '' });
+  });
+});
+
+describe('modes as people see them', () => {
+  test('every scene is Photo, Video or Sample', () => {
+    expect(modeKind('rentfree')).toBe('photo');
+    expect(modeKind('reconstruct')).toBe('photo');
+    expect(modeKind('thirdwheel')).toBe('video');
+    expect(modeKind('sample')).toBe('sample');
+    expect(MODE_NAME).toEqual({ photo: 'Photo', video: 'Video', sample: 'Sample' });
+  });
+});
+
+describe('preview tiles', () => {
+  const tile = (over: Partial<Parameters<typeof previewTile>[0]>) =>
+    previewTile({ id: 1, kind: 'video', file: { size: 60_000 }, url: 'blob:x', status: 'ready', ...over });
+
+  test('a video this browser cannot decode gets a placeholder, like a photo', () => {
+    const video = tile({ status: 'raw' });
+    expect(video).toContain('pv-ph');
+    expect(video).not.toContain('<video');
+    expect(video).toContain('sent as is');
+    const photo = tile({ kind: 'image', status: 'raw' });
+    expect(photo).toContain('pv-ph');
+    expect(photo).not.toContain('<img');
+  });
+
+  test('decodable media shows itself with its size', () => {
+    expect(tile({ duration: 12.34, width: 1920, height: 1080 })).toContain('<video');
+    expect(tile({ duration: 12.34, width: 1920, height: 1080 })).toContain('12.3 s · 1920×1080 · 59 KB');
+    expect(tile({ kind: 'image', width: 2048, height: 1536, blob: { size: 400_000 } })).toContain('2048×1536 · 391 KB');
+  });
+
+  test('the preview frame is a second in, or a quarter into a short clip', () => {
+    expect(previewTime(40)).toBe(1);
+    expect(previewTime(2)).toBe(0.5);
+    expect(previewTime(NaN)).toBe(0.1);
+    expect(previewTime(undefined)).toBe(0.1);
+    expect(tile({ duration: 40, width: 1280, height: 720 })).toContain('#t=1"');
+  });
+
+  test('file URLs are escaped', () => {
+    expect(tile({ kind: 'image', url: 'blob:"><script>' })).not.toContain('"><script>');
   });
 });

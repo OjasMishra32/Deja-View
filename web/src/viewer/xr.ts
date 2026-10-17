@@ -18,6 +18,14 @@ export interface XrHost {
   body: Body;
   ground(): GroundOptions;
   walkBounds(): Bounds | null;
+  /** How far past walkBounds the walker may drift before it is stopped (metres). */
+  walkMargin(): number;
+  /**
+   * Eye height above the floor to show the world from, or null for the wearer's own height.
+   * A room lifted from one camera only looks right near that camera's height, so such rooms ask
+   * for it; the offset is measured once on entry and on "Start point", so head motion stays 1:1.
+   */
+  eyeLevel(): number | null;
   spawn(): { x: number; y: number; z: number; yaw: number };
   /** Desktop pose to start from (feet position + yaw). */
   startPose(): { x: number; y: number; z: number; yaw: number };
@@ -46,6 +54,24 @@ interface Hand {
 
 const SNAP = THREE.MathUtils.degToRad(30);
 const MOVE_SPEED = 1.5;
+/** Splats are fill-rate bound on a Quest: a steady 72 Hz beats a 90 Hz target that drops frames. */
+export const PREFERRED_FRAME_RATE = 72;
+
+/** Frame rate to ask the headset for: 72 Hz when offered, else the highest rate up to 90 Hz. */
+export function pickFrameRate(rates: ArrayLike<number> | null | undefined): number | null {
+  if (!rates || !rates.length) return null;
+  const list = Array.from(rates);
+  if (list.some((r) => Math.abs(r - PREFERRED_FRAME_RATE) < 0.5)) return PREFERRED_FRAME_RATE;
+  const below = list.filter((r) => r <= 90).sort((a, b) => b - a);
+  return below[0] ?? null;
+}
+
+/** Vertical rig offset that puts an eye at `eyeY` (above the local floor) at `wanted` metres. */
+export function eyeLevelOffset(eyeY: number, wanted: number | null): number {
+  if (wanted === null || !Number.isFinite(eyeY) || eyeY < 0.5) return 0;
+  // never lift people more than a little (a seated wearer), never sink them below a crouch
+  return THREE.MathUtils.clamp(wanted - eyeY, -0.75, 0.3);
+}
 
 function stick(gp: Gamepad): [number, number] {
   return gp.axes.length >= 4 ? [gp.axes[2], gp.axes[3]] : [gp.axes[0] ?? 0, gp.axes[1] ?? 0];
@@ -63,13 +89,15 @@ export class XrSystem {
   private snapArmed = true;
   private aiming = false;
   private lastArc: ReturnType<typeof traceArc> | null = null;
-  private fade: { phase: 'out' | 'in'; t: number; target: { x: number; z: number; y: number; yaw?: number } | null } | null = null;
+  private fade: { phase: 'out' | 'in'; t: number; target: { x: number; z: number; y: number; yaw?: number; recalibrate?: boolean } | null } | null = null;
   private vignette = 0;
   /** 0..1 fade to dark (teleports, session start) and comfort vignette, composed by the app. */
   fadeLevel = 0;
   vignetteLevel = 0;
   private snapPulse = 0;
   private placePending = 0;
+  /** rig.position.y = feet height + heightOffset (eye-level matching, see XrHost.eyeLevel). */
+  private heightOffset = 0;
   private headLocal = new THREE.Vector3();
   private lastPose = { x: 0, y: 0, z: 0, yaw: 0 };
   private headWorld = new THREE.Vector3();
@@ -80,7 +108,7 @@ export class XrSystem {
   private panelShown = false;
   private panelFade = 0;
   /** Debug/test readout. */
-  readonly debug = { aiming: false, valid: false, reason: '', snapTurns: 0, teleports: 0, moved: 0 };
+  readonly debug = { aiming: false, valid: false, reason: '', snapTurns: 0, teleports: 0, moved: 0, heightOffset: 0 };
 
   constructor(private host: XrHost, private opts: XrOptions) {
     const { renderer } = host;
@@ -133,14 +161,25 @@ export class XrSystem {
     });
     this.session = session;
     session.addEventListener('end', this.onEnd);
+    // Feet on the floor from the very first XR frame: the desktop rig holds the eye height, and the
+    // headset adds the wearer's own height on top of whatever the rig says.
+    const { rig, camera } = this.host;
+    const start = this.host.startPose();
+    this.heightOffset = 0;
+    rig.position.set(start.x, start.y, start.z);
+    rig.rotation.set(0, start.yaw, 0);
+    camera.position.set(0, 0, 0);
+    camera.rotation.set(0, 0, 0);
+    rig.updateMatrixWorld(true);
+    this.fadeLevel = 1;
+    this.fade = { phase: 'in', t: 0, target: null };
     await renderer.xr.setSession(session);
     renderer.xr.setFoveation(this.opts.foveation);
     try {
-      // a steady 72-90 Hz matters more than resolution for splats
       const rates = (session as XRSession & { supportedFrameRates?: Float32Array }).supportedFrameRates;
-      if (rates && rates.length && 'updateTargetFrameRate' in session) {
-        const want = Array.from(rates).filter((r) => r <= 90).sort((a, b) => b - a)[0];
-        if (want) void (session as XRSession & { updateTargetFrameRate(r: number): Promise<void> }).updateTargetFrameRate(want).catch(() => undefined);
+      const want = pickFrameRate(rates);
+      if (want && 'updateTargetFrameRate' in session) {
+        void (session as XRSession & { updateTargetFrameRate(r: number): Promise<void> }).updateTargetFrameRate(want).catch(() => undefined);
       }
     } catch {
       /* optional */
@@ -184,12 +223,19 @@ export class XrSystem {
     this.headWorld.copy(this.headLocal).applyMatrix4(rig.matrixWorld);
     const d = this.tmp.set(0, 0, -1).applyQuaternion(camera.quaternion);
     const yaw = rig.rotation.y + Math.atan2(-d.x, -d.z);
-    this.lastPose = { x: this.headWorld.x, y: rig.position.y, z: this.headWorld.z, yaw: Math.atan2(Math.sin(yaw), Math.cos(yaw)) };
+    this.lastPose = { x: this.headWorld.x, y: rig.position.y - this.heightOffset, z: this.headWorld.z, yaw: Math.atan2(Math.sin(yaw), Math.cos(yaw)) };
+  }
+
+  /** Measures the eye-level offset from the current head pose (see XrHost.eyeLevel). */
+  private calibrateHeight(): void {
+    this.heightOffset = eyeLevelOffset(this.host.camera.position.y, this.host.eyeLevel());
+    this.debug.heightOffset = this.heightOffset;
   }
 
   /** Puts the rig so the head stands over (x, z) facing `yaw`, feet at y. */
-  placeHead(x: number, y: number, z: number, yaw?: number): void {
+  placeHead(x: number, y: number, z: number, yaw?: number, recalibrate = false): void {
     const { rig, camera } = this.host;
+    if (recalibrate) this.calibrateHeight();
     if (yaw !== undefined) {
       const d = this.tmp.set(0, 0, -1).applyQuaternion(camera.quaternion);
       const localYaw = Math.atan2(-d.x, -d.z);
@@ -197,7 +243,7 @@ export class XrSystem {
     }
     rig.updateMatrixWorld();
     const off = this.tmp.copy(camera.position).applyQuaternion(rig.getWorldQuaternion(this.tmpQ));
-    rig.position.set(x - off.x, y, z - off.z);
+    rig.position.set(x - off.x, y + this.heightOffset, z - off.z);
     rig.updateMatrixWorld();
     this.vel.set(0, 0);
     this.vy = 0;
@@ -205,7 +251,7 @@ export class XrSystem {
 
   resetToSpawn(): void {
     const s = this.host.spawn();
-    this.fade = { phase: 'out', t: 0, target: { x: s.x, y: s.y, z: s.z, yaw: s.yaw } };
+    this.fade = { phase: 'out', t: 0, target: { x: s.x, y: s.y, z: s.z, yaw: s.yaw, recalibrate: true } };
   }
 
   update(dt: number): void {
@@ -218,7 +264,7 @@ export class XrSystem {
       // wait until the first head pose has been applied to the camera
       if (--this.placePending === 0) {
         const p = this.host.startPose();
-        this.placeHead(p.x, p.y, p.z, p.yaw);
+        this.placeHead(p.x, p.y, p.z, p.yaw, true);
       }
     }
     this.updateHead();
@@ -254,11 +300,11 @@ export class XrSystem {
     this.vel.x += (mx - this.vel.x) * k;
     this.vel.y += (mz - this.vel.y) * k;
     const head = this.headWorld;
-    const feet: P3 = { x: head.x, y: rig.position.y, z: head.z };
-    const body: Body = { ...this.host.body, height: Math.max(1.0, Math.min(2.2, this.headLocal.y + 0.08)) };
+    const feet: P3 = { x: head.x, y: rig.position.y - this.heightOffset, z: head.z };
+    const body: Body = { ...this.host.body, height: Math.max(1.0, Math.min(2.2, this.headLocal.y + this.heightOffset + 0.08)) };
     const v3: P3 = { x: this.vel.x, y: 0, z: this.vel.y };
     const wb = this.host.walkBounds();
-    if (wb) softBoundary(feet, v3, wb, 0.6);
+    if (wb) softBoundary(feet, v3, wb, this.host.walkMargin());
     this.vel.set(v3.x, v3.z);
     if (Math.abs(this.vel.x) + Math.abs(this.vel.y) > 1e-4) {
       const ox = feet.x, oz = feet.z;
@@ -269,16 +315,19 @@ export class XrSystem {
     }
 
     // ---- floor following under the head ----
-    const g = groundHeight(world, feet.x, feet.z, rig.position.y, body, ground);
-    if (g >= rig.position.y) {
-      rig.position.y += (g - rig.position.y) * damp(12, dt);
-      if (g - rig.position.y < 0.002) rig.position.y = g;
+    let fy = rig.position.y - this.heightOffset;
+    const g = groundHeight(world, feet.x, feet.z, fy, body, ground);
+    if (g >= fy) {
+      fy += (g - fy) * damp(12, dt);
+      if (g - fy < 0.002) fy = g;
       this.vy = 0;
     } else {
       this.vy -= GRAVITY * dt;
-      rig.position.y = Math.max(g, rig.position.y + this.vy * dt);
-      if (rig.position.y === g) this.vy = 0;
+      fy = Math.max(g, fy + this.vy * dt);
+      if (fy === g) this.vy = 0;
     }
+    rig.position.y = fy + this.heightOffset;
+    feet.y = fy;
 
     // ---- right stick: snap turn and teleport ----
     if (right && rightHand && !this.fade) {
@@ -338,7 +387,7 @@ export class XrSystem {
       if (f.phase === 'out') {
         this.fadeLevel = Math.min(1, f.t / 0.1);
         if (f.t >= 0.1) {
-          if (f.target) this.placeHead(f.target.x, f.target.y, f.target.z, f.target.yaw);
+          if (f.target) this.placeHead(f.target.x, f.target.y, f.target.z, f.target.yaw, f.target.recalibrate);
           this.fade = { phase: 'in', t: 0, target: null };
         }
       } else {
@@ -350,7 +399,8 @@ export class XrSystem {
     // ---- comfort vignette ----
     const speed = this.vel.length();
     this.snapPulse = Math.max(0, this.snapPulse - dt * 4);
-    const target = Math.min(1, Math.min(1, speed / MOVE_SPEED) * 0.85 + this.snapPulse * 0.6);
+    // full strength at walking speed: a clearly visible tunnel while the world slides past
+    const target = Math.min(1, Math.min(1, speed / (0.8 * MOVE_SPEED)) + this.snapPulse * 0.6);
     this.vignette += (target - this.vignette) * damp(target > this.vignette ? 10 : 5, dt);
     this.vignetteLevel = this.vignette;
   }
