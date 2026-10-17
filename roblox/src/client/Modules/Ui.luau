@@ -72,7 +72,7 @@ function Ui.build()
 
 	-- Host bar (left middle)
 	local host = make("Frame", { Name = "HostBar", BackgroundColor3 = Theme.Bg, BackgroundTransparency = 0.05,
-		Position = UDim2.new(0, 16, 0.5, -150), Size = UDim2.new(0, 170, 0, 300), Visible = false, Parent = gui },
+		Position = UDim2.new(0, 16, 0, 184), Size = UDim2.new(0, 170, 0, 300), Visible = false, Parent = gui },
 		{ Theme.corner(14), Theme.stroke(), make("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10),
 			PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10) }),
 		  make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }) })
