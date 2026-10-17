@@ -256,7 +256,7 @@ def test_install_archives_and_sets_the_spawn(tmp_path, room_run):
     res = W.install(scene, out / "auto", doc)
     s = json.loads((scene / "scene.json").read_text())
     assert s["world"]["collider"] == "collider.glb" and s["world"]["spawn"]["yaw"] == doc["spawn"]["yaw"]
-    assert s["world"]["walkZone"]["auto"] is True
+    assert set(s["world"]) == {"file", "floorY", "collider", "spawn"}  # only WorldAsset fields
     assert (tmp_path / "data" / "archive" / "colliders").exists()
     assert open(res["archived"], "rb").read() == b"old collider"
     assert (scene / "collider.glb").read_bytes() == (out / "auto" / "collider.glb").read_bytes()

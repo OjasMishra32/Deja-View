@@ -53,7 +53,7 @@ place you could stand.
 
 Nothing changes in the scene until `--install`. That copies the collider to `<scene>/collider.glb`, after archiving
 the old one under `data/archive/colliders/<scene>-<sha1>.glb` the way `collider-clear-path.ts` does, and sets
-`world.collider`, `world.spawn` and `world.walkZone` in `scene.json`.
+`world.collider` and `world.spawn` in `scene.json`, the two fields the shared `WorldAsset` contract has for this.
 
 ## Running it
 
