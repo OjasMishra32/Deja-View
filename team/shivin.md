@@ -8,6 +8,19 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 13 (Sat ~9:15 AM): URGENT, your Roblox account is moderated.** Since about 9 AM every Open Cloud upload
+> with your key answers `User is moderated` (chess room sky faces, the Tilted Towers room). Server-side uploads are now
+> OFF (the live server no longer sends anything to Roblox). What to do now:
+> 1. Open roblox.com and Creator Hub on your account and read the moderation notice: what was flagged (asset id or
+>    name), the reason and how long it lasts. Tell Ojasva exactly what it says. Appeal it there if it is a mistake.
+> 2. Our uploads so far: the-courts v2 room 91874647541773 plus 6 sky faces, brick-apartment room 96179943812932,
+>    chess-room v1 room 122387814565130 and v2 room 70649141763810, plus earlier test rooms. The likeliest trigger is
+>    Fortnite-derived content (the old fortnite-* rooms, the Brick House apartment, Tilted Towers): Epic's IP.
+> 3. Until it is cleared, do not upload anything from your account (Studio or Open Cloud). Rooms already uploaded may
+>    or may not keep loading; if LoadAssetAsync fails, the game falls back to the block map (that path still works).
+> 4. Proposal (Ojasva decides): keep Fortnite-derived worlds (tilted-towers, brick-apartment) out of the Roblox
+>    picker for good; the Roblox story is our own captures (the Game Lawn, chess, kitchen).
+
 > **Update 12 (Sat ~7 AM): the real tables come from the server, two real rooms are uploaded. Fix chess and foosball.**
 > **New server field** (`contracts.md` 6.6), live once Ojasva restarts the server (he posts it): `features` in `/model`
 > and in `/map` (after `walkBounds`, every chunk too). Studs, the map's frame (metres × 3.57, floor y = 0, no flips).
