@@ -10,9 +10,9 @@ local Theme = require(ReplicatedStorage.Shared.Theme)
 
 local Stats = {}
 
-Stats.GAMES = { "tag", "chess", "pingpong", "foosball", "hideseek", "lava", "cooking" }
+Stats.GAMES = { "tag", "chess", "pingpong", "foosball", "hideseek", "lava", "cooking", "pool" }
 local GAME_TITLE = { tag = "TAG", chess = "CHESS", pingpong = "PING PONG", foosball = "FOOSBALL", hideseek = "HIDE & SEEK",
-	lava = "FLOOR IS LAVA", cooking = "COOKING" }
+	lava = "FLOOR IS LAVA", cooking = "COOKING", pool = "POOL" }
 
 Stats.BADGES = {
 	memory = "Walked into a memory",
@@ -210,7 +210,7 @@ local function buildBoard()
 	Theme.label({ Text = "HALL OF FAME", FontFace = Theme.Heading, TextColor3 = Theme.Accent, Size = UDim2.new(1, 0, 0, 56),
 		MaxText = 56, Parent = root })
 	local grid = Theme.make("Frame", { BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 70), Size = UDim2.new(1, 0, 1, -90),
-		Parent = root }, { Theme.make("UIGridLayout", { CellSize = UDim2.new(0.135, 0, 1, 0), CellPadding = UDim2.new(0.009, 0, 0, 0),
+		Parent = root }, { Theme.make("UIGridLayout", { CellSize = UDim2.new(0.117, 0, 1, 0), CellPadding = UDim2.new(0.009, 0, 0, 0),
 		SortOrder = Enum.SortOrder.LayoutOrder }) })
 	for i, g in Stats.GAMES do
 		local col = Theme.make("Frame", { Name = g, BackgroundColor3 = Theme.Surface, LayoutOrder = i, Parent = grid },

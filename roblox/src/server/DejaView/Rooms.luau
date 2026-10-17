@@ -453,6 +453,7 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 					room:SetAttribute(attr, "rbxassetid://" .. tostring(sky[key]))
 				end
 			end
+			print("[DejaView] skybox set for", sceneId)
 		end
 	elseif not gone and MapBuilder.hasBaked(sceneId) then
 		info = MapBuilder.buildBaked(sceneId)

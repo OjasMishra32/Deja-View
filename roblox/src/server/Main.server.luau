@@ -120,6 +120,13 @@ local actions: { [string]: (Player, any) -> () } = {
 		Extras.endHunt(nil)
 	end,
 	pingpong = function(p, cameraLook)
+		-- one ping pong at a time: stop Seb's real-physics version if it's up (team/seb.md A.12)
+		local seb = DV:FindFirstChild("PingPong")
+		if seb then
+			pcall(function()
+				require(seb :: any).stop()
+			end)
+		end
 		if Pong.isActive() then
 			Pong.rematch() -- pressed again while it's up: a rematch in the same spot
 			return

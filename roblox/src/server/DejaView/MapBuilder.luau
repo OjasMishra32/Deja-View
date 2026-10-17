@@ -57,6 +57,11 @@ local savedLighting: { [string]: any }? = nil
 local parkedEffects: { [Instance]: any } = {}
 
 function MapBuilder.setUnlit(on: boolean)
+	-- Off by default: the client does this per player (client/Modules/RoomLook), so the lobby keeps its normal look
+	-- while others are in a textured room. Set Config.SERVER_UNLIT = true to light everyone from the server instead.
+	if not Config.SERVER_UNLIT then
+		return
+	end
 	if on == (savedLighting ~= nil) then
 		return
 	end
