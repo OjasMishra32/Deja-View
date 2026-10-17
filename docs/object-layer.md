@@ -62,7 +62,7 @@ splats, because the glTF export is still a mesh with textures.
 The popular `ReshotAI/gaussian-splatting-blender-addon` has no license file, so we
 will not vendor it. Use Blender itself (GPL) as a tool, and import PLY directly.
 
-## 4. What we borrow, and under which license
+## 4. What we use, and under which license
 
 The rule: prefer permissive code and models that load through libraries we already
 have. Pin every model by revision. Never commit weights.
@@ -82,7 +82,7 @@ have. Pin every model by revision. Never commit weights.
 
 Model revisions are pinned in `pipeline/models.lock.json`.
 
-## 5. What we deliberately do not borrow
+## 5. What we deliberately do not use
 
 These are good research. This project is not commercial, so their licenses are not a
 hard blocker. We are still not vendoring them now: the 3DGS mesh variants are heavy
@@ -234,11 +234,9 @@ This is practical for hero objects against walls. It is not practical for everyt
 9. Phone scan capture flow.
 10. Openable hero object, one only.
 
-## 13. Commit policy for borrowed code
+## 13. Dependency policy
 
-- One commit per upstream component.
-- The commit message names the upstream URL, the pinned revision, and the license.
-- A source header repeats the upstream, the revision, the license, and our changes.
+- Models and libraries come in as pinned dependencies only (pip packages, model revisions in
+  `pipeline/models.lock.json`); their source is never copied into this repo.
 - Weights are never committed. `pipeline/models.lock.json` pins the download.
-- Prefer a pinned dependency over a copied file. Copy only when the upstream cannot
-  be installed cleanly.
+- Every dependency is credited in `THIRD_PARTY.md` and on the Devpost, as the SwampHacks rules require.

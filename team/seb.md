@@ -10,6 +10,15 @@ up in the headset) and powers the finale (2:00 to 2:25, the judge's own photo be
 
 ---
 
+**Update 7 (Sat ~9:20 AM): your object layer is merged; one repo rule, and Roblox uploads are paused.**
+- Merged on `main` (b5d7939, a108ef1): objects found in the splats, described, and planned as Roblox parts. Tests pass.
+- Repo rule from Ojasva: models and libraries come in only as pinned dependencies, credited in `THIRD_PARTY.md` and on
+  the Devpost. Never copy another project's source files into the repo, and never name other repositories in commit
+  messages or code headers. `docs/object-layer.md` section 13 now says this.
+- Roblox: Shivin's account now answers `User is moderated` to uploads (likely the Fortnite-derived rooms), so the
+  server's uploads are off and nothing should be uploaded with his key until he clears it (shivin.md Update 13). Your
+  test place publishes with your own key, so check that account's notices too before publishing again.
+
 **Update 6 (Sat ~7 AM): the real table comes from the server.** Your ping pong is merged on `main` (67de0b3),
 great work.
 
