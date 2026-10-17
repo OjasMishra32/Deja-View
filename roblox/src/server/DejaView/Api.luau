@@ -79,6 +79,11 @@ function Api.map(sceneId: string, maxParts: number?)
 	return request("GET", "/api/roblox/" .. enc(sceneId) .. "/map" .. q, nil, 20)
 end
 
+-- Textured room model details (contract 6.2b): units, chunks, spawn, and assetId once uploaded.
+function Api.model(sceneId: string)
+	return request("GET", "/api/roblox/" .. enc(sceneId) .. "/model")
+end
+
 function Api.presence(sceneId: string, body: any)
 	return request("POST", "/api/roblox/" .. enc(sceneId) .. "/presence", body)
 end

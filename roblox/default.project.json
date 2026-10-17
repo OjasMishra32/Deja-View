@@ -33,7 +33,8 @@
       "DejaView": { "$path": "src/server/DejaView" }
     },
     "ServerStorage": {
-      "BakedRooms": { "$className": "Folder" }
+      "BakedRooms": { "$className": "Folder", "$ignoreUnknownInstances": true },
+      "Rooms": { "$className": "Folder", "$ignoreUnknownInstances": true }
     },
     "ReplicatedStorage": {
       "Shared": { "$path": "src/shared" },

@@ -115,7 +115,9 @@ function MapBuilder.infoFromMap(map: any): RoomInfo
 end
 
 -- Builds the map; onProgress(built, total). Returns info, or nil if cancelled by a newer build.
-function MapBuilder.build(map: any, onProgress: ((number, number) -> ())?): RoomInfo?
+-- opts.collisionOnly: the blocks are invisible collision under a textured room model (shivin.md Update 2).
+function MapBuilder.build(map: any, onProgress: ((number, number) -> ())?, opts: { collisionOnly: boolean? }?): RoomInfo?
+	local collisionOnly = opts ~= nil and opts.collisionOnly == true
 	generation += 1
 	local myGen = generation
 	local t0 = os.clock()
@@ -132,9 +134,12 @@ function MapBuilder.build(map: any, onProgress: ((number, number) -> ())?): Room
 		part.Size = Vector3.new(sx, sy, sz)
 		part.CFrame = CFrame.new(p[1], p[2], p[3])
 		part.Color = Color3.fromRGB(p[7], p[8], p[9])
-		part.CastShadow = math.min(sx, sy, sz) >= 1
+		part.CastShadow = math.min(sx, sy, sz) >= 1 and not collisionOnly
 		part.CanCollide = math.max(sx, sy, sz) >= 0.6
-		if p[10] == 1 then
+		if collisionOnly then
+			part.Transparency = 1
+			part.CanQuery = math.max(sx, sy, sz) >= 0.6 -- spawn raycasts still find the floor
+		elseif p[10] == 1 then
 			hasImagined = true
 			CollectionService:AddTag(part, "DVImagined")
 		end
@@ -161,6 +166,71 @@ function MapBuilder.build(map: any, onProgress: ((number, number) -> ())?): Room
 	end
 	print(string.format("[DejaView] built %s: %d parts in %.2fs (batch %d)", info.sceneId, total, os.clock() - t0, batch))
 	MapBuilder.current = info
+	return info
+end
+
+local function prepareModel(model: Instance, meshCollision: boolean)
+	for _, d in model:GetDescendants() do
+		if d:IsA("BasePart") then
+			d.Anchored = true
+			d.CanTouch = false
+			d.CanCollide = meshCollision
+			d.CanQuery = meshCollision
+		elseif d:IsA("Script") or d:IsA("LocalScript") then
+			d:Destroy() -- an imported or uploaded room must never run code
+		end
+	end
+end
+
+-- Puts a textured room model into the current Workspace.Room (over invisible collision blocks).
+function MapBuilder.attachModel(model: Instance)
+	local room = workspace:FindFirstChild("Room")
+	if not room then
+		return
+	end
+	prepareModel(model, false)
+	model.Name = "RoomModel"
+	model.Parent = room
+	room:SetAttribute("HasModel", true)
+end
+
+-- A textured room with no block map (map fetch failed): the meshes are the collision.
+function MapBuilder.buildFromModel(sceneId: string, name: string, model: Instance): RoomInfo?
+	generation += 1
+	prepareModel(model, true)
+	local cf, size
+	if model:IsA("Model") then
+		cf, size = model:GetBoundingBox()
+	else
+		local tmp = Instance.new("Model")
+		for _, c in model:GetChildren() do
+			c.Parent = tmp
+		end
+		cf, size = tmp:GetBoundingBox()
+		for _, c in tmp:GetChildren() do
+			c.Parent = model
+		end
+	end
+	local half = size / 2
+	local mn, mx = cf.Position - half, cf.Position + half
+	local spawnAttr = model:GetAttribute("Spawn")
+	local info: RoomInfo = {
+		sceneId = sceneId,
+		name = name,
+		spawn = if typeof(spawnAttr) == "Vector3" then spawnAttr else Vector3.new(cf.Position.X, mn.Y, cf.Position.Z),
+		boundsMin = mn,
+		boundsMax = mx,
+		ceilingY = mx.Y,
+		studsPerMeter = model:GetAttribute("StudsPerMeter") or 3.57,
+		count = #model:GetDescendants(),
+	}
+	local folder = newFolder(info)
+	model.Name = "RoomModel"
+	model.Parent = folder
+	folder:SetAttribute("HasModel", true)
+	addBounds(folder, info)
+	MapBuilder.current = info
+	print("[DejaView] loaded room model for", sceneId, "(no block map)")
 	return info
 end
 

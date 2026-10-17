@@ -15,7 +15,7 @@ local HostAction = Remotes:WaitForChild("HostAction") :: RemoteEvent
 
 for name, value in {
 	Phase = "lobby", SceneId = "", RoomName = "", LoadProgress = 0, LoadStage = "", Banner = "",
-	Offline = false, JudgeHere = false, JudgeName = "", RoundState = "idle", RoundEndsAt = 0,
+	Offline = false, JudgeHere = false, JudgeName = "", JudgeRoom = "", RoundState = "idle", RoundEndsAt = 0,
 	CountdownEndsAt = 0, RoundIt = "", ScoresJson = "", RoomsJson = "[]", AutoJoin = Config.AUTO_JOIN_DEFAULT,
 	Follow = true, MockJudge = false, HasImagined = false, UsingMock = Config.useMock(),
 } do
