@@ -22,7 +22,9 @@ if __package__ in (None, ""):
 
 DETECTIONS_FILE = "detections.json"
 DEFAULT_SAM = "facebook/sam2.1-hiera-small"
+DEFAULT_SAM_REV = "ee5bba1d82bb8749febdf90f45e84b687142ba03"
 DEFAULT_DINO = "IDEA-Research/grounding-dino-tiny"
+DEFAULT_DINO_REV = "a2bb814dd30d776dcf7e30523b00659f4f141c71"
 
 
 def vocabulary(text: str) -> list[str]:
@@ -68,6 +70,8 @@ def run(
     labels: list[str],
     sam_id: str = DEFAULT_SAM,
     dino_id: str = DEFAULT_DINO,
+    sam_rev: str | None = DEFAULT_SAM_REV,
+    dino_rev: str | None = DEFAULT_DINO_REV,
     threshold: float = 0.28,
     text_threshold: float = 0.22,
     min_box: float = 12.0,
@@ -94,10 +98,10 @@ def run(
 
     dev = device or ("cuda" if torch.cuda.is_available() else "cpu")
     log(f"device {dev}; DINO {dino_id}; SAM {sam_id}; {len(views)} views")
-    dino_proc = AutoProcessor.from_pretrained(dino_id)
-    dino = AutoModelForZeroShotObjectDetection.from_pretrained(dino_id).to(dev).eval()
-    sam_proc = Sam2Processor.from_pretrained(sam_id)
-    sam = Sam2Model.from_pretrained(sam_id).to(dev).eval()
+    dino_proc = AutoProcessor.from_pretrained(dino_id, revision=dino_rev)
+    dino = AutoModelForZeroShotObjectDetection.from_pretrained(dino_id, revision=dino_rev).to(dev).eval()
+    sam_proc = Sam2Processor.from_pretrained(sam_id, revision=sam_rev)
+    sam = Sam2Model.from_pretrained(sam_id, revision=sam_rev).to(dev).eval()
     prompt = ". ".join(labels) + "."
 
     detections = []
@@ -173,6 +177,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", default=None)
     ap.add_argument("--sam", default=DEFAULT_SAM)
     ap.add_argument("--dino", default=DEFAULT_DINO)
+    ap.add_argument("--sam-revision", default=DEFAULT_SAM_REV)
+    ap.add_argument("--dino-revision", default=DEFAULT_DINO_REV)
     ap.add_argument("--threshold", type=float, default=0.28)
     ap.add_argument("--text-threshold", type=float, default=0.22)
     ap.add_argument("--min-box", type=float, default=12.0)
@@ -182,6 +188,7 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.out) if args.out else Path(args.views).parent / "masks"
     doc = run(
         args.views, out, vocabulary(args.labels), args.sam, args.dino,
+        args.sam_revision, args.dino_revision,
         args.threshold, args.text_threshold, args.min_box, args.limit, args.device,
     )
     print(f"{len(doc['detections'])} detections -> {out}")
