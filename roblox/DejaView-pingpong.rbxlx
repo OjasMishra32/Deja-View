@@ -8075,6 +8075,21 @@ local barFillCorner = Instance.new("UICorner")
 barFillCorner.CornerRadius = UDim.new(1, 0)
 barFillCorner.Parent = barFill
 
+local version = Instance.new("TextLabel")
+version.Name = "PPVersion"
+version.Size = UDim2.fromOffset(240, 22)
+version.AnchorPoint = Vector2.new(0, 1)
+version.Position = UDim2.new(0, 24, 1, -24)
+version.BackgroundTransparency = 1
+version.Font = Enum.Font.GothamBold
+version.TextSize = 14
+version.TextColor3 = Color3.fromRGB(255, 255, 255)
+version.TextStrokeTransparency = 0.5
+version.TextXAlignment = Enum.TextXAlignment.Left
+version.Text = "PING PONG v3  ·  hold to charge"
+version.Visible = false
+version.Parent = gui
+
 local reticle = Instance.new("Frame")
 reticle.Name = "PPAim"
 reticle.Size = UDim2.fromOffset(10, 10)
@@ -8297,6 +8312,7 @@ PPState.OnClientEvent:Connect(function(msg)
 	end
 	if msg.active ~= nil then
 		active = msg.active == true
+		version.Visible = active
 		if not active then
 			mySide = nil
 			charging = false
