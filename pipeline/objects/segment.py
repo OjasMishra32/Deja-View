@@ -137,7 +137,6 @@ def run(
         masks = sam_proc.post_process_masks(
             sam_out.pred_masks.detach().cpu(),
             sam_inputs["original_sizes"].detach().cpu(),
-            sam_inputs["reshaped_input_sizes"].detach().cpu(),
         )[0]
         iou = sam_out.iou_scores.detach().cpu().numpy().reshape(len(keep), -1)
         for i, (label, score, box) in enumerate(keep):
