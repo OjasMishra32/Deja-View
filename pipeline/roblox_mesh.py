@@ -1377,6 +1377,7 @@ def build_model(scene_dir: Path | str, out_dir: Path | str | None = None, triang
                 texture: int = DEFAULT_TEXTURE, voxel: float | None = None, positions: int = MAX_POSITIONS,
                 face_res: int = FACE_RES, textured: bool = True, device: str | None = None, workers: int = 8,
                 key: str | None = None, sheet: Path | str | None = None, hole_edges: int = HOLE_EDGES,
+                room_override: "Room | None" = None, views_override: "tuple[list[View], list] | None" = None,
                 log: Callable[[str], None] = _log_noop) -> dict:
     t0 = time.time()
     timings: dict[str, float] = {}
@@ -1393,13 +1394,19 @@ def build_model(scene_dir: Path | str, out_dir: Path | str | None = None, triang
     triangles = int(max(MIN_TRIANGLES, min(MAX_TRIANGLES, triangles)))
     texture = int(max(128, min(4096, texture)))
     dev = _device(device)
-    try:
-        room = load_room(scene_dir, log)
-    except rmap.MapError as e:
-        raise MeshError(str(e))
+    if room_override is not None:
+        room = room_override
+    else:
+        try:
+            room = load_room(scene_dir, log)
+        except rmap.MapError as e:
+            raise MeshError(str(e))
     t = lap("load", t0)
 
-    views, stands = plan_views(room, positions, face_res)
+    if views_override is not None:
+        views, stands = views_override
+    else:
+        views, stands = plan_views(room, positions, face_res)
     renderer = Renderer(room, dev)
     shots, view_stats = render_views(renderer, views, log)
     if not shots:
