@@ -21,6 +21,7 @@ local Vote = Remotes:WaitForChild("Vote") :: RemoteEvent
 local HostAction = Remotes:WaitForChild("HostAction") :: RemoteEvent
 local LeaveNote = Remotes:WaitForChild("LeaveNote") :: RemoteEvent
 local PongHit = Remotes:WaitForChild("PongHit") :: RemoteEvent
+local FoosInput = Remotes:WaitForChild("FoosInput") :: RemoteEvent
 
 local player = Players.LocalPlayer
 local ui = Ui.build()
@@ -171,6 +172,7 @@ local function refresh()
 	ui.realityBtn.Visible = W("HasImagined") == true and inRoom
 	ui.noteBtn.Visible = inRoom and phase == "room"
 	ui.hitBtn.Visible = inRoom and W("PongActive") == true
+	ui.foos.Visible = inRoom and W("FoosActive") == true
 	ui.huntBtn.Text = if round == "hunt" then "END HUNT" else "START HUNT"
 	ui.bigBtn.Text = "BIG SCREEN: " .. (if bigScreen then "ON" else "OFF")
 
@@ -347,6 +349,57 @@ end)
 ui.endBtn.Activated:Connect(function()
 	host("end_round")
 end)
+-- Foosball: hold ◀ / ▶ (or Z / X) to slide your rods, KICK (or C) to shoot.
+local foosHeld = { left = false, right = false }
+local function sendSlide()
+	local v = (if foosHeld.right then 1 else 0) - (if foosHeld.left then 1 else 0)
+	FoosInput:FireServer("slide", v)
+end
+for key, btn in { left = ui.foosLeft, right = ui.foosRight } do
+	btn.MouseButton1Down:Connect(function()
+		foosHeld[key] = true
+		sendSlide()
+	end)
+	btn.MouseButton1Up:Connect(function()
+		foosHeld[key] = false
+		sendSlide()
+	end)
+	btn.MouseLeave:Connect(function()
+		if foosHeld[key] then
+			foosHeld[key] = false
+			sendSlide()
+		end
+	end)
+end
+ui.foosKick.Activated:Connect(function()
+	FoosInput:FireServer("kick")
+end)
+ui.foosBtn.Activated:Connect(function()
+	host("foosball", workspace.CurrentCamera.CFrame.LookVector)
+end)
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed or not W("FoosActive") then
+		return
+	end
+	if input.KeyCode == Enum.KeyCode.Z or input.KeyCode == Enum.KeyCode.DPadLeft then
+		foosHeld.left = true
+		sendSlide()
+	elseif input.KeyCode == Enum.KeyCode.X or input.KeyCode == Enum.KeyCode.DPadRight then
+		foosHeld.right = true
+		sendSlide()
+	elseif input.KeyCode == Enum.KeyCode.C or input.KeyCode == Enum.KeyCode.ButtonR1 then
+		FoosInput:FireServer("kick")
+	end
+end)
+UserInputService.InputEnded:Connect(function(input)
+	if input.KeyCode == Enum.KeyCode.Z or input.KeyCode == Enum.KeyCode.DPadLeft then
+		foosHeld.left = false
+		sendSlide()
+	elseif input.KeyCode == Enum.KeyCode.X or input.KeyCode == Enum.KeyCode.DPadRight then
+		foosHeld.right = false
+		sendSlide()
+	end
+end)
 ui.pongBtn.Activated:Connect(function()
 	host("pingpong", workspace.CurrentCamera.CFrame.LookVector)
 end)
@@ -425,7 +478,7 @@ end)
 
 -- Attribute wiring
 for _, name in { "Phase", "RoomName", "LoadProgress", "LoadStage", "Banner", "JudgeHere", "JudgeName", "RoundState",
-	"AutoJoin", "Follow", "MockJudge", "HasImagined", "JudgeRoom", "LabelCount", "PongActive" } do
+	"AutoJoin", "Follow", "MockJudge", "HasImagined", "JudgeRoom", "LabelCount", "PongActive", "FoosActive" } do
 	workspace:GetAttributeChangedSignal(name):Connect(refresh)
 end
 workspace:GetAttributeChangedSignal("RoomsJson"):Connect(renderCards)

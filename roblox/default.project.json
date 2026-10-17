@@ -49,7 +49,8 @@
         "Vote": { "$className": "RemoteEvent" },
         "HostAction": { "$className": "RemoteEvent" },
         "LeaveNote": { "$className": "RemoteEvent" },
-        "PongHit": { "$className": "RemoteEvent" }
+        "PongHit": { "$className": "RemoteEvent" },
+        "FoosInput": { "$className": "RemoteEvent" }
       }
     }
   }
