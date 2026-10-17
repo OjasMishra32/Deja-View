@@ -1,0 +1,44 @@
+# FlashWorld environment on HiPerGator ($HPG_ROOT/envs/flashworld, Python 3.11), installed by hpg/setup.sh.
+#
+# Installed before this file, from https://download.pytorch.org/whl/cu128 (Blackwell needs CUDA 12.8+):
+#   torch==2.8.0 torchvision==0.23.0
+# Installed after it, built against the CUDA module with TORCH_CUDA_ARCH_LIST="8.9;10.0;12.0+PTX":
+#   gsplat @ git+https://github.com/nerfstudio-project/gsplat.git@32f2a54d21c7ecb135320bb02b136b7407ae5712
+# FlashWorld itself is a source checkout at $HPG_ROOT/src/FlashWorld (FLASHWORLD_SRC), not a package.
+# Do not install `spaces`: it switches FlashWorld into Hugging Face Spaces mode.
+
+# Pins from FlashWorld's requirements.txt (torch excepted; transformers 4.57.0 was yanked from PyPI, 4.57.1 is its fix)
+transformers==4.57.1
+diffusers @ git+https://github.com/huggingface/diffusers.git@447e8322f76efea55d4769cd67c372edbf0715b8
+accelerate==1.10.1
+omegaconf==2.3.0
+ninja==1.13.0
+numpy==2.2.6
+einops==0.8.1
+moviepy==1.0.3
+av==15.1.0
+plyfile==1.1.2
+ftfy==6.3.1
+nanobind==2.9.2
+# app.py imports these at module level (only used by its web server)
+gradio==5.49.1
+uvicorn
+fastapi
+
+# Also needed at runtime
+opencv-python-headless==4.12.0.88
+jaxtyping
+rich
+tqdm
+imageio
+imageio-ffmpeg
+pillow
+pillow-heif
+safetensors
+sentencepiece
+protobuf
+scipy
+huggingface_hub[hf_transfer]>=0.34,<1.0
+
+# Tests (python -m pytest tests/gpu on HiPerGator if the tests are copied over)
+pytest

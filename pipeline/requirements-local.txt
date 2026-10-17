@@ -1,0 +1,18 @@
+# Local (Mac, MPS or CPU) environment for pipeline/run_job.py and pipeline/tw.
+# Installed into .venv by scripts/setup-local.sh (uv, Python 3.12).
+# The PyPI macOS arm64 torch wheels include the MPS backend.
+# Tested on an M4 MacBook Air with torch 2.14.1, torchvision 0.29.1, transformers 5.20.1,
+# numpy 2.5.4, opencv-python-headless 5.0.0.93, scipy 1.18.1.
+torch>=2.6
+torchvision>=0.21
+transformers>=4.49,<6
+accelerate>=1.2
+safetensors>=0.4
+huggingface_hub>=0.26
+opencv-python-headless>=4.10
+numpy>=1.26,<3
+pillow>=10.4
+pillow-heif>=0.18
+plyfile>=1.0
+scipy>=1.13
+pytest>=8.3

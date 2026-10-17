@@ -1,5 +1,139 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ThirdWheel</title></head>
-<body><p>capture page coming soon</p></body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>New world · ThirdWheel</title>
+    <meta name="description" content="Take a photo or a video and turn it into a world you can walk around." />
+    <meta name="theme-color" content="#0b0b0d" />
+    <link rel="icon" href="./public/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=JetBrains+Mono:wght@400;500&display=swap"
+    />
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="wrap">
+        <a class="brand" href="/" aria-label="ThirdWheel home">
+          <svg viewBox="0 0 34 18" aria-hidden="true">
+            <circle cx="5" cy="9" r="4.5" fill="currentColor" />
+            <circle cx="17" cy="9" r="4.5" fill="currentColor" />
+            <circle cx="29" cy="9" r="3.9" fill="none" stroke="#d4ff3a" stroke-width="2.2" />
+          </svg>
+          ThirdWheel
+        </a>
+        <div class="spacer"></div>
+        <a class="btn btn-sm" href="/#gallery">Gallery</a>
+      </div>
+    </header>
+
+    <main class="capture-main">
+      <div class="wrap">
+        <div class="capture-grid">
+          <form id="capture-form" novalidate>
+            <div class="capture-head">
+              <div class="eyebrow" id="cap-eyebrow">New world</div>
+              <h1 id="cap-title">Snap it. Move in.</h1>
+              <p id="cap-lede">One photo of a room, a calm game clip, or just a description. We build the rest of the room around it.</p>
+            </div>
+
+            <div class="step">
+              <div class="step-label"><span class="num">1</span>Pick a mode</div>
+              <div class="mode-pick" role="radiogroup" aria-label="Mode">
+                <button type="button" class="mode-opt" role="radio" data-mode="rentfree" aria-checked="true">
+                  <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M10 8H7v3M22 8h3v3M10 24H7v-3M22 24h3v-3" />
+                    <rect x="11" y="12" width="10" height="8" rx="1" fill="currentColor" fill-opacity=".2" />
+                  </svg>
+                  <span class="txt"><span class="t">Rent Free</span><span class="d">Photo, game clip, or just a prompt</span></span>
+                </button>
+                <button type="button" class="mode-opt" role="radio" data-mode="thirdwheel" aria-checked="false">
+                  <svg viewBox="0 0 32 32" aria-hidden="true">
+                    <circle cx="6" cy="16" r="4.5" fill="currentColor" />
+                    <circle cx="16" cy="16" r="4.5" fill="currentColor" />
+                    <circle cx="26" cy="16" r="4" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="2 2" />
+                  </svg>
+                  <span class="txt"><span class="t">Third Wheel</span><span class="d">One video from a propped-up phone</span></span>
+                </button>
+                <button type="button" class="mode-opt" role="radio" data-mode="reconstruct" aria-checked="false">
+                  <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <circle cx="16" cy="16" r="10" stroke-dasharray="3 3" />
+                    <circle cx="16" cy="16" r="3" fill="currentColor" />
+                  </svg>
+                  <span class="txt"><span class="t">Reconstruct</span><span class="d">8+ photos, an exact copy</span></span>
+                </button>
+              </div>
+            </div>
+
+            <div class="step dropzone" id="dropzone">
+              <div class="step-label"><span class="num">2</span><span id="media-label">Add your shot</span></div>
+              <div class="pick-row">
+                <label class="pick" id="pick-camera-label">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" />
+                    <circle cx="12" cy="13.5" r="3.5" />
+                  </svg>
+                  <span><span id="pick-camera-text">Take a photo</span><small id="pick-camera-hint">Opens the camera on a phone</small></span>
+                  <input id="pick-camera" type="file" accept="image/*" capture="environment" />
+                </label>
+                <label class="pick">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 16V4M7 9l5-5 5 5M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4" />
+                  </svg>
+                  <span><span id="pick-files-text">Choose photos or a clip</span><small id="pick-files-hint">Or drop files here</small></span>
+                  <input id="pick-files" type="file" accept="image/*,video/*" multiple />
+                </label>
+              </div>
+              <div class="previews" id="previews"></div>
+            </div>
+
+            <div class="step">
+              <div class="step-label"><span class="num">3</span>Name it</div>
+              <div class="field">
+                <label for="scene-name">Name</label>
+                <input class="input" id="scene-name" name="name" maxlength="80" autocomplete="off" placeholder="Kitchen, rent free" required />
+              </div>
+              <div class="field">
+                <label for="scene-prompt" id="prompt-label">Prompt <small>optional, or use it instead of a photo</small></label>
+                <textarea class="textarea" id="scene-prompt" name="prompt" maxlength="500" placeholder="A sunlit kitchen with green tiles and a very judgmental cat"></textarea>
+              </div>
+            </div>
+
+            <div class="submit-row">
+              <button class="btn btn-primary" id="submit" type="submit">Build my world <span class="arrow">&rarr;</span></button>
+              <button class="btn" id="cancel" type="button" hidden>Cancel upload</button>
+            </div>
+            <div class="form-error" id="capture-error" role="alert"></div>
+
+            <div class="upload-progress" id="upload" aria-live="polite">
+              <div class="stage-line"><b id="up-stage">Uploading</b><span id="up-pct">0%</span></div>
+              <div class="progress"><div class="progress-fill" id="up-fill"></div></div>
+              <div class="stage-line" style="margin: 10px 0 0"><span id="up-bytes"></span><span id="up-speed"></span></div>
+            </div>
+          </form>
+
+          <aside class="side-card" id="side">
+            <div class="eyebrow">How to shoot</div>
+            <h2 id="side-title">One wide photo from a corner.</h2>
+            <ul class="tips" id="side-tips"></ul>
+            <p class="note" id="side-note"></p>
+            <div id="phone-hint" hidden>
+              <p class="note">On a laptop? Open this page on your phone to use its camera:</p>
+              <div class="lan-box" style="margin-top: 12px">
+                <div class="qr" id="qr" style="width: 112px; height: 112px"></div>
+                <a class="lan-url" id="lan-url" href="#"></a>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </main>
+
+    <div class="toast" id="toast" role="status"></div>
+    <script type="module" src="./src/capture.ts"></script>
+  </body>
 </html>

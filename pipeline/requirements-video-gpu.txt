@@ -1,0 +1,24 @@
+# HiPerGator "video" environment: pipeline/run_job.py for Third Wheel (pipeline/tw, plate_room.py)
+# on CUDA. Blackwell GPUs (RTX PRO 6000 sm_120, B200 sm_100) need a PyTorch built for CUDA 12.8+.
+#
+# hpg/setup.sh installs torch/torchvision from the cu128 index first and then this file under its
+# torch constraints, so the unpinned torch lines below keep that build. Standalone:
+#   python -m pip install -r pipeline/requirements-video-gpu.txt
+# picks the cu128 wheels through the extra index.
+# Weights: python pipeline/common/models.py --prefetch (into HF_HOME / TORCH_HOME).
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch>=2.7
+torchvision>=0.22
+transformers>=4.49,<6
+accelerate>=1.2
+safetensors>=0.4
+huggingface_hub>=0.26
+opencv-python-headless>=4.10
+numpy>=1.26,<3
+pillow>=10.4
+pillow-heif>=0.18
+plyfile>=1.0
+scipy>=1.13
+psutil>=5.9
+pytest>=8.3
+# ffmpeg/ffprobe come from conda-forge (hpg/setup.sh) or a module, not pip.

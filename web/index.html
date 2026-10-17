@@ -1,5 +1,239 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ThirdWheel</title></head>
-<body><p>index page coming soon</p></body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>ThirdWheel</title>
+    <meta name="description" content="Snap any room and live in it rent free. Film your friend cooking and third-wheel it in VR." />
+    <meta name="theme-color" content="#0b0b0d" />
+    <link rel="icon" href="./public/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=JetBrains+Mono:wght@400;500&display=swap"
+    />
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="wrap">
+        <a class="brand" href="/" aria-label="ThirdWheel home">
+          <svg viewBox="0 0 34 18" aria-hidden="true">
+            <circle cx="5" cy="9" r="4.5" fill="currentColor" />
+            <circle cx="17" cy="9" r="4.5" fill="currentColor" />
+            <circle cx="29" cy="9" r="3.9" fill="none" stroke="#d4ff3a" stroke-width="2.2" />
+          </svg>
+          ThirdWheel
+        </a>
+        <nav class="topnav" aria-label="Sections">
+          <a href="#modes">Modes</a>
+          <a href="#gallery">Gallery</a>
+          <a href="#headset">Headset</a>
+        </nav>
+        <div class="spacer"></div>
+        <span class="live" id="live" title="Live updates">
+          <span class="dot" id="live-dot"></span><span class="txt" id="live-txt">connecting</span>
+        </span>
+        <a class="btn btn-primary btn-sm" href="/capture">Make one</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="wrap">
+          <div class="hero-grid">
+            <div>
+              <div class="eyebrow">Photo or video in &middot; walkable world out</div>
+              <h1>
+                <span class="line"><span>Snap any room.</span></span>
+                <span class="line"><span>Live in it</span></span>
+                <span class="line"
+                  ><span
+                    ><span class="accent-word"
+                      >rent free.<svg class="squiggle" viewBox="0 0 300 20" preserveAspectRatio="none" aria-hidden="true">
+                        <path d="M3 13 C 40 3, 70 19, 105 10 S 170 3, 205 11 S 265 18, 297 7" /></svg></span></span
+                ></span>
+              </h1>
+              <p class="lede">
+                One photo in, the whole room out: <strong>the corners you missed, the wall behind you, the ceiling nobody
+                photographs.</strong> Walk it on a Quest 3S or right here in the browser.
+              </p>
+              <div class="cta-row">
+                <a class="btn btn-primary" href="/capture?mode=rentfree">Make a world <span class="arrow">&rarr;</span></a>
+                <a class="btn" href="/capture?mode=thirdwheel">Third-wheel a video</a>
+              </div>
+            </div>
+            <div class="hero-art" aria-hidden="true">
+              <canvas id="hero-canvas"></canvas>
+              <span class="tag shot">The part you shot</span>
+              <span class="tag made">The part we made up</span>
+            </div>
+          </div>
+
+          <div class="health" id="health" aria-live="polite">
+            <span class="label">Compute</span>
+            <span class="health-item" data-k="gpu"><span class="dot"></span><span><b>GPU (HiPerGator)</b> <span class="v">checking</span></span></span>
+            <span class="health-item" data-k="worker"><span class="dot"></span><span><b>Warm worker</b> <span class="v">checking</span></span></span>
+            <span class="health-item" data-k="fallbacks"><span class="dot"></span><span><b>Fallbacks</b> <span class="v">checking</span></span></span>
+            <span class="lan health-item"><span class="label">Same Wi-Fi</span><a class="mono" id="lan-inline" href="#headset">finding address</a></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="modes">
+        <div class="wrap">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Two modes</div>
+              <h2>Pick your flavour<br />of trespassing.</h2>
+            </div>
+            <p>Both end the same way: you, standing somewhere you weren't, looking around like you pay rent there.</p>
+          </div>
+
+          <div class="modes">
+            <article class="mode">
+              <div class="mode-top">
+                <svg class="mode-glyph" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                  <path d="M22 18h-6v6M42 18h6v6M22 46h-6v-6M42 46h6v-6" />
+                  <rect x="22" y="24" width="20" height="16" rx="2" fill="currentColor" fill-opacity=".15" />
+                  <circle cx="7" cy="14" r="1.6" fill="currentColor" stroke="none" />
+                  <circle cx="57" cy="12" r="1.6" fill="currentColor" stroke="none" />
+                  <circle cx="5" cy="34" r="1.3" fill="currentColor" stroke="none" />
+                  <circle cx="59" cy="38" r="1.6" fill="currentColor" stroke="none" />
+                  <circle cx="10" cy="55" r="1.3" fill="currentColor" stroke="none" />
+                  <circle cx="54" cy="56" r="1.3" fill="currentColor" stroke="none" />
+                  <circle cx="32" cy="6" r="1.3" fill="currentColor" stroke="none" />
+                  <circle cx="32" cy="58" r="1.6" fill="currentColor" stroke="none" />
+                </svg>
+                <span class="chip accent">Photo &middot; game clip &middot; prompt</span>
+              </div>
+              <h3>Rent Free. <em>Snap any room.</em></h3>
+              <p>
+                Point, shoot, move in. A world model fills in everything the camera never saw, so you can actually turn
+                around. Game clips work too: we pull the sharpest, steadiest frame. No photo? Describe a room and it
+                gets built anyway.
+              </p>
+              <ul class="tips">
+                <li class="tips-title">How to shoot</li>
+                <li><span>01</span><span><b>Back into a corner and shoot wide.</b> Get floor and ceiling in the frame.</span></li>
+                <li><span>02</span><span><b>Lights on, no zoom, landscape.</b> Hold still for a beat before you tap.</span></li>
+                <li><span>03</span><span><b>Game clips: keep the camera calm.</b> Slow pans, no menus, no motion blur.</span></li>
+              </ul>
+              <a class="btn btn-primary" href="/capture?mode=rentfree">Start Rent Free <span class="arrow">&rarr;</span></a>
+            </article>
+
+            <article class="mode">
+              <div class="mode-top">
+                <svg class="mode-glyph" viewBox="0 0 64 64" aria-hidden="true">
+                  <circle cx="13" cy="32" r="9" fill="currentColor" fill-opacity=".9" />
+                  <circle cx="32" cy="32" r="9" fill="currentColor" fill-opacity=".9" />
+                  <circle cx="51" cy="32" r="8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-dasharray="3 3.2" />
+                </svg>
+                <span class="chip accent">One video</span>
+              </div>
+              <h3>Third Wheel. <em>Film your friend cooking.</em></h3>
+              <p>
+                Prop up your phone and hit record. The kitchen becomes a room you can walk around, and your friend is the
+                real footage lifted into 3D, sizzle and all. You stand right there. Slightly too close. As is tradition.
+              </p>
+              <ul class="tips">
+                <li class="tips-title">How to shoot</li>
+                <li><span>01</span><span><b>Prop the phone. Do not hold it.</b> The room is built from whatever stays still.</span></li>
+                <li><span>02</span><span><b>Whole person in frame, 1 to 3 m away.</b> Feet included, please.</span></li>
+                <li><span>03</span><span><b>10 to 30 seconds, good light.</b> Nobody walking through the shot.</span></li>
+              </ul>
+              <a class="btn btn-primary" href="/capture?mode=thirdwheel">Start Third Wheel <span class="arrow">&rarr;</span></a>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="gallery">
+        <div class="wrap">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Gallery</div>
+              <h2>Your worlds</h2>
+            </div>
+            <div class="filters" id="filters" role="toolbar" aria-label="Filter worlds"></div>
+          </div>
+          <div class="banner" id="gallery-error" role="alert"></div>
+          <div class="grid" id="grid" aria-live="polite">
+            <div class="skeleton"></div>
+            <div class="skeleton"></div>
+            <div class="skeleton"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="headset">
+        <div class="wrap">
+          <div class="duo">
+            <div class="panel">
+              <div class="eyebrow">Phone or Quest</div>
+              <h3>Same Wi-Fi? Open this.</h3>
+              <div class="lan-box">
+                <div class="qr" id="qr" aria-hidden="true"></div>
+                <div>
+                  <a class="lan-url" id="lan-url" href="#">finding this laptop&hellip;</a>
+                  <p class="lan-note" id="lan-note">Scan with your phone camera, or type it into the Quest browser.</p>
+                  <div class="lan-actions">
+                    <button class="btn btn-sm" id="lan-copy" type="button">Copy link</button>
+                    <a class="btn btn-sm" id="lan-capture" href="/capture">Capture page</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="eyebrow">Once you're in</div>
+              <h3>How to walk around</h3>
+              <div class="controls">
+                <div>
+                  <h4>Laptop</h4>
+                  <dl>
+                    <div><dt><kbd>Click</kbd></dt><dd>look around</dd></div>
+                    <div><dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>walk, <kbd>Shift</kbd> to run</dd></div>
+                    <div><dt><kbd>Space</kbd></dt><dd>play / pause video</dd></div>
+                    <div><dt><kbd>F</kbd></dt><dd>fly, <kbd>Q</kbd>/<kbd>E</kbd> down/up</dd></div>
+                    <div><dt><kbd>R</kbd></dt><dd>back to start</dd></div>
+                  </dl>
+                </div>
+                <div>
+                  <h4>Phone</h4>
+                  <dl>
+                    <div><dt>Left half</dt><dd>drag to move</dd></div>
+                    <div><dt>Right half</dt><dd>drag to look</dd></div>
+                    <div><dt>Tap</dt><dd>play with sound</dd></div>
+                  </dl>
+                </div>
+                <div>
+                  <h4>Quest 3S</h4>
+                  <dl>
+                    <div><dt>Left stick</dt><dd>walk</dd></div>
+                    <div><dt>Right stick</dt><dd>snap turn; push forward to teleport</dd></div>
+                    <div><dt><kbd>A</kbd> / <kbd>B</kbd></dt><dd>play / back to start</dd></div>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="wrap">
+        <div class="bigword" aria-hidden="true">Third<span>Wheel</span></div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <span>Made at SwampHacks XII. Nobody's kitchen was harmed.</span>
+        <span>three.js &middot; Spark &middot; FlashWorld &middot; Video Depth Anything &middot; WebXR</span>
+      </div>
+    </footer>
+
+    <div class="toast" id="toast" role="status"></div>
+    <script type="module" src="./src/gallery.ts"></script>
+  </body>
 </html>

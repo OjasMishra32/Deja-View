@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Spark splat check</title>
+  <style>html, body { margin: 0; background: #202024; } canvas { display: block; }</style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/node_modules/three/build/three.module.js",
+        "three/addons/": "/node_modules/three/examples/jsm/",
+        "@sparkjsdev/spark": "/node_modules/@sparkjsdev/spark/dist/spark.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+<script type="module">
+  // Loads one splat file with Spark and renders it from a fixed camera:
+  //   ?file=<repo-relative path>&q=x,y,z,w&pos=x,y,z&scale=s&eye=x,y,z&yaw=deg&pitch=deg&fov=deg
+  import * as THREE from 'three';
+  import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
+
+  const p = new URLSearchParams(location.search);
+  const nums = (k, d) => (p.get(k) ?? d).split(',').map(Number);
+  const W = 640, H = 400;
+  try {
+    const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(1);
+    renderer.setSize(W, H);
+    document.body.appendChild(renderer.domElement);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x202024);
+    const camera = new THREE.PerspectiveCamera(Number(p.get('fov') ?? 70), W / H, 0.01, 1000);
+    camera.position.set(...nums('eye', '0,0,0'));
+    camera.rotation.order = 'YXZ';
+    camera.rotation.y = Number(p.get('yaw') ?? 0) * Math.PI / 180;
+    camera.rotation.x = Number(p.get('pitch') ?? 0) * Math.PI / 180;
+    const spark = new SparkRenderer({ renderer });
+    scene.add(spark);
+    const mesh = new SplatMesh({ url: '/' + p.get('file') });
+    mesh.quaternion.set(...nums('q', '0,0,0,1'));
+    mesh.position.set(...nums('pos', '0,0,0'));
+    mesh.scale.setScalar(Number(p.get('scale') ?? 1));
+    scene.add(mesh);
+    await mesh.initialized;
+    window.__numSplats = mesh.numSplats ?? mesh.packedSplats?.numSplats ?? null;
+    for (let i = 0; i < 40; i++) {
+      renderer.render(scene, camera);
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    // Fraction of pixels that differ from the background colour.
+    const gl = renderer.getContext();
+    const px = new Uint8Array(W * H * 4);
+    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    let lit = 0;
+    for (let i = 0; i < px.length; i += 4) {
+      if (Math.abs(px[i] - 0x20) + Math.abs(px[i + 1] - 0x20) + Math.abs(px[i + 2] - 0x24) > 24) lit++;
+    }
+    window.__coverage = lit / (W * H);
+  } catch (e) {
+    window.__error = String(e && e.stack || e);
+  }
+  window.__ready = true;
+</script>
+</body>
+</html>

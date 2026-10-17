@@ -1,5 +1,133 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ThirdWheel</title></head>
-<body><p>view page coming soon</p></body>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0c0c0e">
+  <title>ThirdWheel · Viewer</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230c0c0e'/%3E%3Ccircle cx='11' cy='16' r='5' fill='none' stroke='%23ffb547' stroke-width='2.4'/%3E%3Ccircle cx='21' cy='16' r='5' fill='none' stroke='%23f2eee7' stroke-width='2.4'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap">
+  <link rel="stylesheet" href="./src/viewer/viewer.css">
+</head>
+<body>
+  <div id="tw-stage" aria-hidden="true"></div>
+
+  <div id="tw-hud" class="is-loading">
+    <!-- loading -->
+    <section id="tw-loader" class="tw-loader" aria-live="polite">
+      <div class="tw-loader__inner">
+        <div class="tw-eyebrow"><span class="tw-dot"></span><span id="tw-loader-mode">ThirdWheel</span></div>
+        <h1 id="tw-loader-name" class="tw-loader__name">Opening the door</h1>
+        <div class="tw-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div id="tw-progress-fill" class="tw-progress__fill"></div>
+        </div>
+        <div class="tw-loader__meta">
+          <span id="tw-stage-text">Fetching scene</span>
+          <span id="tw-percent" class="tw-mono">0%</span>
+        </div>
+        <p id="tw-loader-note" class="tw-loader__note"></p>
+      </div>
+    </section>
+
+    <!-- top bar -->
+    <header class="tw-top">
+      <div class="tw-ident">
+        <a class="tw-back" href="/" aria-label="Back to gallery">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" /></svg>
+        </a>
+        <div class="tw-ident__text">
+          <div class="tw-ident__row">
+            <span id="tw-mode" class="tw-tag">Sample</span>
+            <span class="tw-brand">ThirdWheel</span>
+          </div>
+          <h2 id="tw-name" class="tw-name">&nbsp;</h2>
+        </div>
+      </div>
+      <div class="tw-actions">
+        <div class="tw-pill-group">
+          <button id="tw-btn-mute" class="tw-icon-btn" type="button" aria-label="Mute" title="Mute (M)" hidden>
+            <svg class="i-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></svg>
+            <svg class="i-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" /><path d="m16 9.5 5 5m0-5-5 5" /></svg>
+          </button>
+          <button id="tw-btn-help" class="tw-icon-btn" type="button" aria-label="Controls" title="Controls (H)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="11" rx="2.5" /><path d="M7 11h.01M10.5 11h.01M14 11h.01M17 11h.01M8 14.5h8" /></svg>
+          </button>
+          <button id="tw-btn-full" class="tw-icon-btn" type="button" aria-label="Fullscreen" title="Fullscreen">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
+          </button>
+        </div>
+        <button id="tw-btn-vr" class="tw-vr" type="button" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h13A2.5 2.5 0 0 1 21 8.5v6a2.5 2.5 0 0 1-2.5 2.5h-3.2l-1.8-2.4a1.9 1.9 0 0 0-3 0L8.7 17H5.5A2.5 2.5 0 0 1 3 14.5z" /><circle cx="8" cy="11.5" r="1.6" /><circle cx="16" cy="11.5" r="1.6" /></svg>
+          <span>Enter VR</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- centre hint -->
+    <div id="tw-hint" class="tw-hint" hidden>
+      <span class="tw-hint__key">Click</span><span>to look around</span>
+    </div>
+
+    <!-- touch coach -->
+    <div id="tw-coach" class="tw-coach" hidden>
+      <div class="tw-coach__half"><div class="tw-coach__ring"></div><span>Drag to walk</span></div>
+      <div class="tw-coach__half"><div class="tw-coach__ring tw-coach__ring--look"></div><span>Drag to look</span></div>
+    </div>
+
+    <!-- touch joystick -->
+    <div id="tw-stick" class="tw-stick" hidden><div id="tw-stick-knob" class="tw-stick__knob"></div></div>
+
+    <!-- status chip -->
+    <div class="tw-status">
+      <div id="tw-motion" class="tw-chip"><span class="tw-chip__dot"></span><span id="tw-motion-text">Walking</span></div>
+      <div id="tw-perf" class="tw-chip tw-mono" hidden></div>
+    </div>
+
+    <!-- video transport -->
+    <footer id="tw-transport" class="tw-transport" hidden>
+      <button id="tw-btn-play" class="tw-play" type="button" aria-label="Play">
+        <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.8v12.4a.8.8 0 0 0 1.2.7l10-6.2a.8.8 0 0 0 0-1.4l-10-6.2A.8.8 0 0 0 8 5.8z" /></svg>
+        <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1" /><rect x="13.5" y="5" width="4" height="14" rx="1" /></svg>
+      </button>
+      <span id="tw-time" class="tw-mono tw-time">0:00</span>
+      <input id="tw-scrub" class="tw-scrub" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek">
+      <span id="tw-duration" class="tw-mono tw-time tw-time--dim">0:00</span>
+    </footer>
+
+    <!-- help -->
+    <aside id="tw-help" class="tw-help" hidden>
+      <div class="tw-help__head">
+        <h3>Find your way around</h3>
+        <button id="tw-help-close" class="tw-icon-btn tw-icon-btn--small" type="button" aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" /></svg>
+        </button>
+      </div>
+      <dl class="tw-keys" data-for="desktop">
+        <dt><kbd>Click</kbd></dt><dd>Look around</dd>
+        <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Walk</dd>
+        <dt><kbd>Shift</kbd></dt><dd>Run</dd>
+        <dt><kbd>F</kbd></dt><dd>Fly, <kbd>Q</kbd> <kbd>E</kbd> down / up</dd>
+        <dt><kbd>Space</kbd></dt><dd>Play / pause the video</dd>
+        <dt><kbd>R</kbd></dt><dd>Back to the start</dd>
+        <dt><kbd>M</kbd></dt><dd>Mute</dd>
+        <dt><kbd>H</kbd></dt><dd>This card</dd>
+      </dl>
+      <dl class="tw-keys" data-for="touch">
+        <dt><kbd>Left thumb</kbd></dt><dd>Drag to walk</dd>
+        <dt><kbd>Right thumb</kbd></dt><dd>Drag to look</dd>
+        <dt><kbd>Play</kbd></dt><dd>Start the video and sound</dd>
+      </dl>
+      <div class="tw-help__vr">
+        <div class="tw-eyebrow">In the headset</div>
+        <p><b>Left stick</b> walks where you look. <b>Right stick</b> flicks turn 30&deg;, push forward to aim a teleport and let go to jump. <b>A</b> plays or pauses, <b>B</b> returns to the start, <b>trigger</b> presses buttons on your wrist panel.</p>
+      </div>
+    </aside>
+
+    <div id="tw-toasts" class="tw-toasts" aria-live="assertive"></div>
+  </div>
+
+  <script type="module" src="./src/viewer/app.ts"></script>
+</body>
 </html>

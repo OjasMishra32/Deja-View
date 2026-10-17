@@ -1,0 +1,30 @@
+# AnySplat environment on HiPerGator ($HPG_ROOT/envs/anysplat, Python 3.11), installed by hpg/setup.sh.
+#
+# Installed before this file, from https://download.pytorch.org/whl/cu128:
+#   torch==2.8.0 torchvision==0.23.0
+# Installed after it: gsplat (same pinned commit as the FlashWorld env, built for sm_89/100/120) and, when wheels
+# exist for this torch, xformers and torch_scatter. anysplat_run.py replaces those two with PyTorch versions
+# when they are missing (upstream pins xformers 0.0.24 / torch_scatter 2.1.2 for torch 2.2, which predate Blackwell).
+# AnySplat itself is a source checkout at $HPG_ROOT/src/AnySplat (ANYSPLAT_SRC).
+
+numpy>=1.26,<2  # AnySplat was written against numpy 1.x
+einops
+jaxtyping
+beartype
+omegaconf
+hydra-core
+dacite
+huggingface_hub>=0.34,<1.0
+safetensors
+scipy
+matplotlib
+colorspacious
+e3nn
+imageio
+opencv-python-headless>=4.9,<4.12  # 4.12+ needs numpy 2
+scikit-video
+lightning
+tqdm
+pillow
+pillow-heif
+plyfile
