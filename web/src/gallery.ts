@@ -441,9 +441,11 @@ const CURATED: readonly Curated[] = [
   { id: 'the-courts', name: 'Infinity Hall Game Lawn', kind: 'photo', line: 'From 25 photos and two phone clips: table tennis, foosball and the lawn.' },
   { id: 'chess-room', name: 'Giant chess', kind: 'photo', line: 'From stills of four phone clips, frozen just after a knight move.' },
   { id: 'kitchen', name: 'Kitchen', kind: 'photo', line: 'From 36 photos and a cooking clip: the stoves, the sink and the bar tables.' },
+  { id: 'old-house-kitchen', name: 'The old house kitchen', kind: 'photo', line: 'From four photos of its old real-estate listing, a home in Pennsylvania.' },
   { id: 'tilted-towers', name: 'Tilted Towers', kind: 'photo', line: `From stills of ${TILTED_CREDIT}.` },
   { id: 'brick-apartment', name: 'Brick House apartment', kind: 'photo', line: `From 71 frames of ${TILTED_CREDIT}.` },
   { id: 'courts-foosball', name: 'Foosball at the Game Lawn', kind: 'video', line: 'From one phone video: two friends at the foosball table.' },
+  { id: 'kitchen-cooking', name: 'Sebastian cooking', kind: 'video', line: 'From one phone video: Seb at the counters, the stove and the sink.' },
 ];
 const curatedIds = new Set(CURATED.map((c) => c.id));
 

@@ -14,13 +14,14 @@ interface Known {
 }
 
 /** The worlds, best first. Each shows at once with its still; one the server does not call ready leaves. */
-const ORDER = ['the-courts', 'chess-room', 'kitchen', 'tilted-towers'];
+const ORDER = ['the-courts', 'old-house-kitchen', 'chess-room', 'kitchen', 'tilted-towers'];
 
 /** What each known world was made from, in our words. The names are the server's, except the Game Lawn's. */
 const KNOWN: Record<string, Known> = {
   'the-courts': { name: 'Infinity Hall Game Lawn', made: '25 photos and two phone clips.' },
   'chess-room': { name: 'Giant chess', made: 'Stills of four phone clips of the giant chess board.' },
   kitchen: { name: 'Kitchen', made: '36 photos and a cooking clip.' },
+  'old-house-kitchen': { name: 'The old house kitchen', made: 'Four photos from its old real-estate listing.' },
   'tilted-towers': { name: 'Tilted Towers', made: 'Stills of Tilted Towers Tour | Fortnite OG S2 by woodinjake.' },
 };
 
