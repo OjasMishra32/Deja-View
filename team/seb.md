@@ -11,6 +11,12 @@ up in the headset) and powers the finale (2:00 to 2:25, the judge's own photo be
 ---
 
 **Update 3 (Sat ~3 AM): what is next for you (the update box below still stands):**
+
+**The public link is live:** `https://prozac-covered-burke-oklahoma.trycloudflare.com` (it changes if the tunnel restarts; Ojasva reposts). Set it as `dvBase` in your
+DeepSpace config now and point your gallery and "Add a memory" at it (uploads open once Ojasva switches the server
+from read-only, Saturday morning; reading `/api/scenes` works now). Send your DeepSpace URL and `DS_KEY` privately the
+moment `/api/ingest` and `/api/notes` are deployed, so the live map and notes go end to end.
+
 1. **The worlds are changing:** the four rebuilt worlds (real footage, every angle; walking limited to where the camera went): **`tilted-towers`**
 (outdoor town centre), **`brick-apartment`** (the Brick House apartment), **`the-courts`** (our table-tennis and
 foosball patio, from 25 photos), **`chess-room`** (the giant-chess lounge). The two video memories, **`courts-foosball`**

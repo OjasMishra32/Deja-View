@@ -10,6 +10,10 @@ checked, it says so and tells you how to check it. If something here turns out t
 right away and use the fallback listed for it.
 
 > **Update 3 (Sat ~3 AM): what is next for you:**
+>
+> **The public link is live:** `https://prozac-covered-burke-oklahoma.trycloudflare.com`. You can open any world at `https://prozac-covered-burke-oklahoma.trycloudflare.com/view?scene=<id>` to see what the guide
+> will be looking at. For the demo your service runs on Ojasva's Mac (`GUIDE_URL=http://127.0.0.1:8795`); bring it over
+> Saturday morning (the `GEMINI_API_KEY` goes in its `.env` privately).
 > 1. **The worlds are changing:** the four rebuilt worlds (real footage, every angle; walking limited to where the camera went): **`tilted-towers`**
 > (outdoor town centre), **`brick-apartment`** (the Brick House apartment), **`the-courts`** (our table-tennis and
 > foosball patio, from 25 photos), **`chess-room`** (the giant-chess lounge). The two video memories, **`courts-foosball`**
