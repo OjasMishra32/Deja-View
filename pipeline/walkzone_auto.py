@@ -73,6 +73,11 @@ class Thresholds:
     eye_floater_mass: float = 1.0
     floor_radius: float = 0.5
     floor_mass: float = 0.5
+    floor_band: float = 0.3  # glossy floors are a stack of splats and mirror images up to ~0.3 m deep
+    body_from: float = 0.4  # furniture that blocks a spot starts above the floor's mirror stack (the walker steps 0.3 m)
+    captured_share: float = 0.6  # one-sided captures: share of the captured directions that must be good
+    camera_clear: float = 0.45  # a person held the camera there: nothing solid (scripts/collider-clear-path.ts)
+    capture_slack_deg: float = 45.0  # one 8-direction step either side of a real camera
     min_column_mass: float = 1.5
     simplify: float = 0.04
 
@@ -97,10 +102,13 @@ def intrinsics(t: Thresholds) -> tuple[float, float, float, float]:
 
 
 def occupancy(means: np.ndarray, opac: np.ndarray, scales: np.ndarray, lo: np.ndarray, hi: np.ndarray,
-              min_mass: float = 1.5) -> tuple[np.ndarray, np.ndarray, tuple[float, float]]:
+              min_mass: float = 1.5, body_from: float = 0.4, floor_band: float = 0.3
+              ) -> tuple[np.ndarray, np.ndarray, tuple[float, float]]:
     """(solid columns, floor mass) on the 0.1 m grid over lo..hi (x, z), as pipeline/recon/frame.py builds columns:
-    opacity summed between 0.15 and 2.2 m, closed by one cell, specks under 4 cells dropped. Floor mass is the opacity
-    within 15 cm of y = 0. Returns (solid [H, W] bool, floor [H, W] float, (x0, z0))."""
+    opacity summed between `body_from` and 2.2 m, closed by one cell, specks under 4 cells dropped. frame.py starts at
+    0.15 m; a glossy floor's mirror stack reaches ~0.35 m and would read as furniture everywhere, so this starts at
+    0.4 m (the walker steps up 0.3 m anyway). Floor mass is the opacity within `floor_band` of y = 0.
+    Returns (solid [H, W] bool, floor [H, W] float, (x0, z0))."""
     from scipy import ndimage
 
     x0, z0 = float(lo[0]), float(lo[1])
@@ -110,7 +118,7 @@ def occupancy(means: np.ndarray, opac: np.ndarray, scales: np.ndarray, lo: np.nd
     v = np.floor((means[:, 2] - z0) / CELL).astype(np.int64)
     inb = (u >= 0) & (u < W) & (v >= 0) & (v < H)
     small = np.max(scales, axis=1) < 1.0
-    body = inb & small & (opac > 0.05) & (means[:, 1] > 0.15) & (means[:, 1] < COLUMN_TOP)
+    body = inb & small & (opac > 0.05) & (means[:, 1] > body_from) & (means[:, 1] < COLUMN_TOP)
     mass = np.zeros((H, W))
     np.add.at(mass, (v[body], u[body]), opac[body].astype(np.float64))
     solid = ndimage.binary_closing(mass >= min_mass, structure=np.ones((3, 3), bool))
@@ -120,7 +128,7 @@ def occupancy(means: np.ndarray, opac: np.ndarray, scales: np.ndarray, lo: np.nd
         for k, sz in enumerate(sizes, start=1):
             if sz < 4:
                 solid[lab == k] = False
-    fl = inb & (np.abs(means[:, 1]) < 0.15) & (opac > 0.05)
+    fl = inb & (np.abs(means[:, 1]) < floor_band) & (opac > 0.05)
     floor = np.zeros((H, W))
     np.add.at(floor, (v[fl], u[fl]), opac[fl].astype(np.float64))
     return solid, floor, (x0, z0)
@@ -167,7 +175,8 @@ class Spot:
     reason: str = ""
 
     def good_views(self) -> int:
-        return sum(1 for v in self.views if v["good"])
+        """Good views among the directions the capture looked along."""
+        return sum(1 for v in self.views if v["good"] and v.get("captured", True))
 
 
 RenderFn = Callable[[np.ndarray, float, float, float, float, int, int], tuple[np.ndarray, np.ndarray, np.ndarray]]
@@ -243,13 +252,63 @@ def candidate_spots(solid: np.ndarray, floor: np.ndarray, origin: tuple[float, f
     return kept, rejected
 
 
+def captured_directions(cameras: list[dict], t: Thresholds) -> list[bool]:
+    """Which of the spot view directions the capture looked along (within `capture_slack_deg` of a real camera's
+    facing). A world shot all the way round has all of them; a few listing photos from one side only some. With no
+    cameras, all count."""
+    yaws = [2 * math.pi * k / t.directions for k in range(t.directions)]
+    if not cameras:
+        return [True] * t.directions
+    facing = []
+    for c in cameras:
+        f = -np.asarray(c["c2w"], np.float64)[:3, 2]
+        if math.hypot(f[0], f[2]) > 1e-6:
+            facing.append(math.atan2(-f[0], -f[2]))  # the viewer's yaw: forward = (-sin, 0, -cos)
+    slack = math.radians(t.capture_slack_deg)
+    out = []
+    for y in yaws:
+        d = [abs((y - f + math.pi) % (2 * math.pi) - math.pi) for f in facing]
+        out.append(bool(d) and min(d) <= slack)
+    return out if any(out) else [True] * t.directions
+
+
+def needed_good(captured: list[bool], t: Thresholds) -> int:
+    n = sum(captured)
+    return t.good_views if n == t.directions else max(1, math.ceil(t.captured_share * n))
+
+
+def clear_camera_path(solid: np.ndarray, origin: tuple[float, float], cameras: list[dict], radius: float) -> int:
+    """Clears solid cells within `radius` of every capture camera (in x, z), in place: someone stood there holding
+    the phone, so whatever reads as solid there is floaters. The same rule as scripts/collider-clear-path.ts.
+    Returns how many cells were cleared."""
+    if not cameras or radius <= 0:
+        return 0
+    H, W = solid.shape
+    x0, z0 = origin
+    cx = x0 + (np.arange(W) + 0.5) * CELL
+    cz = z0 + (np.arange(H) + 0.5) * CELL
+    before = int(solid.sum())
+    for c in cameras:
+        px, pz = float(c["c2w"][0][3]), float(c["c2w"][2][3])
+        u0, u1 = np.searchsorted(cx, px - radius), np.searchsorted(cx, px + radius)
+        v0, v1 = np.searchsorted(cz, pz - radius), np.searchsorted(cz, pz + radius)
+        if u0 >= u1 or v0 >= v1:
+            continue
+        near = np.hypot(cx[None, u0:u1] - px, cz[v0:v1, None] - pz) < radius
+        solid[v0:v1, u0:u1] &= ~near
+    return before - int(solid.sum())
+
+
 def eye_floater_mass(means: np.ndarray, opac: np.ndarray, x: float, z: float, t: Thresholds) -> float:
     d = np.linalg.norm(means - np.array([x, EYE, z]), axis=1)
     return float(opac[d < t.eye_radius].sum())
 
 
-def score_spots(spots: list[Spot], render: RenderFn, refs, means, opac, t: Thresholds, log=print) -> None:
+def score_spots(spots: list[Spot], render: RenderFn, refs, means, opac, t: Thresholds, log=print,
+                captured: list[bool] | None = None) -> None:
     fx, fy, cx, cy = intrinsics(t)
+    captured = captured or [True] * t.directions
+    need = needed_good(captured, t)
     for i, s in enumerate(spots):
         ref = nearest_ref(refs, s.x, s.z)
         s.eye_floaters = round(eye_floater_mass(means, opac, s.x, s.z, t), 3)
@@ -257,11 +316,12 @@ def score_spots(spots: list[Spot], render: RenderFn, refs, means, opac, t: Thres
         for k in range(t.directions):
             yaw = 2 * math.pi * k / t.directions
             rgb, alpha, depth = render(view_c2w(s.x, s.z, yaw, EYE, t.pitch_deg), fx, fy, cx, cy, t.width, t.height)
-            s.views.append({"yaw": round(yaw, 4), **score_view(rgb, alpha, depth, ref, t)})
+            s.views.append({"yaw": round(yaw, 4), "captured": captured[k], **score_view(rgb, alpha, depth, ref, t)})
         g = s.good_views()
-        s.score = round(float(np.mean([v["value"] for v in s.views])), 4)
-        s.passed = g >= t.good_views and s.eye_floaters <= t.eye_floater_mass
-        s.reason = "ok" if s.passed else (f"{g}/{t.directions} good views" if g < t.good_views
+        n = sum(captured)
+        s.score = round(float(np.mean([v["value"] for v in s.views if v["captured"]])), 4)
+        s.passed = g >= need and s.eye_floaters <= t.eye_floater_mass
+        s.reason = "ok" if s.passed else (f"{g}/{n} good views" if g < need
                                           else f"floaters at eye height ({s.eye_floaters})")
         if (i + 1) % 25 == 0:
             log(f"scored {i + 1}/{len(spots)} spots")
@@ -565,6 +625,8 @@ def pick_spawn(spots: list[Spot], zone: np.ndarray, zone_o) -> Spot | None:
 
 
 def best_yaw(spot: Spot, render: RenderFn, refs, t: Thresholds, steps: int = 16) -> tuple[float, dict]:
+    """The best of `steps` facings at the spawn (a deep, complete, sharp view; for a one-sided capture that is
+    naturally one of the captured directions)."""
     fx, fy, cx, cy = intrinsics(t)
     ref = nearest_ref(refs, spot.x, spot.z)
     best = (0.0, {"value": -1})
@@ -656,15 +718,26 @@ def build(splats, world: dict, cameras: list[dict], out: Path, t: Thresholds | N
     means = np.asarray(splats.means, np.float64)
     opac = np.asarray(splats.opacities, np.float64)
     lo, hi = search_area(means, opac, world)
-    solid, floor, origin = occupancy(means, opac, np.asarray(splats.scales), lo - 1, hi + 1, t.min_column_mass)
+    solid, floor, origin = occupancy(means, opac, np.asarray(splats.scales), lo - 1, hi + 1, t.min_column_mass,
+                                     t.body_from, t.floor_band)
+    cleared = clear_camera_path(solid, origin, cameras, t.camera_clear)
+    if cleared:
+        log(f"cleared {cleared} solid cells along the capture's camera path")
     spots, rejected = candidate_spots(solid, floor, origin, lo, hi, t)
     log(f"{len(spots)} candidate spots ({len(rejected)} rejected: no floor or solid within reach)")
-    refs = reference_sharpness(render, cameras, t)
-    score_spots(spots, render, refs, means, opac, t, log)
+    refs = reference_sharpness(render, cameras[:: max(1, len(cameras) // 60)], t)  # 60 poses are plenty
+    captured = captured_directions(cameras, t)
+    score_spots(spots, render, refs, means, opac, t, log, captured)
     passed = [s for s in spots if s.passed]
-    log(f"{len(passed)}/{len(spots)} spots pass")
+    log(f"{len(passed)}/{len(spots)} spots pass ({sum(captured)}/{t.directions} directions captured, "
+        f"{needed_good(captured, t)} good needed)")
     if not passed:
-        raise SystemExit("no spot passes; the thresholds or the world need a look (see walkzone.json)")
+        diag = {"version": 1, "ok": False, "thresholds": asdict(t), "capturedDirections": captured,
+                "spots": [{"x": s.x, "z": s.z, "passed": False, "score": s.score, "goodViews": s.good_views(),
+                           "eyeFloaters": s.eye_floaters, "reason": s.reason, "views": s.views} for s in spots],
+                "rejected": rejected}
+        (out / "walkzone.json").write_text(json.dumps(diag, indent=1))
+        raise SystemExit(f"no spot passes; see {out / 'walkzone.json'} for every spot's scores")
     seed = max(passed, key=lambda s: s.score)
     zone, zone_o = zone_mask(spots, seed, lo, hi, t)
     spawn_spot = pick_spawn([s for s in spots if s.passed], zone, zone_o)
@@ -677,6 +750,8 @@ def build(splats, world: dict, cameras: list[dict], out: Path, t: Thresholds | N
     floor_y = float(world.get("floorY") or 0.0)
     doc = {
         "version": 1,
+        "ok": True,
+        "capturedDirections": captured,
         "frame": "room (y up, metres, floor y = 0); spawn is also given in the viewer frame (floorY added); "
                  "collider.glb is in the splat file's frame like every collider",
         "thresholds": asdict(t),
@@ -703,21 +778,25 @@ def build(splats, world: dict, cameras: list[dict], out: Path, t: Thresholds | N
         start = hand_spawn if hand_spawn is not None else (spawn_spot.x, spawn_spot.z)
         hand, hand_o = walkable_from_collider(Vh_room, Fh, start, lo, hi)
         doc["handMade"] = {"source": "collider.glb", **compare_masks(zone, zone_o, hand, hand_o)}
+        hand_loops = trace_loops(hand, hand_o) if hand.any() else []
     else:
         box = bounds_box_mask(world, lo, hi)
+        hand_loops = []
         if box is not None:
             doc["handMade"] = {"source": "world.bounds (camera box)", **compare_masks(zone, zone_o, *box)}
+            hand_loops = trace_loops(*box)
     if "handMade" in doc:
         log(f"vs the hand-made limit: {doc['handMade']}")
     (out / "walkzone.json").write_text(json.dumps(doc, indent=1))
-    topdown(out / "topdown.png", spots, rejected, loops, spawn_spot, yaw, lo, hi)
+    topdown(out / "topdown.png", spots, rejected, loops, spawn_spot, yaw, lo, hi, hand=hand_loops)
     log(f"walk zone {area:.1f} m2, {len(loops)} fence loop(s), spawn ({spawn_spot.x}, {spawn_spot.z}) yaw "
         f"{math.degrees(yaw):.0f} deg, collider {cinfo['triangles']} triangles")
     return doc
 
 
-def topdown(path: Path, spots, rejected, loops, spawn, yaw, lo, hi, px: int = 60) -> None:
-    """A plan view: spots coloured by score (red fails, green passes), rejected spots grey, the fence, the spawn."""
+def topdown(path: Path, spots, rejected, loops, spawn, yaw, lo, hi, px: int = 60, hand=()) -> None:
+    """A plan view: spots coloured by score (red fails, green passes), rejected spots grey, the fence (yellow), the
+    hand-made limit (cyan) and the spawn."""
     from PIL import Image, ImageDraw
 
     pad = 1.0
@@ -736,6 +815,8 @@ def topdown(path: Path, spots, rejected, loops, spawn, yaw, lo, hi, px: int = 60
         c = (60, 200, 90) if s.passed else (210, 70, 60)
         r = 3 + 4 * s.score
         d.ellipse([x - r, y - r, x + r, y + r], fill=c)
+    for l in hand:
+        d.line([P(x, z) for x, z in l] + [P(*l[0])], fill=(90, 200, 230), width=1)
     for l in loops:
         d.line([P(x, z) for x, z in l] + [P(*l[0])], fill=(240, 240, 120), width=2)
     sx, sy = P(spawn.x, spawn.z)

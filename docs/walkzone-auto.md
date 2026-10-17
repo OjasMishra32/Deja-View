@@ -12,7 +12,9 @@ place you could stand.
 1. **Spots.** It lays a 0.5 m grid over where the splats are (joined with `world.bounds`, but never limited to them,
    so the result can come out bigger or smaller than a hand-drawn box). It keeps the spots that have floor under them
    and nothing solid within the walker's 0.22 m radius. Solid means the 0.1 m occupancy columns that
-   `pipeline/recon/frame.py` builds colliders from.
+   `pipeline/recon/frame.py` builds colliders from, starting at 0.4 m because glossy floors stack mirror splats up
+   to about 0.35 m. Cells within 0.45 m of a capture camera are cleared first: someone stood there holding the
+   phone.
 2. **Views.** From each spot, at eye height (1.6 m), it renders 8 views: every 45°, 8° down, 80° wide. Each view
    gets three scores:
    - **coverage:** the share of the frame the splats fill. Holes and the void behind the capture are empty.
@@ -23,6 +25,10 @@ place you could stand.
    It also measures the floater mass within 0.35 m of the eye. A view is good when coverage ≥ 0.9, near ≤ 3 % and
    sharpness ≥ 0.35. A spot passes when at least 5 of its 8 views are good and little floats at eye height. Every
    threshold is in `Thresholds` and is written to `walkzone.json`.
+
+   A one-sided capture, such as listing photos, is judged only along the directions it photographed (within 45° of
+   a real camera's facing), with 60 % of those needing to be good. Behind you is never photographed, and that
+   shouldn't rule out every spot.
 3. **Zone and fence.** Each passing spot covers its 0.5 m cell. It keeps the connected piece holding the best spot
    and grows it by the walker's radius, so the walker's centre can reach every good spot. The outline, simplified to
    4 cm, is the fence. Holes stay holes.
@@ -63,7 +69,32 @@ python pipeline/walkzone_auto.py --scene data/scenes/kitchen --install
 ## Results
 
 <!-- walkzone-results:begin -->
-Pending.
+Run locally on the CPU point renderer (192×120 views) against the worlds on `https://deja-view.photo`, without
+`--install`. A gsplat run on the GPU renders sharper and may move the edges a little.
+
+| World | Capture | Spots scored / passing | Auto zone | Hand-made limit | Overlap (IoU) | Hand area covered | Auto inside hand | Spawn (viewer frame) |
+|---|---|---|---|---|---|---|---|---|
+| `kitchen` | 235 frames, all round (8/8 directions, 5 good views needed) | 102 / 55 | 17.3 m², one loop | `collider.glb`, flood-filled from its spawn: 18.1 m² | 0.52 | 67 % | 70 % | (2.70, 0, −1.69), yaw 45° |
+| `old-house-kitchen` | 4 listing photos, one side (4/8 directions, 3 good needed) | 25 / 12 | 4.8 m², one loop | `world.bounds` camera box: 18.9 m² | 0.25 | 25 % | 100 % | (0.33, 0, −2.37), yaw 292° |
+
+What the numbers mean:
+- **Kitchen.** The automatic zone and the hand-made one agree on the middle of the strip. The automatic one leaves
+  out the two far ends of the hand-made strip: past the counters, spots there either have something solid within
+  reach or fail their views. It adds a little room on the left, where the views are good but the hand-made fence
+  stops.
+- **Old house kitchen.** Everything the automatic zone allows is inside the camera box (100 %), but it is a quarter
+  of the box. The rest of the box is cabinets and the island (solid within reach), bare edges with no floor in the
+  splats, or places whose views of the photographed side are incomplete. This is the cautious answer: you can only
+  walk where the four photos hold up.
+
+Fixes made after the first real runs:
+- Glossy floors stack mirror splats up to about 0.35 m. The free-space check now starts at 0.4 m, and the floor
+  band is ±0.3 m. Before this, the old house had 9 % floor and almost no free spots.
+- A one-sided capture is judged only along the directions it photographed (±45° of a real camera). Before this,
+  no spot in a listing world could pass, because nobody photographed behind you.
+- The capture's camera path is cleared of solid cells, as `collider-clear-path.ts` does. This added 16 kitchen
+  spots.
+- A run where nothing passes still writes `walkzone.json` with every spot's scores.
 <!-- walkzone-results:end -->
 
 ## Limits

@@ -66,9 +66,11 @@ def small():
 WORLD = {"bounds": {"min": [-2.0, 0.0, -1.5], "max": [2.0, 2.5, 3.0]}, "floorY": 0.0}
 
 
-def cams():
-    return [{"name": f"c{i}", "c2w": W.view_c2w(x, z, yaw)} for i, (x, z, yaw) in
-            enumerate([(-1.0, 0.5, 0.0), (0.5, -0.5, 1.6), (-0.5, -0.5, 3.1)])]
+def cams(yaws=None):
+    """Capture poses in the room: by default all the way round (like the kitchen's 235 frames)."""
+    yaws = [2 * math.pi * k / 8 for k in range(8)] if yaws is None else yaws
+    return [{"name": f"c{i}", "c2w": W.view_c2w(-0.5 + 0.3 * math.cos(y), -0.3 + 0.3 * math.sin(y), y)}
+            for i, y in enumerate(yaws)]
 
 
 # --- pure pieces -----------------------------------------------------------------------------------------------------
@@ -162,6 +164,40 @@ def test_walkable_from_a_hand_collider_and_compare(tmp_path):
     assert not open_v.any()  # a floor with no fence is not an enclosed zone
 
 
+def test_captured_directions_for_full_and_one_sided_captures():
+    t = W.Thresholds()
+    full = W.captured_directions(cams(), t)
+    assert all(full) and W.needed_good(full, t) == 5
+    # four listing photos facing between 141 and 268 degrees, like the old house kitchen
+    one_sided = W.captured_directions(cams([math.radians(a) for a in (141, 180, 234, 268)]), t)
+    assert 3 <= sum(one_sided) < 8
+    assert not one_sided[0]  # nobody photographed the way the 0 degree view looks
+    assert W.needed_good(one_sided, t) == math.ceil(0.6 * sum(one_sided))
+    assert all(W.captured_directions([], t))
+
+
+def test_a_one_sided_capture_still_gets_a_zone(tmp_path):
+    """Photographed from one side only, like a listing (three photos of the back wall; the opening behind you never
+    photographed), the room still gets a walk zone: views the capture never looked along don't count against a
+    spot."""
+    splats = make_room(floaters=False)
+    one_side = cams([math.radians(a) for a in (-30, 0, 30)])  # yaw 0 looks toward -z, the back wall
+    t = small()
+    doc = W.build(splats, WORLD, one_side, tmp_path, t, renderer(splats), log=lambda *_: None)
+    assert doc["ok"] and sum(doc["capturedDirections"]) < 8 and doc["areaM2"] > 3.0
+    full = W.build(splats, WORLD, cams(), tmp_path / "full", t, renderer(splats), log=lambda *_: None)
+    assert sum(s["passed"] for s in doc["spots"]) >= 0.7 * sum(s["passed"] for s in full["spots"])
+
+
+def test_no_passing_spot_still_writes_the_diagnostics(tmp_path):
+    splats = make_room(floaters=False)
+    strict = W.Thresholds(width=64, height=40, coverage=1.01)  # impossible
+    with pytest.raises(SystemExit):
+        W.build(splats, WORLD, cams(), tmp_path, strict, renderer(splats), log=lambda *_: None)
+    diag = json.loads((tmp_path / "walkzone.json").read_text())
+    assert diag["ok"] is False and diag["spots"] and all(not s["passed"] for s in diag["spots"])
+
+
 # --- end to end ------------------------------------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
@@ -224,3 +260,12 @@ def test_install_archives_and_sets_the_spawn(tmp_path, room_run):
     assert (tmp_path / "data" / "archive" / "colliders").exists()
     assert open(res["archived"], "rb").read() == b"old collider"
     assert (scene / "collider.glb").read_bytes() == (out / "auto" / "collider.glb").read_bytes()
+
+
+def test_camera_path_is_cleared_like_collider_clear_path():
+    solid = np.ones((20, 20), bool)
+    n = W.clear_camera_path(solid, (0.0, 0.0), [{"c2w": W.view_c2w(1.0, 1.0, 0.0)}], 0.45)
+    assert n > 0 and not solid[10, 10] and solid[0, 0] and solid[19, 19]
+    cleared = np.argwhere(~solid) * W.CELL + W.CELL / 2
+    assert np.hypot(cleared[:, 1] - 1.0, cleared[:, 0] - 1.0).max() < 0.45
+    assert W.clear_camera_path(solid, (0.0, 0.0), [], 0.45) == 0
