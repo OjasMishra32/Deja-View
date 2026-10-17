@@ -8,6 +8,7 @@ local Config = require(script.Parent.Config)
 local Backend = require(script.Parent.Backend)
 local World = require(script.Parent.World)
 local Theme = require(ReplicatedStorage.Shared.Theme)
+local Stats = require(script.Parent.Stats)
 
 local PongHit = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("PongHit") :: RemoteEvent
 
@@ -157,6 +158,10 @@ function Pong.point(winnerSide: string, why: string)
 		World.Moment:FireAllClients({ type = "winner", title = string.upper(nameOf(winnerSide)) .. " WINS PING PONG",
 			mvp = finalScore .. " · best rally " .. best })
 		local sceneId = workspace:GetAttribute("SceneId")
+		Stats.win(sides[winnerSide], "pingpong")
+		if sceneId == "the-courts" then
+			Stats.badge(sides[winnerSide], "court")
+		end
 		if type(sceneId) == "string" then
 			Backend.sendEvent(sceneId, { type = "game", game = "pingpong", winner = nameOf(winnerSide), score = finalScore,
 				bestRally = best })
@@ -256,7 +261,21 @@ local function block(parent: Instance, name: string, size: Vector3, cf: CFrame, 
 end
 
 -- centre: the table top centre in world space; yaw: direction of the long axis (side A at the back).
+local lastPlace: any = nil
+
+-- Rematch: the same game again in the same spot (Update 6 item 1).
+function Pong.isActive(): boolean
+	return lastPlace ~= nil and workspace:FindFirstChild("Room") ~= nil and workspace.Room:FindFirstChild("PingPong") ~= nil
+end
+
+function Pong.rematch()
+	if lastPlace then
+		Pong.place(table.unpack(lastPlace, 1, lastPlace.n))
+	end
+end
+
 function Pong.place(centre: Vector3, yaw: number, length: number?, width: number?, visible: boolean?)
+	lastPlace = table.pack(centre, yaw, length, width, visible)
 	Pong.remove()
 	local room = workspace:FindFirstChild("Room")
 	if not room then

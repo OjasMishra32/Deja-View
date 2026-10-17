@@ -245,7 +245,15 @@ local function refreshList()
 			table.insert(fresh, s)
 		end
 	end
+	local pin: { [string]: number } = {}
+	for i, id in Config.PINNED_SCENES do
+		pin[id] = i
+	end
 	table.sort(fresh, function(a, b)
+		local pa, pb = pin[a.id] or math.huge, pin[b.id] or math.huge
+		if pa ~= pb then
+			return pa < pb
+		end
 		return (a.createdAt or "") > (b.createdAt or "")
 	end)
 	-- "New room unlocked": a Photo world that turns ready after we started (the finale) gets a JOIN prompt.

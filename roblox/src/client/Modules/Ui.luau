@@ -219,6 +219,37 @@ function Ui.build()
 		Size = UDim2.new(0, 130, 0, 52), BackgroundColor3 = Theme.Accent, TextColor3 = Theme.Bg, MaxText = 26, ZIndex = 25,
 		Parent = unlocked })
 
+	-- First-join controls card
+	local intro = make("Frame", { Name = "Intro", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(640, 300), BackgroundColor3 = Theme.Bg, BackgroundTransparency = 0.04, Visible = false,
+		ZIndex = 30, Parent = gui }, { Theme.corner(20), Theme.stroke(Theme.Accent, 2),
+		make("UIPadding", { PaddingLeft = UDim.new(0, 22), PaddingRight = UDim.new(0, 22), PaddingTop = UDim.new(0, 16),
+			PaddingBottom = UDim.new(0, 16) }) })
+	ui.intro = intro
+	table.insert(ui.scales, make("UIScale", { Scale = 1, Parent = intro }))
+	label({ Text = "WELCOME TO DÉJÀ VIEW", FontFace = Theme.Heading, TextColor3 = Theme.Accent, Size = UDim2.new(1, 0, 0, 30),
+		MaxText = 26, ZIndex = 31, Parent = intro })
+	label({ Text = "You're standing in a real place someone captured. The lime figure is the person in the VR headset.",
+		TextColor3 = Theme.Muted, TextWrapped = true, Size = UDim2.new(1, 0, 0, 40), Position = UDim2.new(0, 0, 0, 34),
+		MaxText = 16, ZIndex = 31, Parent = intro })
+	local cols = make("Frame", { BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 84), Size = UDim2.new(1, 0, 0, 140),
+		ZIndex = 31, Parent = intro }, { make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal,
+		Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder }) })
+	for i, c in {
+		{ "PHONE", "Thumbstick to walk\nTap buttons and pieces\nHIT / ◀ KICK ▶ in games" },
+		{ "KEYBOARD", "WASD to walk · R rooms\nClick pieces · E to HIT\nZ / X slide · C kick" },
+		{ "QUEST", "Left stick to walk\nPoint and pull to tap\nTrigger to HIT" },
+	} do
+		local card = make("Frame", { BackgroundColor3 = Theme.Surface, Size = UDim2.new(0.32, 0, 1, 0), LayoutOrder = i,
+			ZIndex = 31, Parent = cols }, { Theme.corner(14), make("UIPadding", { PaddingLeft = UDim.new(0, 12),
+			PaddingTop = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }) })
+		label({ Text = c[1], FontFace = Theme.Heading, Size = UDim2.new(1, 0, 0, 26), MaxText = 20, ZIndex = 32, Parent = card })
+		label({ Text = c[2], TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, Size = UDim2.new(1, 0, 1, -32),
+			Position = UDim2.new(0, 0, 0, 30), MaxText = 15, ZIndex = 32, Parent = card })
+	end
+	ui.introOk = button({ Text = "GOT IT", AnchorPoint = Vector2.new(1, 1), Position = UDim2.fromScale(1, 1),
+		Size = UDim2.fromOffset(140, 44), BackgroundColor3 = Theme.Accent, TextColor3 = Theme.Bg, ZIndex = 32, Parent = intro })
+
 	-- Rooms panel
 	local panel = make("Frame", { Name = "RoomsPanel", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.52),
 		Size = UDim2.fromScale(0.86, 0.74), BackgroundColor3 = Theme.Bg, BackgroundTransparency = 0.05, Visible = false,

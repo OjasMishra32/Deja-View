@@ -288,6 +288,14 @@ Moment.OnClientEvent:Connect(function(m)
 		if #(m.squares or {}) > 0 then
 			Effects.sound("tick")
 		end
+	elseif m.type == "intro" then
+		ui.intro.Visible = true
+		task.delay(10, function()
+			ui.intro.Visible = false
+		end)
+	elseif m.type == "badge" then
+		Ui.big(ui, "BADGE", tostring(m.title), Theme.Accent, 2.5)
+		Effects.sound("win")
 	elseif m.type == "unlocked" then
 		ui.unlockedName.Text = string.upper(m.name or "")
 		ui.unlockedId = m.id
@@ -408,6 +416,9 @@ ui.hitBtn.Activated:Connect(function()
 end)
 ui.chessBtn.Activated:Connect(function()
 	host("chess", workspace.CurrentCamera.CFrame.LookVector)
+end)
+ui.introOk.Activated:Connect(function()
+	ui.intro.Visible = false
 end)
 ui.huntBtn.Activated:Connect(function()
 	host(if W("RoundState") == "hunt" then "end_hunt" else "start_hunt")

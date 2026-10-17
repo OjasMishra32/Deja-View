@@ -8,6 +8,7 @@ local MapBuilder = require(script.Parent.MapBuilder)
 local Presence = require(script.Parent.Presence)
 local World = require(script.Parent.World)
 local Interp = require(ReplicatedStorage.Shared.Interp)
+local Stats = require(script.Parent.Stats)
 
 local TagGame = {}
 
@@ -120,6 +121,9 @@ function TagGame.finish(winner: string?)
 		return a.lastTag < b.lastTag -- longest since their last tag
 	end)
 	local mvp = list[1]
+	if wasPlaying and winner == "roblox" and mvp then
+		Stats.win(mvp.player, "tag") -- the MVP of a surviving team takes the tag win
+	end
 	local sceneId = workspace:GetAttribute("SceneId")
 	if wasPlaying and type(sceneId) == "string" then
 		Backend.sendEvent(sceneId, { type = "round", state = "end", scores = scores(), winner = winner,
@@ -199,6 +203,9 @@ function TagGame.start(by: Player?): boolean
 			shield(r.player, Config.IMMUNITY)
 		end
 		setState("playing")
+		for _, r in runners do
+			Stats.badge(r.player, "judge")
+		end
 		workspace:SetAttribute("RoundEndsAt", endsAt)
 		workspace:SetAttribute("RoundIt", vrName)
 		World.Moment:FireAllClients({ type = "roundStart", it = vrName, duration = duration })
