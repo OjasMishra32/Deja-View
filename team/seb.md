@@ -10,6 +10,21 @@ up in the headset) and powers the finale (2:00 to 2:25, the judge's own photo be
 
 ---
 
+**Update 11 (Sat ~3:30 PM): tonight in order, so Roblox is real at the expo.**
+1. **Task A first (Update 8): your experience, live.** Without it there is no Roblox at the table. Publish from the
+   repo (`roblox/default.project.json` + `roblox/DejaView-pingpong-v4.rbxlx`, or your v19 place) on your account,
+   set `dejaview_base` to BASE, and post the place id. The baked v19 court stays the fallback.
+2. **DeepSpace gallery:** set `/admin` → `baseUrl` to BASE now. When Ojasva posts that `https://deja-view.photo` is
+   live (its DNS is switching now), move `baseUrl` and `dejaview_base` to it once.
+3. **Censor pass and gate (Update 8, Tasks C and D):** then upload the Game Lawn room and its sky from your account.
+   Shivin reviews the contact sheets (shivin.md Update 18 item 6). Giant chess is next.
+4. **Cooking rush on the real kitchen:** Shivin writes `cookingSpots` from `features.surfaces` (shivin.md Update 18
+   item 2). You run the Play test and check the STOVE marker sits on the real range.
+5. **The kitchen's v2 textured room** is building on HiPerGator tonight. When Ojasva posts it, it goes through your
+   gate like the others.
+6. **Pool:** only if the game-room pool table gets filmed and rebuilt in time.
+Don't upload anything Fortnite-derived, and don't publish or rename the team place `106038900865360`.
+
 **Update 10 (Sat ~3 PM): the real kitchen for cooking rush.** `GET BASE/api/roblox/kitchen/model` (and `/map`) now
 carries `features.surfaces`, measured from the splats (`pipeline/surfaces.py`). It's a list of real tops in studs, in
 the map frame, each `{kind, name, corners[4], centre, height, length, width, yaw}`:

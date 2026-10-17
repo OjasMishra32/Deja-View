@@ -9,6 +9,32 @@ Everything below was checked against the live Gemini docs and SDK on Fri Oct 16,
 checked, it says so and tells you how to check it. If something here turns out to be wrong on the night, tell Ojasva
 right away and use the fallback listed for it.
 
+> **Update 7 (Sat ~3:30 PM): the guide is still off, and it's the Gemini prize. Please do 1 first, today.**
+> 1. **Turn the guide on.** Every world still says "The guide is off", and there's no Gemini key on the demo Mac
+>    (Ojasva's). Two ways, both quick:
+>    - Come to the Mac: `git pull`, then in `integrations/guide/`: put `GEMINI_API_KEY=...` and `MOCK_GEMINI=0` in
+>      `.env` (it's git-ignored), then `npm install && npm test && npm start` (port 8795).
+>    - Or send Ojasva the key privately (not in the team chat, not in git) and he does the same.
+>    A free key comes from Google AI Studio in a minute. Ojasva then restarts the server with
+>    `GUIDE_URL=http://127.0.0.1:8795`. Labels, the greeting and "who won?" then work in every world, in the browser
+>    and on the Quest.
+> 2. **New places for `WORLD_HINTS`** (`prompts.mjs`; push to your branch, Ojasva merges):
+>    - `old-house-kitchen`: a family kitchen in Pennsylvania, rebuilt from four photos of the house's old real-estate
+>      listing. Cherry cabinets, a granite island, a slide door to the back yard, a steel fridge. The story is
+>      revisiting a home you moved out of.
+>    - `chess-match`: a memory in `chess-room` (live tonight).
+>    - `kitchen-cooking`, now with what happens: Seb opens the freezer (about 13 s), then the fridge (about 20 s),
+>      carries a gallon of milk to the second range (25 to 34 s), reaches for the hood and rinses his hands at the
+>      sink.
+> 3. **Clip notes** (`integrations/guide/notes/*.json`): `kitchen-cooking` from item 2 above. `chess-match` and
+>    `courts-foosball` as in Update 6 item 3.
+> 4. **The Devpost Gemini paragraph**: what Gemini does in the product (captions, labels, greeting, spoken answers)
+>    and where a judge sees each, for `docs/DEVPOST.md`. Shivin is drafting the Devpost page (shivin.md Update 18).
+> 5. **Still open from Update 6**: PACE login (item 2) and the Tiger Cloud and Auth0 sign-ups (item 4), values to
+>    Ojasva privately.
+> The site moves to `https://deja-view.photo` once its DNS switches (Ojasva posts when). Until then use the current
+> link.
+
 > **Update 6 (Sat ~11 AM): five things only you can do, most important first.**
 > 1. **Make the guide live (biggest gap; the site says "The guide is off").** On the demo Mac: `git pull`, then in
 >    `integrations/guide/`: put `GEMINI_API_KEY` (and `MOCK_GEMINI=0`) in `.env`, `npm install`, `npm test`,
