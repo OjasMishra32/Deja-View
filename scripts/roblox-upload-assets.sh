@@ -40,6 +40,14 @@ while IFS=$'\t' read -r id file sha approved reason; do
     echo "skip   $id: $reason"
     continue
   fi
+  # check again right before the upload: the file or its approval may have changed since the plan
+  if ! why="$(python3 -c 'import sys; from pipeline.objects.review import approval_matches, sha1_file
+ok, why = approval_matches(sys.argv[1], sys.argv[2])
+if ok and sha1_file(sys.argv[1]) != sys.argv[3]: ok, why = False, "the file changed since the plan"
+print(why); raise SystemExit(0 if ok else 1)' "$file" "$(dirname "$file")/preflight/approval.json" "$sha")"; then
+    echo "skip   $id: $why"
+    continue
+  fi
   name="DejaView $SCENE $id"
   req="$(NAME="$name" CREATOR="$CREATOR" python3 -c 'import json,os; print(json.dumps({"assetType":"Model","displayName":os.environ["NAME"][:50],"description":"DejaView object mesh from the scan","creationContext":{"creator":{"userId":int(os.environ["CREATOR"])}}}))')"
   echo "upload $id ($(du -h "$file" | cut -f1))"

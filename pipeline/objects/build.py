@@ -7,7 +7,7 @@
 Each detection becomes a 3D candidate. Candidates of the same label are clustered by
 their 3D centre and box overlap, so two cabinets become two objects instead of one
 giant box. Every cluster is lifted with `objects.lift.describe_object`, which takes
-the robust bounds and median colour and writes the schema in `docs/object-layer.md`.
+the robust bounds and body colour and writes the schema in `docs/object-layer.md`.
 """
 from __future__ import annotations
 
@@ -42,22 +42,21 @@ def bbox_iou(a: tuple[np.ndarray, np.ndarray], b: tuple[np.ndarray, np.ndarray])
 def cluster_candidates(items: list[dict], centroid_dist: float = 0.35, iou_min: float = 0.2) -> list[list[dict]]:
     """Group candidates that are the same physical object seen from different views."""
     clusters: list[list[dict]] = []
+    centres: list[np.ndarray] = []  # mean of each cluster's member centres; the items are not modified
     for item in items:
         best = None
         best_d = float("inf")
-        for cluster in clusters:
-            c = cluster[0]
-            d = float(np.linalg.norm(item["centroid"] - c["centroid"]))
-            iou = bbox_iou(item["bounds"], c["bounds"])
+        for k, cluster in enumerate(clusters):
+            d = float(np.linalg.norm(item["centroid"] - centres[k]))
+            iou = bbox_iou(item["bounds"], cluster[0]["bounds"])
             if (d <= centroid_dist or iou >= iou_min) and d < best_d:
-                best, best_d = cluster, d
+                best, best_d = k, d
         if best is None:
             clusters.append([item])
+            centres.append(np.asarray(item["centroid"], np.float64))
         else:
-            best.append(item)
-            # keep the cluster centre stable: mean of the members' centres
-            pts = np.stack([m["centroid"] for m in best])
-            best[0]["centroid"] = pts.mean(axis=0)
+            clusters[best].append(item)
+            centres[best] = np.mean([m["centroid"] for m in clusters[best]], axis=0)
     return clusters
 
 
@@ -119,9 +118,18 @@ def build(scene_dir: str | Path, views_dir: str | Path, masks_dir: str | Path, o
         clusters = cluster_candidates(candidates)
         made = 0
         for cluster in clusters:
-            if len(cluster) < min_views:
+            # Grounding DINO does not suppress duplicate boxes, so one view can hold several masks of the same
+            # object. Union them so a view votes once and min_views counts distinct views.
+            by_view: dict[str, dict] = {}
+            for c in cluster:
+                seen = by_view.get(c["view"]["file"])
+                if seen is None:
+                    by_view[c["view"]["file"]] = {"view": c["view"], "mask": c["mask"], "depth": c["depth"]}
+                else:
+                    seen["mask"] = seen["mask"] | c["mask"]
+            if len(by_view) < min_views:
                 continue
-            views = [(_camera(c["view"]), c["mask"], c["depth"]) for c in cluster]
+            views = [(_camera(v["view"]), v["mask"], v["depth"]) for v in by_view.values()]
             obj = lift.describe_object(points, colors, label, views, min_views=min_views,
                                        min_points=min_splats, studs_per_meter=studs)
             if obj is None:
@@ -136,12 +144,12 @@ def build(scene_dir: str | Path, views_dir: str | Path, masks_dir: str | Path, o
             obj["confidence"] = round(float(np.mean([c["score"] for c in cluster])), 4)
             obj["source"] = {
                 **(obj.get("source") or {}),
-                "views": len(cluster),
+                "views": len(by_view),
                 "detections": len(cluster),
                 "score": round(float(max(c["score"] for c in cluster)), 4),
             }
             objects.append(obj)
-            log(f"{obj['id']}: {obj['source']['splats']} splats, {len(cluster)} views, colour {obj['color']}")
+            log(f"{obj['id']}: {obj['source']['splats']} splats, {len(by_view)} views, colour {obj['color']}")
         log(f"{label}: {len(candidates)} candidates -> {len(objects)} objects so far")
 
     doc = {

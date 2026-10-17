@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import json
 import struct
-import sys
 from pathlib import Path
 
 REPORT_FILE = "preflight.json"
@@ -114,10 +113,19 @@ def scan_codes(images: list[dict], tex_dir: str | Path) -> dict:
                     entry = {"file": info["file"], "scale": scale, "text": text}
                     (qr if str(text).strip() else candidates).append(entry)
             if barcode is not None:
-                res = barcode.detectAndDecode(probe)
-                if res and len(res) >= 2 and res[0]:
-                    texts = res[1] if isinstance(res[1], (list, tuple)) else [res[1]]
-                    bars.append({"file": info["file"], "scale": scale, "text": list(texts)})
+                if hasattr(barcode, "detectAndDecodeWithType"):
+                    # OpenCV 4.8+: detectAndDecode returns (text, corners, straight), so ask for the decoded list
+                    found, texts, _, _ = barcode.detectAndDecodeWithType(probe)
+                else:
+                    found, texts, _, _ = barcode.detectAndDecode(probe)
+                texts = [str(t) for t in (texts or ()) if str(t).strip()]
+                if found and texts:
+                    bars.append({"file": info["file"], "scale": scale, "text": texts})
+    missing = [name for name, d in (("qr", detector), ("barcode", barcode)) if d is None]
+    if missing:
+        # a scanner that did not run cannot clear the asset
+        return {"status": "partial", "reason": f"no {' or '.join(missing)} detector in this OpenCV build",
+                "qr": qr, "qrCandidates": candidates, "barcodes": bars}
     return {"status": "ok", "qr": qr, "qrCandidates": candidates, "barcodes": bars}
 
 

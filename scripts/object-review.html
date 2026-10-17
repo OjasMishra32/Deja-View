@@ -111,8 +111,6 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-refresh();
-let loader = null;
 let assets = [];
 let current = null;
 let model = null;
@@ -130,8 +128,13 @@ const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 2,
 const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 1000);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true; controls.dampingFactor = 0.08;
-loader = new GLTFLoader();
+const loader = new GLTFLoader();
 let baseDistance = 1;
+
+// QR payloads and texture names come out of scanned images: never put them into innerHTML raw
+const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+// an approval only counts for the file it hashed
+const decision = (a) => (a.approval && a.approval.sha1 === a.sha1 ? a.approval : null);
 
 function resize() {
   const r = canvas.parentElement.getBoundingClientRect();
@@ -171,7 +174,6 @@ function disposeScene(root) {
 }
 
 function loadModel(url) {
-  if (!loader) return;
   const token = ++loadToken;
   if (model) { scene.remove(model); disposeScene(model); model = null; }
   loader.load(url, (gltf) => {
@@ -186,8 +188,10 @@ function loadModel(url) {
 }
 
 function badge(a) {
-  if (a?.approved === true) return '<span class="badge approved">approved</span>';
-  if (a?.approved === false) return '<span class="badge denied">denied</span>';
+  const d = decision(a);
+  if (d?.approved === true) return '<span class="badge approved">approved</span>';
+  if (d?.approved === false) return '<span class="badge denied">denied</span>';
+  if (a.approval) return '<span class="badge pending">changed since review</span>';
   return '<span class="badge pending">pending</span>';
 }
 
@@ -203,7 +207,7 @@ function select(a) {
     ['scan', scan.status || 'not run'], ['QR / links', String((scan.qr || []).length)],
     ['candidates', String((scan.qrCandidates || []).length)], ['barcodes', String((scan.barcodes || []).length)],
   ];
-  document.getElementById('meta').innerHTML = rows.map(([k, v]) => `<div class="k">${k}</div><div><code>${String(v)}</code></div>`).join('');
+  document.getElementById('meta').innerHTML = rows.map(([k, v]) => `<div class="k">${k}</div><div><code>${esc(v)}</code></div>`).join('');
   const scanRows = [
     ['status', scan.status || 'not run'],
     ['decodable QR', String((scan.qr || []).length)],
@@ -211,16 +215,17 @@ function select(a) {
     ['barcodes', String((scan.barcodes || []).length)],
     ['note', a.candidates?.note || 'Inspect the texture sheet yourself.'],
   ];
-  document.getElementById('scan').innerHTML = scanRows.map(([k, v]) => `<div class="k">${k}</div><div>${String(v)}</div>`).join('');
+  document.getElementById('scan').innerHTML = scanRows.map(([k, v]) => `<div class="k">${k}</div><div>${esc(v)}</div>`).join('');
   const cand = a.candidates?.items || [];
   document.getElementById('candidates').innerHTML = cand.map(it =>
-    `<figure><img src="/asset/${encodeURIComponent(a.sceneId)}/${encodeURIComponent(a.objectId)}/preflight/${it.file}" alt="${it.texture}"><figcaption>${it.texture} · payload: ${it.text ? '“' + it.text + '”' : 'empty'}</figcaption></figure>`
+    `<figure><img src="/asset/${encodeURIComponent(a.sceneId)}/${encodeURIComponent(a.objectId)}/preflight/${esc(it.file)}" alt="${esc(it.texture)}"><figcaption>${esc(it.texture)} · payload: ${it.text ? '“' + esc(it.text) + '”' : 'empty'}</figcaption></figure>`
   ).join('');
-  const ap = a.approval;
+  const ap = decision(a);
   const st = document.getElementById('status');
   st.className = 'status ' + (ap?.approved ? 'ok' : ap?.approved === false ? 'no' : '');
-  st.textContent = ap ? `${ap.approved ? 'Approved' : 'Denied'} by ${ap.reviewer} at ${new Date(ap.at).toLocaleString()} · sha ${ap.sha1.slice(0, 12)}${ap.note ? ' · ' + ap.note : ''}` : 'No decision yet.';
-  document.getElementById('note').value = ap?.note || '';
+  st.textContent = ap ? `${ap.approved ? 'Approved' : 'Denied'} by ${ap.reviewer} at ${new Date(ap.at).toLocaleString()} · sha ${ap.sha1.slice(0, 12)}${ap.note ? ' · ' + ap.note : ''}`
+    : a.approval ? `The last decision was for an older file (sha ${String(a.approval.sha1 || '').slice(0, 12)}). Review this one again.` : 'No decision yet.';
+  document.getElementById('note').value = a.approval?.note || '';
   loadModel(a.glb);
 }
 
@@ -228,7 +233,7 @@ async function refresh(keep) {
   const data = await (await fetch('/api/assets')).json();
   assets = data.assets || [];
   const list = document.getElementById('list');
-  list.innerHTML = assets.map(a => `<div class="item" data-id="${a.sceneId}/${a.objectId}"><div class="name">${a.objectId}</div><div class="sub">${a.sceneId}</div>${badge(a.approval)}</div>`).join('') || '<div class="empty">No assets yet.</div>';
+  list.innerHTML = assets.map(a => `<div class="item" data-id="${esc(a.sceneId + '/' + a.objectId)}"><div class="name">${esc(a.objectId)}</div><div class="sub">${esc(a.sceneId)}</div>${badge(a)}</div>`).join('') || '<div class="empty">No assets yet.</div>';
   list.querySelectorAll('.item').forEach(el => el.onclick = () => { const a = assets.find(x => x.sceneId + '/' + x.objectId === el.dataset.id); if (a) select(a); });
   const target = keep ? assets.find(x => x.sceneId === keep.sceneId && x.objectId === keep.objectId) : assets[0];
   if (target) select(target);
@@ -237,7 +242,7 @@ async function refresh(keep) {
 async function decide(approved) {
   if (!current) return;
   const res = await fetch('/api/review', { method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ sceneId: current.sceneId, objectId: current.objectId, approved, note: document.getElementById('note').value, reviewer: 'captain' }) });
+    body: JSON.stringify({ sceneId: current.sceneId, objectId: current.objectId, sha1: current.sha1, approved, note: document.getElementById('note').value, reviewer: 'captain' }) });
   const data = await res.json();
   if (!res.ok) { document.getElementById('status').textContent = data.error || 'Review failed'; return; }
   await refresh(current);

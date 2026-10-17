@@ -145,12 +145,17 @@ describe('object layer', () => {
 
   test('POST rejects a non-stud layer and GET is key-gated off localhost', async () => {
     const r = await rig({ dvKey: 'sekret' });
-    const bad = await r.routes[OBJECTS]!(req('/api/roblox/room-a/objects', { method: 'POST', body: JSON.stringify({ units: 'metres', objects: [] }) }), REMOTE);
-    expect(bad.status).toBe(401);
-    const noKey = await r.routes[OBJECTS]!(req('/api/roblox/room-a/objects', { method: 'POST', body: JSON.stringify(doc) }), REMOTE);
-    expect(noKey.status).toBe(401);
-    const withKey = await r.routes[OBJECTS]!(req('/api/roblox/room-a/objects', { method: 'POST', body: JSON.stringify({ ...doc, units: 'metres' }), headers: { 'x-dejaview-key': 'sekret' } }), REMOTE);
-    expect(withKey.status).toBe(400);
+    const key = { 'x-dejaview-key': 'sekret' };
+    const post = (body: unknown, headers: Record<string, string> = key) =>
+      r.routes[OBJECTS]!(req('/api/roblox/room-a/objects', { method: 'POST', body: JSON.stringify(body), headers }), REMOTE);
+    expect((await r.routes[OBJECTS]!(req('/api/roblox/room-a/objects'), REMOTE)).status).toBe(401);
+    expect((await post(doc, {})).status).toBe(401);
+    expect((await post({ ...doc, units: 'metres' })).status).toBe(400);
+    expect((await post({ units: 'studs', objects: 'fridge' })).status).toBe(400);
+    expect((await post(doc)).status).toBe(200);
+    const get = await r.routes[OBJECTS]!(req('/api/roblox/room-a/objects', { headers: key }), REMOTE);
+    expect(get.status).toBe(200);
+    expect((await get.json()).objects).toHaveLength(1);
   });
 });
 

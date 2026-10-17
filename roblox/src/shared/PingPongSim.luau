@@ -1,6 +1,6 @@
 -- The ping pong physics, shared by the server and every client (team/seb.md Update 5, section B).
 -- Everything here is in the table frame: long axis Z, net at z = 0, table top at y = 0, studs.
--- The server owns the ball; clients use the same step to predict and to smooth the render.
+-- The server owns the ball and runs this step; clients see the server's ball Part (no client prediction yet).
 local Sim = {}
 
 -- Roblox provides Vector3 as a global; the Lune test harness injects it through _G.
@@ -133,13 +133,16 @@ function Sim.step(st: any, dt: number, len: number, wid: number): any
 end
 
 -- Reflect the ball off a paddle. `n` is the blade normal, `pv` the paddle velocity.
-function Sim.paddleHit(st: any, n: Vector3, pv: Vector3, restitution: number?): void
+-- Solved in the paddle's frame, then the paddle's velocity is added back so a swing carries into the ball.
+function Sim.paddleHit(st: any, n: Vector3, pv: Vector3, restitution: number?)
 	local rel = st.v - pv
 	local vn = rel:Dot(n)
 	if vn < 0 then
-		rel = rel - n * ((1 + (restitution or 0.8)) * vn)
-		-- keep a little of the sideways paddle movement, not all of it
-		st.v = rel
+		local relN = n * vn
+		local relT = rel - relN
+		-- bounce off the face; keep most of the sideways slip, so only a little of the paddle's sideways movement
+		-- goes into the ball
+		st.v = pv + relT * 0.85 - relN * (restitution or 0.8)
 		if st.v.Magnitude > Sim.MAX_SPEED then
 			st.v = st.v.Unit * Sim.MAX_SPEED
 		end
@@ -174,7 +177,7 @@ function Sim.assistReturn(p0: Vector3, side: string, aim: number, flight: number
 	return v
 end
 
--- Power to distance, in the table frame. Reach runs from 0.80 to 1.22 table lengths: the minimum crosses the net
+-- Power to distance, in the table frame. Reach runs from 0.80 to 1.13 table lengths: the minimum crosses the net
 -- and lands in the far half, half power lands mid-court, and full power goes out from the table edge. Flight time
 -- falls from 0.55 s to 0.22 s, so power is speed too. No post-hoc lift: it used to push every strong shot long.
 function Sim.aimedVelocity(p0: Vector3, dirLocal: Vector3, charge: number, len: number): Vector3

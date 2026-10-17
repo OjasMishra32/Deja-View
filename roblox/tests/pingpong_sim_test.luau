@@ -84,10 +84,10 @@ for _, case in { { 0.0, "min" }, { 0.5, "half" }, { 0.8, "80%" }, { 1.0, "max" }
 		)
 	)
 	if label == "min" or label == "half" or label == "80%" then
-		check(`${label} charge lands on the far half`, farHalf, `first={first} maxZ=${r.maxZ}`)
-		check(`${label} charge clears the net`, r.nets == 0, `nets=${r.nets}`)
+		check(`{label} charge lands on the far half`, farHalf, `first={first} maxZ={r.maxZ}`)
+		check(`{label} charge clears the net`, r.nets == 0, `nets={r.nets}`)
 	else
-		check("full charge from a step back reaches the far edge", farHalf, `first={first} maxZ=${r.maxZ}`)
+		check("full charge from a step back reaches the far edge", farHalf, `first={first} maxZ={r.maxZ}`)
 	end
 end
 
@@ -98,7 +98,7 @@ local edge = Sim.newState(
 	0
 )
 local er = fly(edge, 5)
-check("full charge at the table edge goes out", er.maxZ > LEN / 2 + 0.5, `maxZ=${er.maxZ} first=${er.tables[1]}`)
+check("full charge at the table edge goes out", er.maxZ > LEN / 2 + 0.5, `maxZ={er.maxZ} first={er.tables[1]}`)
 
 -- 4. one descent gives one bounce; the ball then keeps bouncing, which is why the server counts per bounce
 local drop = Sim.newState(Vector3.new(0, 2, -1), Vector3.new(0, 0, 0), 0)
@@ -120,15 +120,19 @@ local netShot = Sim.newState(Vector3.new(0, 0.25, -2), Vector3.new(0, 0, 30), 0)
 local nr = fly(netShot, 1)
 check("a low flat shot hits the net", nr.nets >= 1, `nets={nr.nets}`)
 
--- 7. a shot aimed backwards lands on the hitter's own half (fault)
+-- 7. a shot aimed backwards never comes over the table: it goes out past the hitter's own end
 local back = Sim.aimedVelocity(p0, Vector3.new(0, 0, -1), 0.5, LEN)
 local backState = Sim.newState(p0, back, 0)
 local br = fly(backState, 5)
-check("a backwards shot goes out past the hitter's end", br.maxZ < -LEN / 2, `maxZ=${br.maxZ} first={br.tables[1]}`)
+check(
+	"a backwards shot goes out past the hitter's end",
+	#br.tables == 0 and br.maxZ < -LEN / 2 and backState.p.Z < p0.Z,
+	`maxZ={br.maxZ} endZ={backState.p.Z} first={br.tables[1]}`
+)
 
 -- 8. speed stays under the smash cap
 local fast = Sim.aimedVelocity(p0, dir, 1, LEN)
-check("speed is capped", fast.Magnitude <= Sim.MAX_SPEED + 0.01, `speed=${fast.Magnitude}`)
+check("speed is capped", fast.Magnitude <= Sim.MAX_SPEED + 0.01, `speed={fast.Magnitude}`)
 
 print(("\n%s  (%d failure(s))"):format(if failures == 0 then "ALL PASS" else "FAILURES", failures))
 if failures > 0 then

@@ -4,7 +4,7 @@
 #   BASE=https://your-tunnel.trycloudflare.com SCENE=kitchen scripts/roblox-objects-upload.sh
 #
 # The key is read from DEJAVIEW_KEY. It is never printed. The server route checks it
-# when DV_KEY is configured. The file is validated on the server before it is written.
+# when DV_KEY is configured. The server checks that `objects` is an array and the units are studs before it writes.
 set -euo pipefail
 
 BASE="${BASE:-}"
@@ -27,7 +27,7 @@ if [[ -n "$KEY" ]]; then
 fi
 
 url="${BASE%/}/api/roblox/$SCENE/objects"
-curl -fsS -X POST "${auth[@]}" -H "content-type: application/json" --data-binary "@$FILE" "$url"
+# ${auth[@]+...}: macOS bash 3.2 treats an empty array as unbound under set -u
+curl -fsS -X POST ${auth[@]+"${auth[@]}"} -H "content-type: application/json" --data-binary "@$FILE" "$url"
 echo
-curl -fsS "${auth[@]}" "$url" -o /tmp/dejaview-objects-check.json
-python3 -c 'import json,sys; d=json.load(open("/tmp/dejaview-objects-check.json")); print(f"{len(d.get(\"objects\", []))} objects live for {d.get(\"sceneId\", \"?\")}")'
+curl -fsS ${auth[@]+"${auth[@]}"} "$url" | python3 -c 'import json, sys; d = json.load(sys.stdin); print(len(d.get("objects", [])), "objects live for", d.get("sceneId", "?"))'

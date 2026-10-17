@@ -16,6 +16,9 @@
 //                                            `upload` (where the uploads stand). With an uploader, a model that was
 //                                            never uploaded starts uploading.
 //   POST /api/roblox/:sceneId/model          start (or retry) the uploads now; 202 with the upload state.
+//   GET  /api/roblox/:sceneId/objects        the object layer (data/scenes/<id>/objects.json, docs/object-layer.md);
+//                                            404 when the room has none.
+//   POST /api/roblox/:sceneId/objects        replace it: a JSON object with an `objects` array, units "studs" if set.
 //
 // A v1 sidecar describes one file (roblox.glb, `sha1`); a v2 sidecar lists `parts` [{file, sha1, ...}] (each under
 // 20 MB; the first is roblox.glb and its sha1 is also the top-level `sha1`) and `sky` {front: {file, sha1}, ...}.
@@ -701,7 +704,7 @@ export function createRobloxModelRoutes(deps: ModelRouteDeps): Record<string, Mo
       const d = doc as { units?: unknown; objects?: unknown };
       if (!d || typeof d !== 'object' || !Array.isArray(d.objects)) return fail(400, 'objects must be an array.');
       if (d.units !== undefined && d.units !== 'studs') return fail(400, 'units must be "studs".');
-      const tmp = `${path}.tmp`;
+      const tmp = `${path}.${process.pid}.${Date.now()}.tmp`;
       await writeFile(tmp, JSON.stringify(doc));
       await rename(tmp, path);
       return json({ ok: true, objects: (d.objects as unknown[]).length });

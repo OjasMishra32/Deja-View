@@ -52,7 +52,7 @@ def test_merge_votes_needs_agreement():
     assert lift.merge_votes([a, b], 1).tolist() == [True, True, True, False]
 
 
-def test_describe_object_builds_a_studs_record_with_a_median_colour():
+def test_describe_object_builds_a_studs_record_with_the_body_colour():
     cam = _camera()
     pts = _grid(-0.6, 0.6, -0.4, 0.4, z=-2.0, step=0.05)
     colours = np.tile([0.95, 0.95, 0.92], (len(pts), 1))

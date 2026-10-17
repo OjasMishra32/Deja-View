@@ -219,13 +219,9 @@ local function beginCharge()
 	refreshHitButton()
 end
 
-local function endCharge()
-	if not charging then
-		return
-	end
+-- Leave the charge: hide the bar and give the camera and the mouse back.
+local function stopCharge()
 	charging = false
-	local phase = ((os.clock() - chargeStart) / CHARGE_MAX) % 2
-	local held = math.clamp(if phase <= 1 then phase else 2 - phase, CHARGE_MIN, 1)
 	charge = 0
 	barBack.Visible = false
 	reticle.Visible = false
@@ -236,6 +232,15 @@ local function endCharge()
 	if not UserInputService.VREnabled then
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 	end
+end
+
+local function endCharge()
+	if not charging then
+		return
+	end
+	local phase = ((os.clock() - chargeStart) / CHARGE_MAX) % 2
+	local held = math.clamp(if phase <= 1 then phase else 2 - phase, CHARGE_MIN, 1)
+	stopCharge()
 	local dir = aimDir()
 	if not dir then
 		refreshHitButton()
@@ -256,7 +261,7 @@ local function endCharge()
 			})
 		end
 	else
-		PPHit:FireServer({ charge = held, dir = dir, flight = 0.7 })
+		PPHit:FireServer({ charge = held, dir = dir })
 	end
 	refreshHitButton()
 end
@@ -324,10 +329,10 @@ local function clampToScope()
 end
 
 RunService.RenderStepped:Connect(function(dt)
-	PingPongView.update(dt)
 	if not active then
 		return
 	end
+	PingPongView.update(dt)
 	local t = os.clock()
 	if UserInputService.VREnabled then
 		local cf = bladeCframe()
@@ -365,6 +370,18 @@ PPPaddle.OnClientEvent:Connect(function(userId, cf)
 		PingPongView.paddle(userId, cf)
 	end
 end)
+Players.PlayerRemoving:Connect(function(p)
+	PingPongView.remove(p.UserId)
+end)
+
+-- The table closed: no side, no charge, no paddles.
+local function deactivate()
+	mySide = nil
+	if charging then
+		stopCharge()
+	end
+	PingPongView.clear()
+end
 
 task.spawn(function()
 	local ok, side = pcall(function()
@@ -402,21 +419,16 @@ PPState.OnClientEvent:Connect(function(msg)
 		dbg(if active then "active" else "inactive")
 		version.Visible = active
 		if not active then
-			mySide = nil
-			charging = false
-			barBack.Visible = false
-			reticle.Visible = false
-			PingPongView.clear()
+			deactivate()
 		end
+		-- the board message always carries the last bounce; a missing one means none since the last hit
+		bounce = msg.bounce
 	end
 	if msg.serve ~= nil then
 		serveSide = msg.serve
 	end
 	if msg.serving ~= nil then
 		serving = msg.serving == true
-	end
-	if msg.bounce ~= nil then
-		bounce = msg.bounce
 	end
 	if typeof(msg.c) == "Vector3" then
 		tableC = msg.c
@@ -438,11 +450,7 @@ workspace:GetAttributeChangedSignal("PPActive"):Connect(function()
 	if on ~= active then
 		active = on
 		if not on then
-			mySide = nil
-			charging = false
-			barBack.Visible = false
-			reticle.Visible = false
-			PingPongView.clear()
+			deactivate()
 		end
 		refreshHitButton()
 	end

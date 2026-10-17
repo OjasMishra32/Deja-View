@@ -75,7 +75,8 @@ function ObjectLayer.build(sceneId: string, room: Instance?)
 	if not ok or type(doc) ~= "table" or type(doc.objects) ~= "table" or #doc.objects == 0 then
 		doc = ObjectFixtures[sceneId]
 		if not doc then
-			if status ~= 404 then
+			-- a 404 or an empty layer is normal (no objects for this room); only a failed request is worth a warning
+			if not ok and status ~= 404 then
 				warn("[DejaView] object layer unavailable for", sceneId, status)
 			end
 			return

@@ -15,8 +15,6 @@ local Sim = require(ReplicatedStorage.Shared.PingPongSim)
 local PingPong = {}
 
 local SCORE_TO_WIN = Sim.WIN_SCORE
-local SIDE_ZONE = 12
-local HIT_SLACK = 1.8
 local BOT_DELAY = 0.28
 
 local frame = CFrame.new()
@@ -62,7 +60,7 @@ local function nameOf(s: string?): string
 		return "—"
 	end
 	local p = sides[s]
-	return if p and p.Parent then p.DisplayName elseif s then "Bot" else "—"
+	return if p and p.Parent then p.DisplayName else "Bot"
 end
 
 local function playerSide(p: Player): string?
@@ -147,6 +145,10 @@ end
 
 -- Build the visible table (a real table gets only the net and the lines) and the prompt.
 local function buildTable(tableCf: CFrame, length: number, width: number, visible: boolean)
+	-- one ping pong at a time: Shivin's arcade game goes before this one is placed (team/seb.md A.12)
+	if Pong.isActive() then
+		Pong.remove()
+	end
 	destroyTable()
 	frame, len, wid = tableCf, length, width
 	tableYaw = select(2, tableCf:ToOrientation())
@@ -278,7 +280,7 @@ local function placeForScene(host: Player?, features: any?, cameraLook: Vector3?
 	local look = if flat.Magnitude > 0.01 then flat.Unit else Vector3.new(0, 0, -1)
 	local hum = (hrp.Parent :: Model):FindFirstChildOfClass("Humanoid")
 	local floorY = hrp.Position.Y - ((hum and hum.HipHeight or 2) + hrp.Size.Y / 2)
-	local centre2 = Vector3.new(hrp.Position.X, floorY + 2.71, hrp.Position.Z) + look * (6 + len / 2)
+	local centre2 = Vector3.new(hrp.Position.X, floorY + 2.71, hrp.Position.Z) + look * (6 + Sim.LEN / 2)
 	buildTable(CFrame.new(centre2) * CFrame.Angles(0, math.atan2(look.X, look.Z), 0), Sim.LEN, Sim.WID, true)
 end
 
@@ -303,8 +305,31 @@ local function launch(to: string, p0: Vector3, flight: number, aim: number)
 	updateBoard()
 end
 
+-- A player's own shot (camera aim or paddle swing): the ball flies at the other side, which starts with no bounces.
+local function struck(side: string, v: Vector3)
+	state.to = other(side)
+	state.v = v
+	state.lastTouch = state.t
+	state.bounces = 0
+	state.receiverBounces = 0
+	state.shot += 1
+	lastHitter = side
+	lastBounce = nil
+	ball.CFrame = frame * CFrame.new(state.p)
+	broadcastState()
+	updateBoard()
+end
+
 local function serve(wait: boolean)
 	if over or not folder then
+		return
+	end
+	if not sides.A and not sides.B then
+		-- nobody at the table: wait for a join instead of letting the bot play itself (and post bot-vs-bot results)
+		if state then
+			state.live, state.serving = false, false
+		end
+		updateBoard()
 		return
 	end
 	state = state or { rally = 0, best = 0, shot = 0 }
@@ -313,6 +338,7 @@ local function serve(wait: boolean)
 	state.p, state.v, state.t = p, Vector3.zero, now()
 	state.live, state.lastTouch, state.bounces = true, now(), 0
 	state.receiverBounces = 0
+	state.serveInFlight = false
 	state.to = serverSide
 	state.serving = true
 	lastHitter, lastBounce = nil, nil
@@ -326,6 +352,7 @@ local function serve(wait: boolean)
 		-- the bot serves after a moment
 		task.delay(0.9, function()
 			if folder and state and state.serving and not over then
+				state.serveInFlight = true -- a bot serve into the net is a let too, like a player's
 				launch(other(serverSide), state.p, 0.8, 0)
 			end
 		end)
@@ -393,7 +420,8 @@ local function point(winnerSide: string, why: string)
 		finish(target)
 		return
 	end
-	if pointsPlayed % 2 == 0 and not (score.A >= 10 and score.B >= 10) then
+	-- the serve changes every 2 points, and every point from 10-10
+	if pointsPlayed % 2 == 0 or (score.A >= 10 and score.B >= 10) then
 		serverSide = other(serverSide)
 	end
 	task.delay(1.2, function()
@@ -427,7 +455,8 @@ local function botReturn()
 end
 
 local function step(dt: number)
-	if not state or not state.live or not ball then
+	-- a waiting serve floats; a let that starts a new serve mid-frame must not drop it
+	if not state or not state.live or state.serving or not ball then
 		return
 	end
 	local ev = Sim.step(state, dt, len, wid)
@@ -447,9 +476,8 @@ local function step(dt: number)
 			point(hitter, "Double bounce")
 			return
 		end
-		if ev.table == state.to then
-			botReturn()
-		end
+		-- it landed on the receiver's half: the bot returns it when that end is empty
+		botReturn()
 	end
 	if ev.net then
 		if state.serveInFlight then
@@ -506,27 +534,14 @@ local function onHit(player: Player, payload: any)
 	local dir = payload.dir
 	local aimed = typeof(dir) == "Vector3" and dir.Magnitude > 0.1
 	local p0 = state.p
-	state.serving = false
-	state.rally = (state.rally or 0) + 1
-	state.best = math.max(state.best or 0, state.rally)
+	local v: Vector3? = nil
 	if aimed and payload.vr ~= true then
 		-- hold to charge, aim with the camera: reach and pace grow with the hold, and a late aim sails out
-		local v = Sim.aimedVelocity(p0, frame:VectorToObjectSpace((dir :: Vector3).Unit), charge, len)
-		state.to = other(side)
-		lastHitter = side
-		lastBounce = nil
-		state.lastTouch = state.t
-		state.v = v
-		ball.CFrame = frame * CFrame.new(state.p)
-		broadcastState()
-		updateBoard()
-		return
-	end
-	if payload.vr == true and typeof(payload.cf) == "CFrame" and typeof(payload.vel) == "Vector3" then
+		v = Sim.aimedVelocity(p0, frame:VectorToObjectSpace((dir :: Vector3).Unit), charge, len)
+	elseif payload.vr == true and typeof(payload.cf) == "CFrame" and typeof(payload.vel) == "Vector3" then
 		-- the paddle really hit it: reflect off the blade and let the ball fly
 		local blade = payload.cf :: CFrame
 		local claimed = payload.p
-		local ballWorld = frame:PointToWorldSpace(state.p)
 		if typeof(claimed) == "Vector3" and (claimed - ballWorld).Magnitude > 2 then
 			broadcastState()
 			return
@@ -542,27 +557,22 @@ local function onHit(player: Player, payload: any)
 			frame:VectorToObjectSpace(payload.vel :: Vector3),
 			0.8
 		)
-		if state.v ~= before then
-			local boost = 0.75 + charge * 0.5
-			state.v = state.v * boost
-			if state.v.Magnitude > Sim.MAX_SPEED then
-				state.v = state.v.Unit * Sim.MAX_SPEED
-			end
-		end
 		if state.v == before then
 			broadcastState() -- the ball was moving away; nothing to return
 			return
 		end
-		state.to = other(side)
-		lastHitter = side
-		lastBounce = nil
-		state.lastTouch = state.t
-		ball.CFrame = frame * CFrame.new(state.p)
-		broadcastState()
-		updateBoard()
-		return
+		local boosted = state.v * (0.75 + charge * 0.5)
+		v = if boosted.Magnitude > Sim.MAX_SPEED then boosted.Unit * Sim.MAX_SPEED else boosted
 	end
-	launch(other(side), p0, flight, aim)
+	-- the hit counts: only now does the rally grow (a rejected swing above returns first)
+	state.rally = (state.rally or 0) + 1
+	state.best = math.max(state.best or 0, state.rally)
+	if v then
+		struck(side, v)
+	else
+		-- neither a camera aim nor a swing: the assist return, the same shot the bot plays
+		launch(other(side), p0, math.max(0.55, 0.8 - state.rally * 0.02), 0)
+	end
 end
 
 local function serveHit(player: Player, payload: any)
@@ -575,15 +585,7 @@ local function serveHit(player: Player, payload: any)
 	local charge = type(payload) == "table" and math.clamp(tonumber(payload.charge) or 0.3, 0, 1) or 0.3
 	local dir = type(payload) == "table" and payload.dir or nil
 	if typeof(dir) == "Vector3" and dir.Magnitude > 0.1 then
-		local v = Sim.aimedVelocity(state.p, frame:VectorToObjectSpace(dir.Unit), charge, len)
-		state.to = other(side)
-		lastHitter = side
-		lastBounce = nil
-		state.lastTouch = state.t
-		state.v = v
-		ball.CFrame = frame * CFrame.new(state.p)
-		broadcastState()
-		updateBoard()
+		struck(side, Sim.aimedVelocity(state.p, frame:VectorToObjectSpace(dir.Unit), charge, len))
 		return true
 	end
 	launch(other(side), state.p, 0.8, 0)
@@ -606,11 +608,28 @@ local function onHeartbeat(dt: number)
 		elseif not state.live then
 			break
 		else
-			for _ = 1, 2 do
-				step(h / 2)
+			for _ = 1, Sim.SUBSTEPS do
+				step(h / Sim.SUBSTEPS)
 			end
 		end
 	end
+end
+
+-- A fresh match on the table just built: new round id, 0-0, A serves, nobody on a side yet.
+local function newMatch()
+	roundId = string.format(
+		"pp-%s",
+		string.upper(
+			(game.JobId:sub(1, 8) ~= "" and game.JobId:sub(1, 8) or "studio") .. tostring(math.floor(os.clock() * 1000))
+		)
+	)
+	matchStart = now()
+	score.A, score.B = 0, 0
+	pointsPlayed, over = 0, false
+	serverSide = "A"
+	state = nil
+	sides.A, sides.B = nil, nil
+	updateBoard()
 end
 
 function PingPong.isActive(): boolean
@@ -672,7 +691,7 @@ function PingPong.join(player: Player)
 	end
 end
 
-function PingPong.stop(): void
+function PingPong.stop()
 	destroyTable()
 	sides.A, sides.B = nil, nil
 	queue = {}
@@ -761,20 +780,7 @@ function PingPong.start()
 			if typeof(mn) == "Vector3" and typeof(mx) == "Vector3" then
 				local c = (mn + mx) / 2
 				buildTable(CFrame.new(c.X, c.Y + 2.71, c.Z), Sim.LEN, Sim.WID, true)
-				roundId = string.format(
-					"pp-%s",
-					string.upper(
-						(game.JobId:sub(1, 8) ~= "" and game.JobId:sub(1, 8) or "studio")
-							.. tostring(math.floor(os.clock() * 1000))
-					)
-				)
-				matchStart = now()
-				score.A, score.B = 0, 0
-				pointsPlayed, over = 0, false
-				serverSide = "A"
-				state = nil
-				sides.A, sides.B = nil, nil
-				updateBoard()
+				newMatch()
 				return
 			end
 		end
@@ -793,9 +799,6 @@ function PingPong.start()
 		task.delay(2, maybePlace)
 	end)
 	task.delay(3, maybePlace)
-	workspace:GetAttributeChangedSignal("SceneId"):Connect(function()
-		PingPong.stop()
-	end)
 
 	RunService.Heartbeat:Connect(onHeartbeat)
 	print("[PingPong] ready")
@@ -804,19 +807,7 @@ end
 -- Kept for the host action Shivin wires: open the table on the current room.
 function PingPong.placeForRoom(host: Player?, features: any?, cameraLook: Vector3?)
 	placeForScene(host, features, cameraLook)
-	roundId = string.format(
-		"pp-%s",
-		string.upper(
-			(game.JobId:sub(1, 8) ~= "" and game.JobId:sub(1, 8) or "studio") .. tostring(math.floor(os.clock() * 1000))
-		)
-	)
-	matchStart = now()
-	score.A, score.B = 0, 0
-	pointsPlayed, over = 0, false
-	serverSide = "A"
-	state = nil
-	sides.A, sides.B = nil, nil
-	updateBoard()
+	newMatch()
 end
 
 return PingPong

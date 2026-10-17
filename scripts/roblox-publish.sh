@@ -3,6 +3,7 @@
 #
 #   scripts/roblox-publish.sh                 # publish to the DejaView PingPong Test place
 #   UNIVERSE=... PLACE=... scripts/roblox-publish.sh
+#   scripts/roblox-publish.sh --upload-object <glb> [name]   # one approved object GLB as a Model asset, no place build
 #
 # The API key lives in ~/.config/dejaview/roblox.key (mode 600). This script never prints it.
 set -euo pipefail
@@ -16,27 +17,10 @@ CURL_BIN="${CURL_BIN:-curl}"
 OUT="${OUT:-/tmp/dejaview-place.rbxl}"
 PLACE_FILE="${PLACE_FILE:-}"
 
-[[ -s "$KEY_FILE" ]] || { echo "missing API key at $KEY_FILE" >&2; exit 1; }
-if [[ -n "$PLACE_FILE" ]]; then
-  [[ -f "$PLACE_FILE" ]] || { echo "missing place file at $PLACE_FILE" >&2; exit 1; }
-  OUT="$PLACE_FILE"
-  echo "publishing existing place file $OUT"
-else
-  [[ -x "$ROJO" ]] || { echo "missing rojo at $ROJO" >&2; exit 1; }
-  echo "building $OUT"
-  "$ROJO" build "$ROOT/roblox" -o "$OUT" >/dev/null
-fi
-
-KEY="$(tr -d '\r\n' < "$KEY_FILE")"
-# Asset uploads need an assets:write key. Keep it separate from the place publish key.
-ASSET_KEY_FILE="${ROBLOX_ASSET_KEY_FILE:-$HOME/.config/dejaview/roblox-assets.key}"
-ASSET_KEY="$KEY"
-if [[ -s "$ASSET_KEY_FILE" ]]; then
-	ASSET_KEY="$(tr -d '\r\n' < "$ASSET_KEY_FILE")"
-fi
 if [[ "${1:-}" == "--upload-object" ]]; then
 	FILE="${2:-}"
 	NAME="${3:-DejaView object}"
+	[[ -n "$FILE" && -f "$FILE" ]] || { echo "usage: scripts/roblox-publish.sh --upload-object <glb> [name]" >&2; exit 2; }
 	APPROVAL="$(dirname "$FILE")/preflight/approval.json"
 	if [[ ! -f "$APPROVAL" ]]; then
 		echo "No upload: no personal approval. Run pipeline/objects/review.py after inspecting the preflight sheet." >&2
@@ -58,8 +42,12 @@ PY
 	then
 		exit 2
 	fi
+	# Asset uploads need an assets:write key. Use the separate assets key when there is one, else the place key.
+	ASSET_KEY_FILE="${ROBLOX_ASSET_KEY_FILE:-$HOME/.config/dejaview/roblox-assets.key}"
+	[[ -s "$ASSET_KEY_FILE" ]] || ASSET_KEY_FILE="$KEY_FILE"
+	[[ -s "$ASSET_KEY_FILE" ]] || { echo "missing assets:write key at $ASSET_KEY_FILE" >&2; exit 1; }
+	ASSET_KEY="$(tr -d '\r\n' < "$ASSET_KEY_FILE")"
 	CREATOR="${ROBLOX_CREATOR_ID:-4348140549}"
-	[[ -n "$FILE" && -f "$FILE" ]] || { echo "usage: scripts/roblox-publish.sh --upload-object <glb> [name]" >&2; exit 2; }
 	REQ="$(NAME="$NAME" CREATOR="$CREATOR" python3 -c 'import json,os; print(json.dumps({"assetType":"Model","displayName":os.environ["NAME"][:50],"description":"DejaView object mesh from the scan","creationContext":{"creator":{"userId":int(os.environ["CREATOR"])}}}))')"
 	echo "uploading $(du -h "$FILE" | cut -f1) as asset for creator $CREATOR"
 	CODE="$(curl -sS --max-time 180 -o /tmp/object-upload.json -w '%{http_code}' \
@@ -74,15 +62,38 @@ PY
 	fi
 	OP="$(python3 -c 'import json; d=json.load(open("/tmp/object-upload.json")); print(d.get("operationId") or (d.get("path") or "").split("/")[-1])')"
 	[[ -n "$OP" ]] || { echo "no operation id"; exit 1; }
-	for attempt in $(seq 1 60); do
+	for _ in $(seq 1 60); do
 		sleep 2
 		curl -sS --max-time 30 -o /tmp/object-op.json -H "x-api-key: $ASSET_KEY" "https://apis.roblox.com/assets/v1/operations/$OP"
 		DONE="$(python3 -c 'import json; d=json.load(open("/tmp/object-op.json")); print(1 if d.get("done") else 0)')"
 		if [[ "$DONE" == "1" ]]; then break; fi
 	done
-	python3 -c 'import json; d=json.load(open("/tmp/object-op.json")); print("asset", (d.get("response") or {}).get("assetId")) if not d.get("error") else (_ for _ in ()).throw(SystemExit("upload failed: " + str(d["error"]))))'
-	exit $?
+	python3 - <<'PY'
+import json, sys
+d = json.load(open("/tmp/object-op.json"))
+if d.get("error"):
+    sys.exit(f"upload failed: {d['error']}")
+if not d.get("done"):
+    sys.exit("upload failed: Roblox did not finish processing the model in time")
+asset = (d.get("response") or {}).get("assetId")
+if not asset:
+    sys.exit("upload failed: no asset id")
+print("asset", asset)
+PY
+	exit 0
 fi
+
+[[ -s "$KEY_FILE" ]] || { echo "missing API key at $KEY_FILE" >&2; exit 1; }
+if [[ -n "$PLACE_FILE" ]]; then
+  [[ -f "$PLACE_FILE" ]] || { echo "missing place file at $PLACE_FILE" >&2; exit 1; }
+  OUT="$PLACE_FILE"
+  echo "publishing existing place file $OUT"
+else
+  [[ -x "$ROJO" ]] || { echo "missing rojo at $ROJO" >&2; exit 1; }
+  echo "building $OUT"
+  "$ROJO" build "$ROOT/roblox" -o "$OUT" >/dev/null
+fi
+KEY="$(tr -d '\r\n' < "$KEY_FILE")"
 echo "publishing to universe $UNIVERSE place $PLACE"
 for attempt in 1 2 3 4 5; do
   code="$("$CURL_BIN" -sS --max-time 120 -o /tmp/roblox-publish.out -w '%{http_code}' \

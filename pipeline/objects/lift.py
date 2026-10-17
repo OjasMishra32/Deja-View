@@ -5,9 +5,9 @@ splat centres, colours, one camera per keyframe, and a boolean mask per camera. 
 module projects the splats, samples the masks, keeps what enough views agree on, and
 returns an object record in the `objects.json` shape.
 
-All input points are in the viewer (splat) frame, in metres. The output centre and
-size are converted to studs with `studs_per_meter`, because that is the frame the
-Roblox model and the object schema use.
+Points and cameras share one frame, in metres; `build.py` uses the room frame (floor at
+y = 0). The output centre and size are converted to studs with `studs_per_meter`, because
+that is the unit the Roblox model and the object schema use.
 
 The projection is the same pinhole projection as `pipeline/reality_split.py`.
 """
@@ -51,7 +51,6 @@ def mask_points(
     depth: np.ndarray | None = None,
     abs_tol: float = rs.DEFAULT_ABS_TOL,
     rel_tol: float = rs.DEFAULT_REL_TOL,
-    use_crop: bool = False,
 ) -> np.ndarray:
     """Splat centres that project into `mask`. With `depth`, hidden points are removed too."""
     u, v, z, in_front = rs.project_points(points, cam)
@@ -86,7 +85,7 @@ def robust_bounds(points: np.ndarray, low: float = 1.0, high: float = 99.0) -> t
     return np.percentile(p, low, axis=0), np.percentile(p, high, axis=0)
 
 
-def median_color(colors: np.ndarray, scale: float = 255.0) -> list[int]:
+def median_color(colors: np.ndarray) -> list[int]:
     """Per-channel median colour, rounded and clamped to 0..255."""
     c = np.asarray(colors, np.float64)
     if c.ndim != 2 or c.shape[1] != 3 or len(c) == 0:
@@ -169,7 +168,7 @@ def describe_object(
     lo, hi = robust_bounds(p)
     centre_m = (lo + hi) / 2.0
     size_m = np.maximum(hi - lo, 1e-6)
-    agreement = np.stack(votes, axis=0)[:, keep].mean(axis=0) if votes else np.ones(len(p))
+    agreement = np.stack(votes, axis=0)[:, keep].mean(axis=0)
     confidence = float(np.clip(agreement.mean(), 0.0, 1.0))
     return {
         "id": _slug(label),

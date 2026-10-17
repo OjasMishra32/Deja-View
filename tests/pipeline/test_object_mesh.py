@@ -44,3 +44,12 @@ def test_object_room_uses_the_crop_and_the_object_frame():
     assert room.floor_y == 0.0
     assert np.allclose(room.lo, lo) and np.allclose(room.hi, hi)
     assert room.transform["scale"] == 1
+
+
+def test_object_room_colours_and_ceiling_use_the_room_units():
+    s = _splats(50)
+    hi = np.array([1.0, 2.0, 1.0])
+    room = mesh.object_room(s, {"id": "fridge"}, None, -hi, hi, np.zeros(3))
+    # Splats.rgb() is 0..1 (here 0.2..1), so linear light is about 0.03..1, not near black
+    assert room.lin.min() > 0.02 and room.lin.max() <= 1.0
+    assert room.voxel_map["ceilingY"] == pytest.approx(2.0 * 3.57, abs=0.01)

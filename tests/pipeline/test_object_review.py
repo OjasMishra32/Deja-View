@@ -1,8 +1,6 @@
 """Approval is bound to the exact file bytes."""
-import json
-
 import pipeline_helpers  # noqa: F401
-from objects import preflight, review
+from objects import review
 
 
 def test_approval_records_the_hash_and_invalidates_after_a_change(tmp_path):

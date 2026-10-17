@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
 import sys
 from pathlib import Path
 
@@ -22,12 +21,10 @@ import numpy as np
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import roblox_map as rmap  # noqa: E402
 import roblox_mesh as rm  # noqa: E402
 import splat_io as sio  # noqa: E402
 from objects import scene as obj_scene  # noqa: E402
-
-GLB_FILE = "roblox.glb"
-SIDECAR_FILE = "roblox-model.json"
 
 
 def crop_splats(splats: sio.Splats, lo: np.ndarray, hi: np.ndarray) -> sio.Splats:
@@ -70,8 +67,8 @@ def object_room(splats: sio.Splats, scene: dict, scene_dir: Path, lo: np.ndarray
         spawn_yaw=0.0,
         pos=np.asarray(splats.means, np.float64),
         w=np.ones(len(splats), np.float64),
-        lin=np.clip(rgb / 255.0, 0, 1) ** 2.2,
-        voxel_map={"spawn": [0, 0, 0], "spawnYaw": 0, "ceilingY": float(hi[1])},
+        lin=rmap.srgb_to_linear(rgb),  # Splats.rgb() is already 0..1
+        voxel_map={"spawn": [0, 0, 0], "spawnYaw": 0, "ceilingY": round(float(hi[1]) * rm.STUDS_PER_METER, 2)},
     )
 
 

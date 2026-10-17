@@ -8,8 +8,6 @@ import pipeline_helpers  # noqa: F401  (puts pipeline/ on sys.path)
 import splat_io as sio
 from objects import render_views, scene as obj_scene
 
-ROOT = Path(__file__).resolve().parents[2]
-
 
 def _tiny_scene(tmp_path: Path) -> Path:
     d = tmp_path / "tiny"

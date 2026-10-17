@@ -4,6 +4,7 @@ import json
 import struct
 
 import numpy as np
+import pytest
 from PIL import Image
 
 import pipeline_helpers  # noqa: F401
@@ -47,3 +48,34 @@ def test_report_is_never_approved_automatically(tmp_path):
     assert report["approved"] is False
     assert report["images"]
     assert "clear" in report
+
+
+_EAN_L = ["0001101", "0011001", "0010011", "0111101", "0100011", "0110001", "0101111", "0111011", "0110111", "0001011"]
+_EAN_G = ["0100111", "0110011", "0011011", "0100001", "0011101", "0111001", "0000101", "0010001", "0001001", "0010111"]
+_EAN_R = ["1110010", "1100110", "1101100", "1000010", "1011100", "1001110", "1010000", "1000100", "1001000", "1110100"]
+_EAN_FIRST = ["LLLLLL", "LLGLGG", "LLGGLG", "LLGGGL", "LGLLGG", "LGGLLG", "LGGGLL", "LGLGLG", "LGLGGL", "LGGLGL"]
+
+
+def _ean13_image(digits: str, module: int = 2) -> np.ndarray:
+    d = [int(c) for c in digits]
+    bits = "101" + "".join((_EAN_L if _EAN_FIRST[d[0]][i] == "L" else _EAN_G)[c] for i, c in enumerate(d[1:7]))
+    bits += "01010" + "".join(_EAN_R[c] for c in d[7:]) + "101"
+    quiet = 40  # modules of white either side; OpenCV's detector needs a wide quiet zone
+    img = np.full((200, (len(bits) + 2 * quiet) * module, 3), 255, np.uint8)
+    for i, b in enumerate(bits):
+        if b == "1":
+            img[60:140, (i + quiet) * module:(i + quiet + 1) * module] = 0
+    return img
+
+
+def test_a_decoded_barcode_is_reported_as_text(tmp_path):
+    cv2 = pytest.importorskip("cv2")
+    if not hasattr(cv2, "barcode"):
+        pytest.skip("this OpenCV build has no barcode detector")
+    tex = tmp_path / "textures"
+    tex.mkdir()
+    Image.fromarray(_ean13_image("4006381333931")).save(tex / "texture_00.png")
+    scan = preflight.scan_codes([{"file": "texture_00.png"}], tex)
+    json.dumps(scan)  # the report must stay writable
+    assert scan["status"] == "ok"
+    assert scan["barcodes"] and scan["barcodes"][0]["text"] == ["4006381333931"]
