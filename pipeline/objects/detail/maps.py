@@ -105,6 +105,9 @@ def ambient_occlusion(prims: list[Prim], size: int = 1024, directions: int = 48,
     dist = extent * 50.0
     f = (resolution / 2.0) / (extent * 0.55 / dist)
     geo = [Prim(p.name, p.V, p.F, p.N) for p in prims]  # depth only
+    # A mesh whose winding is flipped as a whole would bake black; orient normals outward from the centroid.
+    allN = np.concatenate([p.N if p.N is not None else vertex_normals(p.V, p.F) for p in prims])
+    sign = -1.0 if float(((allV - allV.mean(axis=0)) * allN).sum(axis=1).mean()) < 0 else 1.0
     texel = []
     for p in prims:
         face, bary = uv_raster(p, size)
@@ -112,7 +115,7 @@ def ambient_occlusion(prims: list[Prim], size: int = 1024, directions: int = 48,
         tri = p.F[face[cov]]
         b = bary[cov][:, :, None]
         pos = (p.V[tri] * b).sum(axis=1)
-        N = p.N if p.N is not None else vertex_normals(p.V, p.F)
+        N = sign * (p.N if p.N is not None else vertex_normals(p.V, p.F))
         nrm = (N[tri] * b).sum(axis=1)
         nrm /= np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-12)
         texel.append((cov, pos, nrm))

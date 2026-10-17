@@ -110,7 +110,8 @@ def build_flat(splats, box: ObjectBox, p: flat.Params, out: Path, room_centre: n
 
 def reconstruct(scene_dir: str | Path, wanted: list[str] | None, out_root: str | Path | None = None,
                 objects: str | Path | None = None, device: str | None = None, kind: str | None = None,
-                bake: bool = True, ao_into_colour: float = 0.5, log=print) -> list[dict]:
+                bake: bool = True, ao_into_colour: float = 0.5, splats_file: str | Path | None = None,
+                log=print) -> list[dict]:
     from objects import scene as obj_scene
 
     scene_dir = Path(scene_dir)
@@ -119,6 +120,10 @@ def reconstruct(scene_dir: str | Path, wanted: list[str] | None, out_root: str |
         raise SystemExit("refusing to write over the current objects set (and the approved fridge)")
     boxes = pick(load_objects(objects_file(scene_dir, objects)), wanted)
     splats, scene = obj_scene.load_scene(scene_dir)
+    if splats_file:  # e.g. Gaussian Grouping's object Gaussians, already in the room frame
+        import splat_io as sio
+
+        splats = sio.read_splats(splats_file)
     room_centre = np.asarray(splats.means, np.float64).mean(axis=0)
     results = []
     for box in boxes:
@@ -165,10 +170,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--device", default=None)
     ap.add_argument("--kind", choices=["regular", "small", "flat"], default=None, help="override the classifier")
     ap.add_argument("--no-maps", action="store_true")
+    ap.add_argument("--splats", default=None, help="mesh these splats instead of the scene's (room frame)")
     ap.add_argument("--ao-into-colour", type=float, default=0.5, help="0 keeps the albedo unshaded")
     args = ap.parse_args(argv)
     res = reconstruct(args.scene, args.object, args.out, args.objects, args.device, args.kind, not args.no_maps,
-                      args.ao_into_colour)
+                      args.ao_into_colour, args.splats)
     bad = [r["id"] for r in res if not r["ok"]]
     print(f"{len(res) - len(bad)}/{len(res)} objects rebuilt" + (f"; failed: {', '.join(bad)}" if bad else ""))
     return 1 if bad else 0
