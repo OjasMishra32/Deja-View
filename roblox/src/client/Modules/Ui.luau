@@ -109,8 +109,8 @@ function Ui.build()
 
 	-- Scoreboard (top-right)
 	local score = make("Frame", { Name = "Scoreboard", BackgroundColor3 = Theme.Bg, BackgroundTransparency = 0.05,
-		AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -16, 0, 64), Size = UDim2.new(0.24, 0, 0, 220),
-		Visible = false, Parent = gui }, { Theme.corner(14), Theme.stroke(),
+		AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -16, 0, 64), Size = UDim2.new(0.24, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y, Visible = false, Parent = gui }, { Theme.corner(14), Theme.stroke(),
 		make("UISizeConstraint", { MinSize = Vector2.new(200, 0), MaxSize = Vector2.new(320, 400) }),
 		make("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), PaddingTop = UDim.new(0, 10),
 			PaddingBottom = UDim.new(0, 10) }),
@@ -118,7 +118,7 @@ function Ui.build()
 	ui.score = score
 	ui.timer = label({ Text = "0:00", FontFace = Theme.Heading, Size = UDim2.new(1, 0, 0, 44), MaxText = 44,
 		LayoutOrder = 0, Parent = score })
-	ui.scoreRows = make("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 150), LayoutOrder = 1,
+	ui.scoreRows = make("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), LayoutOrder = 1,
 		AutomaticSize = Enum.AutomaticSize.Y, Parent = score },
 		{ make("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }) })
 
