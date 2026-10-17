@@ -292,6 +292,10 @@ def main(argv: list[str] | None = None) -> int:
         status["steps"]["ground"] = solve_ground()
         ran.append("refine")
     hf = hmr_file(work, a.refine)
+    if not (work / "tracks.npz").exists() and not set(steps) - {"hmr"}:
+        # a GPU job for the pose step alone (hpg/avatar.sbatch STEPS=hmr): the CPU steps run next, in their own job
+        log("run", f"hmr done in {time.time() - t0:.1f} s; tracks come from the ground step")
+        return 0
     tracks = dict(np.load(work / "tracks.npz"))
     n_people = sum(1 for k in tracks if k.endswith("/rest_vertices"))
     from pipeline.avatar.body import Asset
