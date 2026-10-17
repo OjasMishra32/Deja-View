@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DejaView asset review</title>
+<style>
+  :root { --bg: #0b0d12; --panel: #141820; --line: #252b36; --text: #e8ebf0; --muted: #8e97a6; --accent: #7bd88f; --warn: #f0b35b; --bad: #ef6b6b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; }
+  header { padding: 14px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 14px; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: .2px; }
+  header .warn { color: var(--warn); font-size: 12px; }
+  .layout { display: grid; grid-template-columns: 240px 1fr; min-height: calc(100vh - 58px); }
+  aside { border-right: 1px solid var(--line); padding: 12px; }
+  aside .item { padding: 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; cursor: pointer; background: var(--panel); }
+  aside .item.active { border-color: var(--accent); }
+  aside .item .name { font-weight: 600; }
+  aside .item .sub { color: var(--muted); font-size: 12px; }
+  .badge { display: inline-block; padding: 1px 7px; border-radius: 99px; font-size: 11px; margin-top: 6px; }
+  .badge.pending { background: #2a2f3a; color: var(--muted); }
+  .badge.approved { background: #16351f; color: var(--accent); }
+  .badge.denied { background: #3a1c1c; color: var(--bad); }
+  main { min-width: 0; }
+  .viewer-wrap { position: relative; height: 52vh; min-height: 340px; border-bottom: 1px solid var(--line); background: radial-gradient(circle at 50% 40%, #1a2030, #0b0d12 70%); }
+  #viewer { width: 100%; height: 100%; display: block; }
+  .viewer-hint { position: absolute; left: 14px; bottom: 12px; color: var(--muted); font-size: 12px; }
+  .viewer-actions { position: absolute; right: 14px; top: 12px; }
+  .content { padding: 16px 20px 40px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1.1fr) minmax(300px, .9fr); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); margin: 0 0 10px; }
+  .card img { max-width: 100%; display: block; border-radius: 6px; }
+  .sheet { max-height: 520px; overflow: auto; }
+  .kv { display: grid; grid-template-columns: 120px 1fr; gap: 6px 12px; font-size: 13px; }
+  .kv .k { color: var(--muted); }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #cbd3df; }
+  textarea { width: 100%; min-height: 70px; background: #0e1218; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 9px; font: inherit; }
+  .buttons { display: flex; gap: 8px; margin-top: 10px; }
+  button { border: 1px solid var(--line); background: #1b2130; color: var(--text); border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  button.approve { border-color: #2d6a3f; background: #173a24; color: #b9f2c7; }
+  button.deny { border-color: #6a2d2d; background: #3a1a1a; color: #ffc4c4; }
+  button:hover { filter: brightness(1.15); }
+  .candidates { display: flex; gap: 10px; flex-wrap: wrap; }
+  .candidates figure { margin: 0; width: 180px; }
+  .candidates img { width: 180px; height: 180px; object-fit: cover; }
+  .candidates figcaption { color: var(--muted); font-size: 11px; margin-top: 4px; }
+  .status { margin-top: 10px; font-size: 13px; }
+  .status.ok { color: var(--accent); } .status.no { color: var(--bad); }
+  .empty { color: var(--muted); padding: 30px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid var(--line); } .content { grid-template-columns: 1fr; } }
+</style>
+<script>
+  window.addEventListener('error', (e) => {
+    const el = document.getElementById('status');
+    if (el) el.textContent = 'JS error: ' + (e.message || e.error || 'unknown');
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const el = document.getElementById('status');
+    if (el) el.textContent = 'JS promise error: ' + (e.reason?.message || e.reason || 'unknown');
+  });
+</script>
+<script type="importmap">
+  { "imports": { "three": "/vendor/three.module.js", "three/addons/": "/vendor/addons/" } }
+</script>
+</head>
+<body>
+<header>
+  <h1>DejaView asset review</h1>
+  <span class="warn">Nothing is uploaded here. Approve or deny writes a local record tied to the file hash.</span>
+</header>
+<div class="layout">
+  <aside><div id="list"></div></aside>
+  <main>
+    <div class="viewer-wrap">
+      <canvas id="viewer"></canvas>
+      <div class="viewer-hint">Drag to rotate · scroll to zoom</div>
+      <div class="viewer-actions"><button id="reset">Reset view</button></div>
+    </div>
+    <div class="content">
+      <div style="display:grid;gap:16px;min-width:0">
+        <div class="card">
+          <h2>Texture sheet</h2>
+          <div class="sheet"><img id="sheet" alt="texture sheet"></div>
+        </div>
+        <div class="card">
+          <h2>Scan</h2>
+          <div class="kv" id="scan"></div>
+          <div id="candidates" class="candidates" style="margin-top:12px"></div>
+        </div>
+      </div>
+      <div style="display:grid;gap:16px;min-width:0">
+        <div class="card">
+          <h2>Asset</h2>
+          <div class="kv" id="meta"></div>
+        </div>
+        <div class="card">
+          <h2>Your decision</h2>
+          <textarea id="note" placeholder="Note for the record, for example: no poster, only atlas noise"></textarea>
+          <div class="buttons">
+            <button class="approve" id="approve">Approve this exact file</button>
+            <button class="deny" id="deny">Deny</button>
+          </div>
+          <div class="status" id="status"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+refresh();
+let loader = null;
+let assets = [];
+let current = null;
+let model = null;
+const canvas = document.getElementById('viewer');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NoToneMapping;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#0b0d12');
+scene.add(new THREE.HemisphereLight(0xffffff, 0x223344, 2.4));
+const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(3, 5, 4); scene.add(key);
+const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 2, -3); scene.add(fill);
+const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 1000);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+loader = new GLTFLoader();
+let baseDistance = 1;
+
+function resize() {
+  const r = canvas.parentElement.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  renderer.setSize(r.width, r.height, false);
+  camera.aspect = r.width / r.height;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(canvas.parentElement);
+function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
+animate();
+
+function frame() {
+  if (!model) return;
+  const box = new THREE.Box3().setFromObject(model);
+  const sphere = box.getBoundingSphere(new THREE.Sphere());
+  baseDistance = Math.max(sphere.radius * 2.6, 0.5);
+  controls.target.copy(sphere.center);
+  camera.position.set(sphere.center.x + baseDistance * 0.75, sphere.center.y + baseDistance * 0.45, sphere.center.z + baseDistance);
+  camera.near = Math.max(baseDistance / 100, 0.005);
+  camera.far = baseDistance * 20;
+  camera.updateProjectionMatrix();
+  controls.update();
+}
+document.getElementById('reset').onclick = frame;
+
+function loadModel(url) {
+  if (!loader) return;
+  if (model) { scene.remove(model); model.traverse(o => { if (o.isMesh) { o.geometry?.dispose(); o.material?.map?.dispose(); o.material?.dispose(); } }); model = null; }
+  loader.load(url, (gltf) => {
+    model = gltf.scene;
+    model.traverse(o => { if (o.isMesh) { o.material.side = THREE.DoubleSide; o.material.needsUpdate = true; } });
+    scene.add(model);
+    frame();
+  }, undefined, (err) => { document.getElementById('status').textContent = 'Could not load the mesh: ' + err; });
+}
+
+function badge(a) {
+  if (a?.approved === true) return '<span class="badge approved">approved</span>';
+  if (a?.approved === false) return '<span class="badge denied">denied</span>';
+  return '<span class="badge pending">pending</span>';
+}
+
+function select(a) {
+  current = a;
+  document.querySelectorAll('.item').forEach(el => el.classList.toggle('active', el.dataset.id === a.sceneId + '/' + a.objectId));
+  document.getElementById('sheet').src = a.sheet || '';
+  const pre = a.preflight || {};
+  const scan = pre.scan || {};
+  const rows = [
+    ['scene', a.sceneId], ['object', a.objectId], ['file', 'roblox.glb'],
+    ['size', (a.bytes / 1e6).toFixed(2) + ' MB'], ['sha1', a.sha1.slice(0, 16) + '…'],
+    ['scan', scan.status || 'not run'], ['QR / links', String((scan.qr || []).length)],
+    ['candidates', String((scan.qrCandidates || []).length)], ['barcodes', String((scan.barcodes || []).length)],
+  ];
+  document.getElementById('meta').innerHTML = rows.map(([k, v]) => `<div class="k">${k}</div><div><code>${String(v)}</code></div>`).join('');
+  const scanRows = [
+    ['status', scan.status || 'not run'],
+    ['decodable QR', String((scan.qr || []).length)],
+    ['pattern candidates', String((scan.qrCandidates || []).length)],
+    ['barcodes', String((scan.barcodes || []).length)],
+    ['note', a.candidates?.note || 'Inspect the texture sheet yourself.'],
+  ];
+  document.getElementById('scan').innerHTML = scanRows.map(([k, v]) => `<div class="k">${k}</div><div>${String(v)}</div>`).join('');
+  const cand = a.candidates?.items || [];
+  document.getElementById('candidates').innerHTML = cand.map(it =>
+    `<figure><img src="/asset/${encodeURIComponent(a.sceneId)}/${encodeURIComponent(a.objectId)}/preflight/${it.file}" alt="${it.texture}"><figcaption>${it.texture} · payload: ${it.text ? '“' + it.text + '”' : 'empty'}</figcaption></figure>`
+  ).join('');
+  const ap = a.approval;
+  const st = document.getElementById('status');
+  st.className = 'status ' + (ap?.approved ? 'ok' : ap?.approved === false ? 'no' : '');
+  st.textContent = ap ? `${ap.approved ? 'Approved' : 'Denied'} by ${ap.reviewer} at ${new Date(ap.at).toLocaleString()} · sha ${ap.sha1.slice(0, 12)}${ap.note ? ' · ' + ap.note : ''}` : 'No decision yet.';
+  document.getElementById('note').value = ap?.note || '';
+  loadModel(a.glb);
+}
+
+async function refresh(keep) {
+  const data = await (await fetch('/api/assets')).json();
+  assets = data.assets || [];
+  const list = document.getElementById('list');
+  list.innerHTML = assets.map(a => `<div class="item" data-id="${a.sceneId}/${a.objectId}"><div class="name">${a.objectId}</div><div class="sub">${a.sceneId}</div>${badge(a.approval)}</div>`).join('') || '<div class="empty">No assets yet.</div>';
+  list.querySelectorAll('.item').forEach(el => el.onclick = () => { const a = assets.find(x => x.sceneId + '/' + x.objectId === el.dataset.id); if (a) select(a); });
+  const target = keep ? assets.find(x => x.sceneId === keep.sceneId && x.objectId === keep.objectId) : assets[0];
+  if (target) select(target);
+}
+
+async function decide(approved) {
+  if (!current) return;
+  const res = await fetch('/api/review', { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ sceneId: current.sceneId, objectId: current.objectId, approved, note: document.getElementById('note').value, reviewer: 'captain' }) });
+  const data = await res.json();
+  if (!res.ok) { document.getElementById('status').textContent = data.error || 'Review failed'; return; }
+  await refresh(current);
+}
+document.getElementById('approve').onclick = () => decide(true);
+document.getElementById('deny').onclick = () => decide(false);
+resize();
+refresh();
+</script>
+</body>
+</html>
