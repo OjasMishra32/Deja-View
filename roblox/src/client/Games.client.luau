@@ -11,6 +11,7 @@ local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local PPPaddle = Remotes:WaitForChild("PPPaddle") :: UnreliableRemoteEvent
 local PPHit = Remotes:WaitForChild("PPHit") :: RemoteEvent
 local PPState = Remotes:WaitForChild("PPState") :: RemoteEvent
+local PPSide = Remotes:WaitForChild("PPSide") :: RemoteEvent
 
 local GRIP = CFrame.new(0, 0, -0.35) * CFrame.Angles(math.rad(-20), 0, 0)
 local PADDLE_SEND = 1 / 30
@@ -22,6 +23,13 @@ local lastAssist = 0
 local lastHit = 0
 local hand = Enum.UserCFrame.RightHand
 local active = false
+local mySide: string? = nil
+local canHit = false
+local bounce: string? = nil
+local serving = false
+local serveSide: string? = nil
+local lastBlade: CFrame? = nil
+local paddleVel = Vector3.zero
 
 -- HUD: one HIT button that works with a thumb, a click or a Quest trigger.
 local gui = Instance.new("ScreenGui")
@@ -61,11 +69,26 @@ local function aimFrom(x: number?): number
 end
 
 local function fireHit(aim: number)
-	if not active or os.clock() - lastHit < HIT_COOLDOWN then
+	if not active or not canHit or os.clock() - lastHit < HIT_COOLDOWN then
 		return
 	end
 	lastHit = os.clock()
 	PPHit:FireServer({ aim = aim, flight = 0.7 })
+end
+
+local function fireVrHit(bladeCf: CFrame)
+	if not active or not canHit or os.clock() - lastHit < HIT_COOLDOWN then
+		return
+	end
+	local b = workspace:FindFirstChild("PPBall", true)
+	if not b or not b:IsA("BasePart") then
+		return
+	end
+	if (b.Position - bladeCf.Position).Magnitude > 2.2 then
+		return
+	end
+	lastHit = os.clock()
+	PPHit:FireServer({ vr = true, cf = bladeCf, vel = paddleVel, p = b.Position, t = workspace:GetServerTimeNow() })
 end
 
 hitButton.Activated:Connect(function()
@@ -109,11 +132,11 @@ local function tryVrHit(bladeCf: CFrame)
 		return
 	end
 	-- only when the ball is in front of the blade and coming at it
-	local n = bladeCf.LookVector
+	local n = bladeCf.UpVector
 	if rel:Dot(n) < 0 then
 		return
 	end
-	fireHit(0)
+	fireVrHit(bladeCf)
 end
 
 RunService.RenderStepped:Connect(function(dt)
@@ -126,6 +149,10 @@ RunService.RenderStepped:Connect(function(dt)
 		local cf = handCframe()
 		if cf then
 			local bladeCf = cf * GRIP
+			if lastBlade then
+				paddleVel = (bladeCf.Position - lastBlade.Position) / math.max(0.008, dt)
+			end
+			lastBlade = bladeCf
 			if t - lastSend >= PADDLE_SEND then
 				lastSend = t
 				PPPaddle:FireServer(bladeCf)
@@ -148,26 +175,59 @@ PPPaddle.OnClientEvent:Connect(function(userId, cf)
 	end
 end)
 
+PPSide.OnClientEvent:Connect(function(side)
+	if side == "A" or side == "B" then
+		mySide = side
+	end
+end)
+
+local function refreshHitButton()
+	local mine = mySide
+	if not active or not mine then
+		hitButton.Visible = false
+		canHit = false
+		return
+	end
+	hitButton.Visible = true
+	local serveNow = serving and serveSide == mine
+	local bounceNow = bounce == mine
+	canHit = serveNow or bounceNow
+	hitButton.Text = if canHit then (serveNow and "SERVE" or "HIT") else (serving and "WAIT" or "WAIT")
+	hitButton.BackgroundTransparency = if canHit then 0.1 else 0.6
+	hitButton.TextColor3 = if canHit then Color3.fromRGB(0, 122, 255) else Color3.fromRGB(150, 150, 155)
+end
+
 PPState.OnClientEvent:Connect(function(msg)
 	if type(msg) ~= "table" then
 		return
 	end
 	if msg.active ~= nil then
 		active = msg.active == true
-		hitButton.Visible = active
 		if not active then
+			mySide = nil
 			PingPongView.clear()
 		end
 	end
+	if msg.serve ~= nil then
+		serveSide = msg.serve
+	end
+	if msg.serving ~= nil then
+		serving = msg.serving == true
+	end
+	if msg.bounce ~= nil then
+		bounce = msg.bounce
+	end
+	refreshHitButton()
 end)
 
 workspace:GetAttributeChangedSignal("PPActive"):Connect(function()
 	local on = workspace:GetAttribute("PPActive") == true
 	if on ~= active then
 		active = on
-		hitButton.Visible = on
 		if not on then
+			mySide = nil
 			PingPongView.clear()
 		end
+		refreshHitButton()
 	end
 end)
