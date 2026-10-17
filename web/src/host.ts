@@ -581,6 +581,7 @@ async function refreshStatus(force = false): Promise<void> {
 }
 
 function onScene(scene: Scene) {
+  if (scene.unlisted) return; // a test build: never in the list of worlds
   const prev = scenes.get(scene.id);
   addToFeed({ type: 'scene', scene });
   scenes.set(scene.id, hostScene(scene));

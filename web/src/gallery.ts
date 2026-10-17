@@ -752,7 +752,7 @@ function applyHighlight() {
 }
 
 function upsert(s: Scene) {
-  if (!s || typeof s.id !== 'string') return;
+  if (!s || typeof s.id !== 'string' || s.unlisted) return; // a test build: never in the list of worlds
   const prev = scenes.get(s.id);
   scenes.set(s.id, s);
   if (!prev || (s.status === 'ready') !== (prev.status === 'ready') || s.name !== prev.name || s.caption !== prev.caption || s.thumb !== prev.thumb) rowChanged();

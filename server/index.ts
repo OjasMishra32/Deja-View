@@ -482,7 +482,7 @@ const hostRoutes = createHostRoutes({
   health: (force) => core.health.info(force),
   worker: (force) => core.health.worker.get(force),
   hpgEnabled: hpgConfig().enabled,
-  listScenes: () => core.store.list(),
+  listScenes: async () => (await core.store.list()).filter((s) => !s.unlisted),
   presence: core.social!.presence,
   guide: core.integrations!.guideClient,
   deepspace: core.integrations!.deepspace,
