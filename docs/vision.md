@@ -120,12 +120,14 @@ Done. `docs/object-layer.md`, `THIRD_PARTY.md`, `pipeline/models.lock.json`, mas
 lift, Roblox layout. Tests pass.
 
 ### Phase 1: producer
-Render views from the kitchen splats on PACE. Run Grounding DINO and SAM 2.1. Lift
-the masks and write `objects.json` for `fridge`, `cabinet`, and `counter`.
+In progress. 16 views rendered from the kitchen splats on PACE. Grounding DINO and
+SAM 2.1 produced 98 detections. The depth-banded lift, with two-view agreement, gives a clean fridge box of
+0.90 by 1.65 by 1.03 m. The trash can also lifts, but it needs a per-label
+one-view rule, so it is not in the first object file.
 
-Acceptance: `objects.json` has three objects, each with a box, a color, and a splat
-count. The boxes sit on the fridge, the cabinet, and the counter in the rendered
-views.
+Acceptance: `objects.json` has the hero objects, each with a box, a color, and a
+splat count. The boxes sit on the objects in the rendered views.
+Remaining: choose the final three labels and add the handle parts.
 
 ### Phase 2: Roblox proxy
 Build `ObjectLayer` from `objects.json`. It fetches the file, creates parts, applies

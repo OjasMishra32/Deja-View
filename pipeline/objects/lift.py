@@ -54,10 +54,19 @@ def mask_points(
     use_crop: bool = False,
 ) -> np.ndarray:
     """Splat centres that project into `mask`. With `depth`, hidden points are removed too."""
-    u, v, _, in_front = rs.project_points(points, cam)
+    u, v, z, in_front = rs.project_points(points, cam)
     hit = in_front & sample_mask(mask, u, v)
     if depth is not None:
-        hit &= rs.classify_seen(points, cam, depth, abs_tol, rel_tol, use_crop)
+        d = np.asarray(depth, np.float64)
+        h, w = d.shape
+        xi = np.floor(np.where(np.isfinite(u), u, 0.0)).astype(np.int64)
+        yi = np.floor(np.where(np.isfinite(v), v, 0.0)).astype(np.int64)
+        inside = (xi >= 0) & (xi < w) & (yi >= 0) & (yi < h)
+        ref = np.zeros(z.shape, np.float64)
+        ref[inside] = d[yi[inside], xi[inside]]
+        # exact-pixel band: keep the surface the camera saw, not the wall behind it
+        band = (ref > 0) & (z <= ref * (1.0 + rel_tol) + abs_tol) & (z >= ref * 0.5)
+        hit &= band
     return hit
 
 
@@ -97,7 +106,7 @@ def describe_object(
     points: np.ndarray,
     colors: np.ndarray,
     label: str,
-    views: list[tuple[rs.InputCamera, np.ndarray]],
+    views: list[tuple],
     min_views: int = 2,
     min_points: int = MIN_POINTS,
     studs_per_meter: float = STUDS_PER_METER,
@@ -105,13 +114,17 @@ def describe_object(
 ) -> dict | None:
     """Return one object record, or None when too few splats survive the masks.
 
-    `views` is [(camera, mask), ...] in the same frame as `points`.
+    `views` is [(camera, mask)] or [(camera, mask, depth), ...] in the same frame as `points`.
     """
     points = np.asarray(points, np.float64)
     colors = np.asarray(colors, np.float64)
     if len(points) != len(colors):
         raise ValueError("points and colors must have the same length")
-    votes = [mask_points(points, cam, mask) for cam, mask in views]
+    votes = []
+    for entry in views:
+        cam, mask = entry[0], entry[1]
+        depth = entry[2] if len(entry) > 2 else None
+        votes.append(mask_points(points, cam, mask, depth=depth))
     keep = merge_votes(votes, min_views)
     if int(keep.sum()) < int(min_points):
         return None
