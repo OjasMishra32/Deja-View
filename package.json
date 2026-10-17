@@ -12,6 +12,7 @@
     "cert": "bun scripts/make-cert.ts",
     "samples": "bun scripts/fetch-samples.ts",
     "tunnel": "bun scripts/tunnel.ts",
+    "describe:clip": "bun scripts/describe-clip.ts",
     "mock:deepspace": "bun tests/harness/mock-deepspace.ts",
     "mock:guide": "bun tests/harness/mock-guide.ts",
     "demo:mocks": "bun scripts/demo-mocks.ts",

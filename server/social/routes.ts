@@ -2,7 +2,8 @@
 //
 //   GET  /api/presence/:sceneId           everyone in a scene, metres
 //   POST /api/presence/:sceneId           headset / browser viewer (4 Hz, metres) -> everyone else
-//   GET  /api/roblox/:sceneId/map         the room as coloured boxes in studs (built once, cached, gzip)
+//   GET  /api/roblox/:sceneId/map         the room as coloured boxes in studs (built once, cached, gzip), plus
+//                                         walkBounds (world.bounds in studs) when the scene has them
 //   POST /api/roblox/:sceneId/presence    a Roblox game server's players (4 Hz, studs) -> everyone else in studs
 //   POST /api/roblox/:sceneId/event       a Roblox moment (tag, round) -> onEvent subscribers (the /ws layer)
 //
@@ -29,6 +30,8 @@ import {
 import { parsePresenceBody, PresenceStore, type PresenceOptions } from './presence.ts';
 import {
   mapChunk,
+  mapResponse,
+  mapWalkBounds,
   parseRobloxEvent,
   parseRobloxPresence,
   personToStuds,
@@ -230,7 +233,8 @@ export function createSocialRoutes(deps: SocialRouteDeps): SocialRoutes {
     if (denied) return denied;
     const sceneId = pathSegment(req, 3);
     if (!sceneId || !SCENE_ID_RE.test(sceneId)) return fail(404, NO_SUCH_SCENE);
-    if (isVideoScene(await sceneFor(sceneId))) return fail(404, VIDEO_NO_ROOM);
+    const scene = await sceneFor(sceneId);
+    if (isVideoScene(scene)) return fail(404, VIDEO_NO_ROOM);
     const url = new URL(req.url);
     const r = await maps.get(sceneId, url.searchParams.get('maxParts'));
     switch (r.status) {
@@ -246,26 +250,29 @@ export function createSocialRoutes(deps: SocialRouteDeps): SocialRoutes {
         return fail(500, r.error);
     }
     const map = r.map;
+    // the walk box (scene.json world.bounds in studs) is added at response time, so cached maps stay valid
+    const walk = mapWalkBounds(map, scene);
     const chunkRaw = url.searchParams.get('chunk');
     if (chunkRaw !== null && chunkRaw !== '') {
-      const c = mapChunk(map, Number(chunkRaw));
+      const c = mapChunk(map, Number(chunkRaw), walk);
       if (!c.ok) return fail(400, c.error);
       return json(c.body, 200, { 'Cache-Control': 'no-cache', 'X-Map-Parts': String(map.parts) });
     }
+    const out = mapResponse(map, walk);
     const headers: Record<string, string> = {
       ...SOCIAL_CORS,
       'Content-Type': 'application/json; charset=utf-8',
       'Cache-Control': 'no-cache',
-      ETag: map.etag,
+      ETag: out.etag,
       Vary: 'Accept-Encoding',
       'X-Map-Parts': String(map.parts),
     };
     const inm = req.headers.get('if-none-match');
-    if (inm && inm.split(',').some((t) => t.trim() === map.etag || t.trim() === `W/${map.etag}`)) {
+    if (inm && inm.split(',').some((t) => t.trim() === out.etag || t.trim() === `W/${out.etag}`)) {
       return new Response(null, { status: 304, headers });
     }
     const gzip = /\bgzip\b/i.test(req.headers.get('accept-encoding') ?? '');
-    const bytes = gzip ? map.gzip : map.body;
+    const bytes = gzip ? out.gzip : out.body;
     if (gzip) headers['Content-Encoding'] = 'gzip';
     headers['Content-Length'] = String(bytes.byteLength);
     return new Response(req.method === 'HEAD' ? null : (bytes as Uint8Array<ArrayBuffer>), { status: 200, headers });

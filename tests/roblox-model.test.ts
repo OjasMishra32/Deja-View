@@ -118,11 +118,12 @@ async function rig(opts: { uploader?: RobloxAssetUploader | null; dvKey?: string
 const req = (path: string, init?: RequestInit) => new Request(`http://dv.test${path}`, init);
 const GLB = '/api/roblox/:sceneId/model.glb';
 const MODEL = '/api/roblox/:sceneId/model';
+const FILE = '/api/roblox/:sceneId/model/:file';
 
 describe('route table', () => {
-  test('exports the two model paths', async () => {
+  test('exports the model paths', async () => {
     const r = await rig();
-    expect(Object.keys(r.routes).sort()).toEqual([MODEL, GLB].sort());
+    expect(Object.keys(r.routes).sort()).toEqual([MODEL, GLB, FILE].sort());
   });
 });
 
@@ -291,5 +292,252 @@ describe('uploaderFromEnv', () => {
     // a key in .env alone never uploads: test servers load the same .env
     expect(uploaderFromEnv({ ROBLOX_API_KEY: 'k', ROBLOX_CREATOR_ID: '42' })).toBeNull();
     expect(uploaderFromEnv({ ROBLOX_UPLOAD: '0', ROBLOX_API_KEY: 'k', ROBLOX_CREATOR_ID: '42' })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------- v2: several parts and a skybox
+
+const FACES = ['front', 'back', 'left', 'right', 'up', 'down'] as const;
+
+function fakePng(seed: number): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(48);
+  out.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  for (let i = 8; i < 48; i++) out[i] = (i * 13 + seed) & 0xff;
+  return out;
+}
+
+/** A fake Open Cloud that records every create and fails the create calls numbered in `failAt` (1-based). */
+function fakeRoblox2(opts: { failAt?: number[] } = {}) {
+  const creates: { request: Record<string, any>; file: { type: string; name: string; size: number } }[] = [];
+  let n = 0;
+  const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    if ((init?.method ?? 'GET') === 'POST' && url.endsWith('/assets/v1/assets')) {
+      n++;
+      const form = init!.body as FormData;
+      const f = form.get('fileContent') as File;
+      creates.push({ request: JSON.parse(String(form.get('request'))), file: { type: f.type, name: f.name, size: f.size } });
+      if (opts.failAt?.includes(n)) return new Response(JSON.stringify({ message: 'boom' }), { status: 500 });
+      return Response.json({ path: `operations/op-${n}`, operationId: `op-${n}`, done: false });
+    }
+    const m = url.match(/\/assets\/v1\/operations\/op-(\d+)$/);
+    if (m) return Response.json({ path: `operations/op-${m[1]}`, done: true, response: { assetId: `77000${m[1]}` } });
+    return new Response('nope', { status: 404 });
+  }) as typeof fetch;
+  return { creates, fetchImpl };
+}
+
+/** room-v2: roblox.glb + roblox-2.glb and six sky faces, described by a v2 sidecar. */
+async function writeV2(dir: string, seed = 10): Promise<Record<string, string>> {
+  const d = join(dir, 'room-a');
+  const p1 = fakeGlb(seed), p2 = fakeGlb(seed + 1);
+  await writeFile(join(d, 'roblox.glb'), p1);
+  await writeFile(join(d, 'roblox-2.glb'), p2);
+  const sky: Record<string, { file: string; sha1: string }> = {};
+  for (const [i, f] of FACES.entries()) {
+    const png = fakePng(seed + i);
+    await writeFile(join(d, `sky-${f}.png`), png);
+    sky[f] = { file: `sky-${f}.png`, sha1: sha1(png) };
+  }
+  await writeFile(
+    join(d, 'roblox-model.json'),
+    JSON.stringify({
+      version: 2, sceneId: 'room-a', name: 'Room room-a', units: 'studs', studsPerMeter: 3.57, file: 'roblox.glb', sha1: sha1(p1),
+      parts: [
+        { file: 'roblox.glb', sha1: sha1(p1), bytes: 64, triangles: 9 },
+        { file: 'roblox-2.glb', sha1: sha1(p2), bytes: 64, triangles: 3 },
+      ],
+      sky,
+      skyInfo: { size: 1024 },
+      chunks: [],
+    }),
+  );
+  return { p1: sha1(p1), p2: sha1(p2) };
+}
+
+describe('v2 sidecars: model parts and a skybox', () => {
+  test('GET uploads every part as a Model and every face as a Decal, then reports parts, assetId and sky', async () => {
+    const fake = fakeRoblox2();
+    const uploader = new RobloxAssetUploader({ apiKey: 'k', creatorId: '42', fetch: fake.fetchImpl, sleep: async () => {} });
+    const r = await rig({ uploader });
+    await writeV2(r.dir);
+    const first = (await (await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL)).json()) as Record<string, any>;
+    expect(first.upload).toMatchObject({ state: 'uploading', done: 0, total: 8 });
+    expect(first.assetId).toBeUndefined();
+    expect(first.sky).toBeNull();
+    expect(first.parts).toEqual([
+      { file: 'roblox.glb', url: '/api/roblox/room-a/model/roblox.glb', bytes: 64, triangles: 9 },
+      { file: 'roblox-2.glb', url: '/api/roblox/room-a/model/roblox-2.glb', bytes: 64, triangles: 3 },
+    ]);
+    expect(first.skyFiles.up).toBe('/api/roblox/room-a/model/sky-up.png');
+    await r.models.settle('room-a');
+
+    expect(fake.creates.map((c) => [c.request.assetType, c.file.type, c.file.name])).toEqual([
+      ['Model', 'model/gltf-binary', 'roblox.glb'],
+      ['Model', 'model/gltf-binary', 'roblox-2.glb'],
+      ...FACES.map((f) => ['Decal', 'image/png', `sky-${f}.png`]),
+    ]);
+    expect(fake.creates[1]!.request.displayName).toContain('2/2');
+    expect(fake.creates[2]!.request.displayName).toContain('sky front');
+    expect(fake.creates.every((c) => c.request.creationContext.creator.userId === '42')).toBe(true);
+
+    const b = (await (await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL)).json()) as Record<string, any>;
+    expect(b.upload).toMatchObject({ state: 'done', assetId: '770001', done: 8, total: 8 });
+    expect(b.assetId).toBe('770001');
+    expect(b.parts.map((p: any) => [p.file, p.assetId])).toEqual([['roblox.glb', '770001'], ['roblox-2.glb', '770002']]);
+    expect(b.sky).toEqual({ front: '770003', back: '770004', left: '770005', right: '770006', up: '770007', down: '770008' });
+    const stored = JSON.parse(await readFile(join(r.dir, 'room-a', 'roblox-model.json'), 'utf8'));
+    expect(stored.parts[1].upload).toMatchObject({ assetId: '770002', operationId: 'op-2' });
+    expect(stored.sky.down.upload).toMatchObject({ assetId: '770008' });
+    expect(stored.upload).toMatchObject({ assetId: '770001', sha1: stored.sha1 }); // v1 readers see the first part
+    expect(stored.skyInfo).toEqual({ size: 1024 });
+    // nothing goes up again while the files are unchanged
+    await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL);
+    await r.models.settle('room-a');
+    expect(fake.creates.length).toBe(8);
+  });
+
+  test('a half-uploaded room reports no assetId; a failed sky still lets the room load', async () => {
+    const fake = fakeRoblox2({ failAt: [2] });
+    const uploader = new RobloxAssetUploader({ apiKey: 'k', creatorId: '42', fetch: fake.fetchImpl, sleep: async () => {} });
+    const r = await rig({ uploader });
+    await writeV2(r.dir);
+    await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL);
+    await r.models.settle('room-a');
+    const b = (await (await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL)).json()) as Record<string, any>;
+    expect(b.upload).toMatchObject({ state: 'failed', done: 1, total: 8 });
+    expect(b.upload.error).toContain('500');
+    expect(b.assetId).toBeUndefined(); // a game must never load half a room
+    expect(b.parts[0].assetId).toBe('770001');
+    expect(b.parts[1].assetId).toBeUndefined();
+    expect(fake.creates.length).toBe(2); // the job stops at the first failure ...
+    // ... and POST resumes where it stopped
+    const fake2 = fakeRoblox2({ failAt: [3] });
+    const r2 = await rig({ uploader: new RobloxAssetUploader({ apiKey: 'k', creatorId: '42', fetch: fake2.fetchImpl, sleep: async () => {} }) });
+    await writeV2(r2.dir);
+    await r2.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL);
+    await r2.models.settle('room-a');
+    const c = (await (await r2.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL)).json()) as Record<string, any>;
+    expect(c.assetId).toBe('770001'); // both parts are up: the room loads
+    expect(c.sky).toBeNull(); // the first face failed: no sky yet
+    expect(c.upload.state).toBe('failed');
+    const post = await r2.routes[MODEL]!(req('/api/roblox/room-a/model', { method: 'POST' }), LOCAL);
+    expect(post.status).toBe(202);
+    await r2.models.settle('room-a');
+    const d = (await (await r2.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL)).json()) as Record<string, any>;
+    expect(d.upload.state).toBe('done');
+    expect(Object.keys(d.sky).sort()).toEqual([...FACES].sort());
+    expect(fake2.creates.map((x) => x.file.name).filter((n) => n === 'roblox.glb').length).toBe(1);
+  });
+
+  test('a rebuilt part goes up again on its own; the room has no assetId until it is up', async () => {
+    const fake = fakeRoblox2();
+    const uploader = new RobloxAssetUploader({ apiKey: 'k', creatorId: '42', fetch: fake.fetchImpl, sleep: async () => {} });
+    const r = await rig({ uploader });
+    await writeV2(r.dir);
+    await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL);
+    await r.models.settle('room-a');
+    expect(fake.creates.length).toBe(8);
+    // the pipeline rebuilds part 2 only: new file, its sha1 in the (otherwise uploaded) sidecar
+    const path = join(r.dir, 'room-a', 'roblox-model.json');
+    const s = JSON.parse(await readFile(path, 'utf8'));
+    const p2 = fakeGlb(99);
+    await writeFile(join(r.dir, 'room-a', 'roblox-2.glb'), p2);
+    s.parts[1] = { file: 'roblox-2.glb', sha1: sha1(p2) };
+    await writeFile(path, JSON.stringify(s));
+    const b = (await (await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL)).json()) as Record<string, any>;
+    expect(b.assetId).toBeUndefined();
+    expect(b.sky).not.toBeNull(); // the sky did not change
+    expect(b.upload).toMatchObject({ state: 'uploading', done: 7, total: 8 });
+    await r.models.settle('room-a');
+    expect(fake.creates.length).toBe(9);
+    expect(fake.creates[8]!.file.name).toBe('roblox-2.glb');
+    const c = (await (await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL)).json()) as Record<string, any>;
+    expect(c.assetId).toBe('770001');
+    expect(c.parts[1].assetId).toBe('770009');
+  });
+
+  test('a first part a v1 server already uploaded (top-level upload record) is not uploaded again', async () => {
+    const fake = fakeRoblox2();
+    const uploader = new RobloxAssetUploader({ apiKey: 'k', creatorId: '42', fetch: fake.fetchImpl, sleep: async () => {} });
+    const r = await rig({ uploader });
+    const sums = await writeV2(r.dir);
+    const path = join(r.dir, 'room-a', 'roblox-model.json');
+    const s = JSON.parse(await readFile(path, 'utf8'));
+    // what the v1 code writes after uploading roblox.glb
+    await writeFile(path, JSON.stringify({ ...s, assetId: '555', upload: { assetId: '555', sha1: sums.p1, operationId: 'op-x', at: 1 } }));
+    const a = (await (await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL)).json()) as Record<string, any>;
+    expect(a.upload).toMatchObject({ state: 'uploading', done: 1, total: 8 });
+    expect(a.assetId).toBeUndefined(); // part 2 is not up yet
+    await r.models.settle('room-a');
+    expect(fake.creates.map((c) => c.file.name)).toEqual(['roblox-2.glb', ...FACES.map((f) => `sky-${f}.png`)]);
+    const b = (await (await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL)).json()) as Record<string, any>;
+    expect(b.assetId).toBe('555');
+    expect(b.parts.map((x: any) => x.assetId)).toEqual(['555', '770001']);
+  });
+
+  test('a file on disk that is not the one the sidecar describes is not uploaded', async () => {
+    const fake = fakeRoblox2();
+    const uploader = new RobloxAssetUploader({ apiKey: 'k', creatorId: '42', fetch: fake.fetchImpl, sleep: async () => {} });
+    const r = await rig({ uploader });
+    await writeV2(r.dir);
+    await writeFile(join(r.dir, 'room-a', 'roblox-2.glb'), fakeGlb(55)); // mid-rebuild: new file, old sidecar
+    await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL);
+    await r.models.settle('room-a');
+    expect(fake.creates.map((c) => c.file.name)).toEqual(['roblox.glb']);
+    const b = (await (await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL)).json()) as Record<string, any>;
+    expect(b.upload.state).toBe('failed');
+    expect(b.upload.error).toContain('roblox-2.glb');
+  });
+
+  test('the file route serves listed parts and sky faces only', async () => {
+    const r = await rig();
+    await writeV2(r.dir);
+    const part = await r.routes[FILE]!(req('/api/roblox/room-a/model/roblox-2.glb'), LOCAL);
+    expect(part.status).toBe(200);
+    expect(part.headers.get('content-type')).toBe('model/gltf-binary');
+    expect(new Uint8Array(await part.arrayBuffer())).toEqual(fakeGlb(11));
+    const face = await r.routes[FILE]!(req('/api/roblox/room-a/model/sky-up.png'), LOCAL);
+    expect(face.status).toBe(200);
+    expect(face.headers.get('content-type')).toBe('image/png');
+    expect(face.headers.get('access-control-allow-origin')).toBe('*');
+    const etag = face.headers.get('etag')!;
+    expect((await r.routes[FILE]!(req('/api/roblox/room-a/model/sky-up.png', { headers: { 'if-none-match': etag } }), LOCAL)).status).toBe(304);
+    for (const bad of ['roblox-model.json', 'roblox-3.glb', '..%2Fscene.json', 'sky-sideways.png', 'world.spz']) {
+      const res = await r.routes[FILE]!(req(`/api/roblox/room-a/model/${bad}`), LOCAL);
+      expect(res.status).toBe(404);
+    }
+    expect((await r.routes[FILE]!(req('/api/roblox/room-a/model/sky-up.png', { method: 'POST' }), LOCAL)).status).toBe(405);
+    expect((await r.routes[FILE]!(req('/api/roblox/nope/model/roblox.glb'), LOCAL)).status).toBe(404);
+    const keyed = await rig({ dvKey: 'sekret' });
+    await writeV2(keyed.dir);
+    expect((await keyed.routes[FILE]!(req('/api/roblox/room-a/model/roblox.glb'), REMOTE)).status).toBe(401);
+  });
+
+  test('a v1 sidecar reports one part and no sky', async () => {
+    const fake = fakeRoblox2();
+    const uploader = new RobloxAssetUploader({ apiKey: 'k', creatorId: '42', fetch: fake.fetchImpl, sleep: async () => {} });
+    const r = await rig({ uploader });
+    const a = (await (await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL)).json()) as Record<string, any>;
+    expect(a.parts).toEqual([{ file: 'roblox.glb', url: '/api/roblox/room-a/model/roblox.glb' }]);
+    expect(a.sky).toBeNull();
+    expect(a.skyFiles).toBeNull();
+    await r.models.settle('room-a');
+    const b = (await (await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL)).json()) as Record<string, any>;
+    expect(b.parts).toEqual([{ file: 'roblox.glb', url: '/api/roblox/room-a/model/roblox.glb', assetId: '770001' }]);
+    expect(b.assetId).toBe('770001');
+    expect(fake.creates.map((c) => c.request.assetType)).toEqual(['Model']);
+    expect((await r.routes[FILE]!(req('/api/roblox/room-a/model/roblox.glb'), LOCAL)).status).toBe(200);
+  });
+});
+
+describe('the uploader', () => {
+  test('a Decal goes up as image/png with its own file name', async () => {
+    const fake = fakeRoblox2();
+    const up = new RobloxAssetUploader({ apiKey: 'k', creatorId: '7', creatorType: 'group', fetch: fake.fetchImpl, sleep: async () => {} });
+    const res = await up.upload(fakePng(1), 'x'.repeat(80), 'd', { assetType: 'Decal', fileName: 'sky-up.png' });
+    expect(res.assetId).toBe('770001');
+    expect(fake.creates[0]).toMatchObject({ request: { assetType: 'Decal', creationContext: { creator: { groupId: '7' } } }, file: { type: 'image/png', name: 'sky-up.png' } });
+    expect(fake.creates[0]!.request.displayName.length).toBe(50);
   });
 });

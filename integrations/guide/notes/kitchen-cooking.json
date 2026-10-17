@@ -1,0 +1,36 @@
+{
+  "sceneId": "kitchen-cooking",
+  "place": "kitchen",
+  "clip": "IMG_7410.mov",
+  "oneLine": "One person takes a milk jug from the fridge, sets it on the stove, rinses hands. No cooking shown.",
+  "activity": "In a shared kitchen with UF-branded rules posters, one person walks in, checks the top freezer, takes a gallon jug of what looks like milk from the main fridge, sets it on an electric stove, touches the stove's front knobs and the range hood, then rinses their hands at the sink. No food is prepared or cooked in the 50-second clip.",
+  "people": [
+    "The one person on camera the whole time: black T-shirt with a white print panel and red Japanese lettering, a lanyard with a badge, jeans, dark clogs, a light-coloured wristband.",
+    "The person filming is never shown. A dark figure shows in the window glass at about 5 s; the frames do not make clear whether it is a reflection or someone in the next room."
+  ],
+  "objects": [
+    "Gallon plastic jug of what looks like milk: white liquid, red cap, partly full; the brand label is not readable in the frames. This is the only food item handled.",
+    "Stainless Whirlpool top-freezer fridge with a 'LABEL YOUR FOOD IN THE FRIDGE' poster",
+    "In the freezer (seen only at 14 s, not taken out): a box labelled 'CHICKEN NUGGETS' in the door shelf and some frozen bags",
+    "Two electric ranges with black glass cooktops, under stainless range hoods numbered 1 and 2; the jug goes on the one under hood 2",
+    "No pot, pan, bowl, knife or cooking utensil appears in the clip",
+    "Double-basin sink with a gooseneck faucet and side sprayer, a bottle of green dish soap and a blue sponge",
+    "Two wire dish racks with wooden handles on the counter",
+    "Grey round trash can with a liner, stainless steel prep table, anti-fatigue floor mats",
+    "Posters: 'STAY WITH YOUR FOOD WHEN Cooking', 'DO NOT LEAVE FOOD Unattended', 'RECYCLING & LARGE ITEMS', 'STOP' (room trash), 'CLEANUP AFTER YOURSELF'",
+    "Black metal bar stools and high tables in the seating area next to the kitchen"
+  ],
+  "outcome": "Nothing yet: a jug of milk went on the stove, then its owner went off to rinse their hands. No pan, no recipe.",
+  "outcomeEvidence": "The milk jug comes out of the fridge at 26 s and is set on the cooktop under hood 2 at 34-35 s (frame at 35 s). At 35.8 s a hand goes to the front knobs, but no burner glow is visible afterwards, so whether anything was switched on is not visible in the frames. No pan or utensil ever appears. In the last frames (46-49.7 s) the person rinses their hands at the sink while the jug still sits alone on the stove in the background (frame at 49.5 s). What they were going to make is not visible in the frames.",
+  "moments": [
+    { "t": 1, "what": "Walks into the kitchen through the door" },
+    { "t": 14, "what": "Opens the top freezer; a 'CHICKEN NUGGETS' box is visible in the door shelf" },
+    { "t": 26, "what": "Comes out of the main fridge holding a gallon jug of milk" },
+    { "t": 35, "what": "Sets the milk jug down on the glass cooktop under hood 2" },
+    { "t": 38.5, "what": "Reaches up to the front of the range hood where its controls are" },
+    { "t": 46.5, "what": "Turns on the tap and rinses hands; the jug stays on the stove until the clip ends at 49.7 s" }
+  ],
+  "funnyDetail": "The milk gets parked on the stove right under a 'DO NOT LEAVE FOOD Unattended' poster, then waits there on its own while its owner goes off to wash up.",
+  "checkedBy": "frames, by eye",
+  "confidence": "high"
+}

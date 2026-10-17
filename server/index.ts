@@ -48,6 +48,7 @@ import { HealthMonitor, publicHealth } from './health.ts';
 import { createHostRoutes } from './host.ts';
 import { hpgConfig } from './hpg.ts';
 import { readPublicUrl } from './integrations/config.ts';
+import { clipForScene } from './integrations/describe.ts';
 import { createIntegrations, presenceFromGetter, type Integrations } from './integrations/routes.ts';
 import { JobRunner, parseBackendOrder, type PrepareContext } from './jobs.ts';
 import { acquireDataLock, DataDirLocked, type DataLock } from './lock.ts';
@@ -273,14 +274,15 @@ function onSceneChanged(core: Core, scene: Scene, opts: { boot?: boolean } = {})
 
 /**
  * A ready world whose caption only says how it was made (a Video upload described before this existed, an upload
- * whose /describe timed out): the guide describes its thumbnail once, in the background, so /ask and /narrate get
- * the place and not the pipeline's sentence. Hand-written captions are kept.
+ * whose /describe timed out): the guide describes its thumbnail once (a Video memory: frames from its clip), in the
+ * background, so /ask and /narrate get the place and not the pipeline's sentence. Hand-written captions are kept.
  */
 async function describeBackfill(core: Core, scene: Scene): Promise<void> {
   const integrations = core.integrations;
   if (!integrations?.config.guide.url || scene.captionSource === 'guide' || scene.mode === 'sample') return;
   if (scene.caption && !isPipelineCaption(scene.caption)) return;
-  if (!scene.thumb || core.describing!.has(scene.id)) return;
+  const clip = isVideoScene(scene) ? clipForScene(scene, core.store.sceneDir(scene.id)) : null;
+  if ((!scene.thumb && !clip) || core.describing!.has(scene.id)) return;
   core.describing!.add(scene.id);
   // one at a time: at boot several worlds may need it, and the guide's model has a rate limit
   const turn = (core.describeChain ?? Promise.resolve()).catch(() => {});
@@ -288,7 +290,10 @@ async function describeBackfill(core: Core, scene: Scene): Promise<void> {
   core.describeChain = new Promise<void>((r) => (done = r));
   await turn;
   try {
-    const caption = await integrations.describeForJob(join(core.store.sceneDir(scene.id), scene.thumb));
+    const thumb = scene.thumb ? join(core.store.sceneDir(scene.id), scene.thumb) : undefined;
+    const caption = clip
+      ? await integrations.describeClipForJob(clip.path, scene, { imagePath: thumb, packed: clip.packed })
+      : await integrations.describeForJob(thumb!);
     if (!caption) return;
     const next = await core.store.update(scene.id, (s) =>
       s.captionSource === 'guide' || (s.caption && !isPipelineCaption(s.caption)) ? s : { ...s, caption, captionSource: 'guide' },
@@ -324,19 +329,23 @@ function describeImage(core: Core, scene: Scene): string | null {
 
 /**
  * contracts 8 (/describe): right after any upload is accepted, before its job starts, the guide describes the photo
- * (for a video, the thumbnail: a frame from its first second, the empty spot) in one or two sentences. The caption
- * becomes the world model's prompt (after the upload's own prompt) and scene.caption, which is also what /ask and
- * /narrate get as the place. No guide, a slow guide or an error: the job runs with the built-in captioner
- * (describeForJob never throws and stays within 5 s).
+ * in one or two sentences. A Video memory sends up to 8 frames from its clip instead (with the thumbnail as `image`),
+ * and the caption says what happens in it, so "who won?" has an answer. The caption becomes the world model's prompt
+ * (after the upload's own prompt) and scene.caption, which is also what /ask and /narrate get as the place. No guide,
+ * a slow guide or an error: the job runs with the built-in captioner (both calls never throw; a photo stays within
+ * 5 s, a clip within GUIDE_DESCRIBE_CLIP_TIMEOUT_MS, 12 s).
  */
 async function describeUpload(core: Core, scene: Scene, ctx: PrepareContext): Promise<Scene | null> {
   const integrations = core.integrations;
   if (scene.mode === 'sample' || scene.captionSource === 'guide' || !integrations?.config.guide.url) return null;
   const image = describeImage(core, scene);
-  if (!image) return null;
+  const clip = isVideoScene(scene) ? clipForScene(scene, core.store.sceneDir(scene.id)) : null;
+  if (!image && !clip) return null;
   ctx.report(isVideoScene(scene) ? 'Looking at your clip' : 'Reading your photo');
   const t0 = Date.now();
-  const caption = await integrations.describeForJob(image);
+  const caption = clip
+    ? await integrations.describeClipForJob(clip.path, scene, { imagePath: image ?? undefined, packed: clip.packed })
+    : await integrations.describeForJob(image!);
   const ms = Date.now() - t0;
   if (ctx.signal.aborted) return null;
   if (!caption) {

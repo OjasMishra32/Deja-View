@@ -11,7 +11,8 @@ local Fixtures = require(game:GetService("ReplicatedStorage").Shared.Fixtures)
 
 local Rooms = {}
 
-type Entry = { map: any?, swatches: { string }?, measuring: boolean, failed: boolean, tries: number, nextTry: number }
+type Entry = { map: any?, swatches: { string }?, measuring: boolean, failed: boolean, tries: number, nextTry: number,
+	gone: boolean? }
 
 local list: { any } = {} -- last /api/scenes answer
 local cache: { [string]: Entry } = {}
@@ -24,6 +25,8 @@ local judgeScene: string? = nil
 local activeSeenAt = 0
 local lastFollowed: string? = nil
 local lastBoardJson = ""
+local closedRooms: { [string]: boolean } = {} -- archived or deleted on the server while we knew them
+local closing = false
 
 Rooms.onSwitchStart = nil :: (() -> ())?
 Rooms.onRoomReady = nil :: ((joined: boolean) -> ())?
@@ -109,20 +112,92 @@ Rooms.modelInfo = function(sceneId: string): any?
 	return modelInfo(sceneId)
 end
 
--- The textured room the server uploaded with Open Cloud (contract 6.2b), loaded by asset id; nil without one.
-local function uploadedRoom(sceneId: string): Instance?
+-- The union of {min, max} boxes (studs), or nil when any is missing.
+local function unionBox(boxes: { any }): any?
+	local mn, mx = nil, nil
+	for _, b in boxes do
+		local lo, hi = type(b) == "table" and b.min, type(b) == "table" and b.max
+		if type(lo) ~= "table" or type(hi) ~= "table" then
+			return nil
+		end
+		local a = Vector3.new(tonumber(lo[1]) or 0, tonumber(lo[2]) or 0, tonumber(lo[3]) or 0)
+		local z = Vector3.new(tonumber(hi[1]) or 0, tonumber(hi[2]) or 0, tonumber(hi[3]) or 0)
+		mn = if mn then mn:Min(a) else a
+		mx = if mx then mx:Max(z) else z
+	end
+	if not mn or not mx then
+		return nil
+	end
+	return { min = { mn.X, mn.Y, mn.Z }, max = { mx.X, mx.Y, mx.Z } }
+end
+
+-- The textured room the server uploaded with Open Cloud (contract 6.2b), loaded by asset id; nil without one. A model
+-- in several parts (roblox.glb, roblox-2.glb, ...) loads every part into one Model, each part lined up on its own box
+-- when the server sends one. Also returns the box the loaded
+-- parts occupy according to the server (studs, map frame), to centre and scale the model on; nil when unknown.
+local function uploadedRoom(sceneId: string): (Instance?, any?)
 	local info = modelInfo(sceneId)
 	local assetId = info and tonumber(info.assetId)
 	if not assetId then
-		return nil
+		return nil, nil
 	end
-	local okLoad, container = pcall(AssetService.LoadAssetAsync, AssetService, assetId)
-	if not okLoad or not container then
-		warn("[DejaView] LoadAssetAsync failed for", sceneId, assetId, container)
-		return nil
+	local items = {}
+	local total = 1
+	if type(info.parts) == "table" and #info.parts > 1 then
+		total = #info.parts
+		for _, p in info.parts do
+			local id = type(p) == "table" and tonumber(p.assetId)
+			if id then
+				table.insert(items, { id = id, bounds = p.bounds })
+			end
+		end
 	end
-	print("[DejaView] loaded uploaded room model", sceneId, assetId)
-	return container
+	if #items == 0 then
+		items, total = { { id = assetId, bounds = info.bounds } }, 1
+	end
+	local room = Instance.new("Model")
+	room.Name = "RoomModel"
+	local loaded, boxes, allBoxes = 0, {}, true
+	for i, it in items do
+		local okLoad, container = pcall(AssetService.LoadAssetAsync, AssetService, it.id)
+		if okLoad and typeof(container) == "Instance" then
+			-- a Model or Folder wrapping the asset hands over its children; a lone MeshPart comes over as it is
+			local part = Instance.new("Model")
+			part.Name = "Part" .. i
+			if container:IsA("Model") or container:IsA("Folder") then
+				for _, c in container:GetChildren() do
+					c.Parent = part
+				end
+				container:Destroy()
+			else
+				container.Parent = part
+			end
+			if #items > 1 then
+				MapBuilder.alignPart(part, it.bounds)
+			end
+			part.Parent = room
+			loaded += 1
+			if type(it.bounds) == "table" then
+				table.insert(boxes, it.bounds)
+			else
+				allBoxes = false
+			end
+		else
+			warn("[DejaView] LoadAssetAsync failed for", sceneId, it.id, container)
+		end
+	end
+	if loaded == 0 then
+		room:Destroy()
+		return nil, nil
+	end
+	print("[DejaView] loaded uploaded room model", sceneId, assetId, "(" .. loaded .. "/" .. total .. " parts)")
+	local box = nil
+	if loaded == total and type(info.bounds) == "table" then
+		box = info.bounds
+	elseif allBoxes then
+		box = unionBox(boxes) -- only the parts that loaded: never stretch half a room over the whole one
+	end
+	return room, box
 end
 
 -- One map fetch attempt. Returns "ok" | "wait" | "fail".
@@ -131,7 +206,8 @@ local function fetchOnce(id: string): string
 	local ok, data, status = Backend.map(id, Config.maxParts())
 	if ok and status == 200 and type(data) == "table" and type(data.parts) == "table" then
 		data.sceneId = data.sceneId or id
-		e.map, e.swatches, e.measuring, e.failed = data, swatches(data), false, false
+		e.map, e.swatches, e.measuring, e.failed, e.gone = data, swatches(data), false, false, false
+		closedRooms[id] = nil -- back on the server
 		return "ok"
 	end
 	e.tries += 1
@@ -141,6 +217,7 @@ local function fetchOnce(id: string): string
 		return "wait"
 	elseif status == 404 then
 		e.failed = true
+		e.gone = type(data) == "table" -- our server's JSON 404: no such room (archived, deleted, or a video)
 		return "fail"
 	elseif status == 409 then
 		e.nextTry = os.clock() + 3
@@ -164,7 +241,7 @@ local function fetchMap(id: string): (any?, string?)
 	if e.map then
 		return e.map
 	end
-	e.tries, e.failed = 0, false
+	e.tries, e.failed, e.gone = 0, false, false
 	local netFails = 0
 	for _ = 1, 40 do
 		local r = fetchOnce(id)
@@ -329,7 +406,18 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 	if mySwitch ~= switching then
 		return
 	end
-	local visual = if stored then stored:Clone() else if map then uploadedRoom(sceneId) else nil
+	-- An uploaded model comes with the server's box for it (exact alignment); a room imported in Studio uses that box
+	-- only when it has the same proportions (it may be another build), else it is aligned loosely on the block map. A
+	-- room the server no longer has (404) gets neither.
+	local visual, box = nil, nil
+	local gone = not map and entry(sceneId).gone == true
+	if stored and not gone then
+		visual = stored:Clone()
+		local smi = modelInfo(sceneId)
+		box = smi and smi.bounds
+	elseif not gone then
+		visual, box = uploadedRoom(sceneId)
+	end
 	-- Walk limits come with the room model's details (Update 4).
 	local mi = modelInfo(sceneId)
 	if map and mi and mi.walkBounds and not map.walkBounds then
@@ -340,7 +428,7 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 	end
 	local info = nil
 	if not map and visual then
-		info = MapBuilder.buildFromModel(sceneId, name, visual)
+		info = MapBuilder.buildFromModel(sceneId, name, visual, mi, box, stored ~= nil)
 	elseif map then
 		info = MapBuilder.build(map, function(built, total)
 			if mySwitch == switching then
@@ -354,12 +442,22 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 			return -- cancelled by a newer switch
 		end
 		if visual then
-			MapBuilder.attachModel(visual)
+			MapBuilder.attachModel(visual, box, stored ~= nil)
 		end
-	elseif MapBuilder.hasBaked(sceneId) then
+	elseif not gone and MapBuilder.hasBaked(sceneId) then
 		info = MapBuilder.buildBaked(sceneId)
 	else
-		World.toast("Couldn't load " .. name .. ": " .. tostring(reason))
+		if gone then
+			closedRooms[sceneId] = true
+		end
+		local here = MapBuilder.current
+		if here and closedRooms[here.sceneId] and workspace:FindFirstChild("Room") then
+			-- the room we are in is gone too: never keep it; go to the default room or the lobby
+			workspace:SetAttribute("SceneId", here.sceneId)
+			task.spawn(Rooms.roomClosed, here.sceneId)
+			return
+		end
+		World.toast(if gone then "That room was closed" else "Couldn't load " .. name .. ": " .. tostring(reason))
 		if not MapBuilder.current or workspace:FindFirstChild("Room") == nil then
 			info = MapBuilder.build(game:GetService("HttpService"):JSONDecode(Fixtures.MAP_SMALL))
 			sceneId = "fixture-room"
@@ -422,6 +520,68 @@ end
 function Rooms.joinOne(player: Player)
 	if workspace:GetAttribute("Phase") == "room" and World.where(player) ~= "room" then
 		World.toRoom({ player })
+	end
+end
+
+-- Everyone back to the lobby, with no room loaded.
+local function closeToLobby()
+	if Rooms.onSwitchStart then
+		Rooms.onSwitchStart()
+	end
+	World.holdRoomPlayers(false)
+	for _, p in Players:GetPlayers() do
+		if World.where(p) == "room" then
+			World.toLobby(p)
+		end
+	end
+	MapBuilder.clear()
+	workspace:SetAttribute("SceneId", "")
+	workspace:SetAttribute("RoomName", "")
+	workspace:SetAttribute("HasImagined", false)
+	workspace:SetAttribute("Phase", "lobby")
+end
+
+-- The server answered 404 for the room we are in (archived or deleted): not a connection problem, so no
+-- "Reconnecting" banner. Toast it, move everyone to Config.DEFAULT_SCENE (the lobby if that fails too) and refresh
+-- the room list. Only for the room that is built (a room still loading is handled by its switch) and never for the
+-- fixture room, which the server does not know by design.
+function Rooms.roomClosed(sceneId: string)
+	local cur = MapBuilder.current
+	if closing or sceneId == "fixture-room" or not (cur and cur.sceneId == sceneId) then
+		return
+	end
+	closing = true
+	local ok, err = pcall(function()
+		closedRooms[sceneId] = true
+		cache[sceneId] = nil
+		modelInfos[sceneId] = nil
+		if workspace:GetAttribute("Banner") == "Reconnecting to Déjà View..." then
+			workspace:SetAttribute("Banner", "")
+		end
+		workspace:SetAttribute("Offline", false)
+		World.toast("That room was closed")
+		warn("[DejaView] room " .. sceneId .. " was closed on the server")
+		pcall(refreshList)
+		local target = Config.DEFAULT_SCENE
+		local okTarget = target ~= "" and target ~= sceneId and not closedRooms[target] and playable(sceneById(target))
+		local before = switching
+		if okTarget then
+			local okSwitch, errSwitch = pcall(Rooms.switchTo, target, { moveRoom = true })
+			if not okSwitch then
+				warn("[DejaView] could not open " .. target .. ":", errSwitch)
+			end
+		end
+		-- a newer switch (a vote, the judge) took over meanwhile: leave it alone
+		local superseded = switching > before + (if okTarget then 1 else 0)
+		local arrived = okTarget and workspace:GetAttribute("SceneId") == target and workspace:GetAttribute("Phase") == "room"
+		if not superseded and not arrived then
+			closeToLobby()
+		end
+		publishBoard()
+	end)
+	closing = false
+	if not ok then
+		warn("[DejaView] closing room " .. sceneId .. " failed:", err)
 	end
 end
 

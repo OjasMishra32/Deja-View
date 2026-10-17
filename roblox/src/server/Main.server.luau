@@ -36,6 +36,7 @@ World.init()
 
 Presence.stateOf = TagGame.stateOf
 Presence.onActive = Rooms.onActive
+Presence.onRoomGone = Rooms.roomClosed
 Presence.onHostEvent = function(ev)
 	if ev.type == "start_round" then
 		TagGame.start(nil)

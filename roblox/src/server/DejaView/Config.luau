@@ -26,7 +26,7 @@ local Config = {
 
 	LOBBY_CENTER = Vector3.new(0, 300, 0),
 	WALK_SPEED = 12,
-	FALL_Y = -30,
+	FALL_Y = -4, -- root part height; the room floor is at y = 0 and its safety floor 8 studs under it
 
 	-- Scene the server builds on boot if it is ready (falls back to the newest ready room).
 	DEFAULT_SCENE = "the-courts", -- Update 8: the court is the best demo moment; boot there

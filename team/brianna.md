@@ -9,6 +9,50 @@ Everything below was checked against the live Gemini docs and SDK on Fri Oct 16,
 checked, it says so and tells you how to check it. If something here turns out to be wrong on the night, tell Ojasva
 right away and use the fallback listed for it.
 
+> **Update 5 (Sat ~5:30 AM): most of Updates 3 and 4 is now built into your service on `main`. The rest is yours.**
+> Added in `integrations/guide/`:
+> - `/describe` takes `frames` (up to 8, in order; a longer list keeps 8 evenly spaced) and returns the "who is playing,
+>   who wins" caption. `image`-only calls are unchanged.
+> - `WORLD_HINTS` in `prompts.mjs` (your Update 4 labels) go into the `/hotspots` and `/narrate` prompts; a memory uses
+>   its place's (`courts-foosball` → `the-courts`, `chess-match` → `chess-room`, `kitchen-cooking` → `kitchen`).
+> - `notes/<id>.json`, checked by eye against the footage, go into `/ask` and `/narrate` (`notes.mjs`, read on every
+>   call, so a fix counts at once). When Gemini is off or fails, "who won?" and "what are they making?" are answered
+>   from the notes' `outcome` (`fallback.mjs`).
+> - `scripts/video-notes.mjs` (`npm run notes`): one Files API upload and one JSON call per clip; it never replaces a
+>   notes file without `--force`.
+> - `npm test` (31 `node --test` tests, stubbed Gemini, no key), a "Describe clip" button on the test page, and the
+>   README's Gemini features list and AI tools line.
+> - The Déjà View server now sends a Video memory's clip frames (up to 8, plus the thumbnail as `image`) to your
+>   `/describe` and saves your caption on the scene, so `/ask` gets it back as `scene.caption`. Answers marked
+>   `degraded: true` are not saved: keep that flag on fallback answers.
+>
+> **Your steps:**
+> 1. Pull `main`. In `integrations/guide/.env`: `GEMINI_API_KEY` and `MOCK_GEMINI=0` (if you set `GUIDE_KEY`, send
+>    Ojasva the same value privately). Then `npm install` and `npm test` (31 pass).
+> 2. Start it on the demo Mac (`npm start`, port 8795; the server points at it with `GUIDE_URL=http://127.0.0.1:8795`).
+>    Time an 8-frame "Describe clip": the server gives the whole clip call 12 s and up to about 5 s of that goes to
+>    grabbing frames, so aim for 7 s or less.
+> 3. Let Gemini write its own notes into a scratch folder and compare them with the checked files. The clips are on the
+>    demo Mac under `data/test-media/`; from `integrations/guide/`:
+>    `NOTES_DIR=/tmp/dv-notes npm run notes -- courts-foosball ../../data/test-media/pingpong/video/IMG_7373.mov`, then
+>    `chess-match` with `chess/video/IMG_9293.mov` (the clip with the final move) and `kitchen-cooking` with
+>    `kitchen/video/IMG_7410.mov`. If the call rejects `responseJsonSchema` or `thinkingLevel: 'LOW'` in the script,
+>    delete that setting. The checked files win: change one only if you were there and know better, then set `checkedBy`
+>    to your name. Their `outcome` lines (spoken word for word when Gemini is off or fails; context for Gemini otherwise):
+>    - `courts-foosball`: "Still undecided: they were mid-game with no goal, no celebration and no final score, so who
+>      won is a mystery." This is the demo's "who won?" at 0:40: if you know who won, write it here in the room's voice.
+>    - `chess-match`: "White won by checkmate: the black-T-shirt player's queen took the f7 pawn beside the black king,
+>      guarded by a white knight on e5."
+>    - `kitchen-cooking`: "Nothing yet: a jug of milk went on the stove, then its owner went off to rinse their hands.
+>      No pan, no recipe."
+> 4. Tune the label wording (`WORLD_HINTS`) and answers on the five worlds through the public link
+>    (`/view?scene=<id>`) as each one is up; `the-courts` and `brick-apartment` are there now. Still open from Update 4:
+>    short, texty answers are not in `ASK_SYSTEM` yet. Small: the canned "who won" hotspot has `box_2d` but no `x`/`y`.
+> 5. Devpost: paste the README's Gemini features list and AI tools line, plus anything you change.
+>
+> The three memory scenes are not on the server yet; once they are, Ojasva runs `bun run describe:clip <id>` with your
+> guide running.
+>
 > **Update 4 (Sat ~4:50 AM):** the worlds you tune are now `the-courts`, `chess-room`, `kitchen`, `tilted-towers`,
 > `brick-apartment`. Labels to aim for: the court (foosball table, ping pong table, chairs, the glass door), chess (the
 > giant king and queen, the board, the wall TV, the UF banner), the kitchen (fridge, the two stoves, the sink, the steel

@@ -8,6 +8,18 @@ same world is a Roblox place** friends play on the Quest Roblox app or a phone) 
 a room with the real footage standing in it in 3D; headset and browser only, not Roblox). Walk around in a Meta Quest 3S
 or a browser.
 
+**Update 5 (Sat ~5:30 AM):** on the link now: `the-courts` (shown as Infinity Hall Game Lawn) and `brick-apartment`.
+Still being built: `chess-room`, `kitchen`, `tilted-towers`, the three video memories, and the version 2 Roblox models
+(the court first). New on `main`: the Roblox game stands you on a real floor at y = 0, lines the textured model up on
+the server's box and sends everyone to the court when a room is closed; Brianna's guide reads clip frames, label hints
+per world and checked notes for each memory. Next, one line each:
+- **Shivin:** pull, Rojo sync, play-test `the-courts` (floor, walls, model line-up), publish: Update 11 in `shivin.md`.
+- **Brianna:** key in, `npm install`, `npm test`, run the guide on the demo Mac, check the notes (who won the foosball?),
+  tune labels: Update 5 in `brianna.md`.
+- **Seb:** Roblox games on your own branch (real-physics ping pong at the court, then pool): Update 5 in `seb.md`.
+- **Ojasva:** restart the live server so the new Roblox fields and clip captions go live; caption each memory with
+  `bun run describe:clip <id>` once it is up.
+
 **Update 4 (Sat ~4:50 AM):** five worlds now, all rebuilt from our own footage: `tilted-towers`, `brick-apartment`,
 `the-courts` (ping pong + foosball), `chess-room` and **`kitchen`** (new: 36 photos). Three video memories put the people
 in full 3D, walkable from every side even when paused: **`courts-foosball`** and **`chess-match`** are the game night we
@@ -33,7 +45,8 @@ Details for every connection: `contracts.md`. The whole plan: `plan.md`.
 
 **Update (Sat ~2 AM):** only Photo worlds go to Roblox, and each one now comes as a real textured model of the room
 (`GET /api/roblox/<id>/model`, `.../model.glb`), not just blocks; it must play on the Quest Roblox app and on phones.
-You join the judge in the **Fortnite** world. Details: Update 2 at the top of `shivin.md`.
+You join the judge in the **Fortnite** world (now `tilted-towers`; the old `fortnite-*` rooms are retired). Details:
+Update 2 at the top of `shivin.md`.
 
 Someone texts a photo of a real room, it becomes a 3D world, and you plus friends join that same room in Roblox and play
 tag with the person in the VR headset.

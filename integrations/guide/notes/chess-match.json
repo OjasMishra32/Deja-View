@@ -1,0 +1,54 @@
+{
+  "sceneId": "chess-match",
+  "place": "chess-room",
+  "clip": "IMG_9290.mov, IMG_9291.mov, IMG_9292.mov, IMG_9293.mov",
+  "oneLine": "Giant floor chess: the black-T-shirt player (White) checkmates the gray-hoodie player (Black) with a queen capture on f7.",
+  "activity": "One full game of chess on a giant floor board with knee-to-thigh-high plastic pieces, in a lounge corner by a UF banner. It starts from the opening position in IMG_9290 and ends in checkmate in IMG_9293, under five minutes of play across four clips (two short unfilmed gaps between clips). Each player walks onto the board to carry their own pieces while the person filming keeps circling the board.",
+  "people": [
+    "Player with the white pieces: black short-sleeved shirt with sunglasses hooked on it, black cargo pants, dark sneakers and a lanyard badge; stands at White's end by the UF banner and walks onto the board for every move.",
+    "Player with the black pieces: gray hoodie with a small pink heart logo, black shorts, white sneakers, a wristwatch and a lanyard badge; leans on the wall under the framed prints at Black's end between moves.",
+    "The person filming is never seen; they walk lap after lap around the board.",
+    "No names are legible in the frames; both badges are too small to read."
+  ],
+  "objects": [
+    "giant chess set with white and black plastic pieces",
+    "board made of black and white interlocking grid mat squares",
+    "orange-and-blue UF University of Florida banner reading 'Rent anything inside - for free'",
+    "green putting mat beside the board",
+    "foosball table by the windows",
+    "three framed art prints and a wall-mounted TV",
+    "recycling bins",
+    "the three captured black pawns standing beside the board at White's end"
+  ],
+  "outcome": "White won by checkmate: the black-T-shirt player's queen took the f7 pawn beside the black king, guarded by a white knight on e5.",
+  "outcomeEvidence": "IMG_9293, checked with the board grid projected from the camera poses. At 55.8 s the white queen is on f3, a white knight on e5, a white pawn on e4 and a white bishop on b5; the black king is on e8 with its own queen on d8, bishop on f8, knight on g8, pawns on d7, f7 and g7, and f4 to f6 are empty. From 58.0 to 59.0 s the black-T-shirt player carries the white queen up the f-file and sets it on f7; at 59.25 to 61 s lifts the black f7 pawn off and carries it back, and at 63.5 to 64.25 s stands it next to the two black pawns captured earlier (IMG_9291 about 150 s and IMG_9292 about 7 s). The final position, seen from four angles at 74.4, 74.7, 75.5 and 78.5 s, is checkmate: the queen on f7 checks the king on e8, the knight on e5 guards f7, d8 and f8 hold the king's own queen and bishop, d7 holds its own pawn, e7 is covered by the queen, and no black piece can take on f7. Nobody moves a piece from 61 s to the end of the clip at 79.1 s; the gray-hoodie player rubs a hand over the face looking at the board at 62.5 to 63.0 s and the black-T-shirt player grins at 66 to 68 s. No handshake, tipped king or resignation is visible, and the audio was not checked. Material at the end: Black has lost three pawns; no captured white piece is seen anywhere off the board.",
+  "moments": [
+    {
+      "t": 0.0,
+      "what": "IMG_9290: the giant board in the starting position; White's player by the UF banner, Black's player leaning on the wall at the far end."
+    },
+    {
+      "t": 17.0,
+      "what": "IMG_9291: White's player walks onto the board and opens with a centre pawn."
+    },
+    {
+      "t": 40.5,
+      "what": "IMG_9291: Black's player steps off the wall and reaches across the board to make a first move."
+    },
+    {
+      "t": 152.0,
+      "what": "IMG_9291: first capture of the game; White's player carries a black pawn back to White's end of the board."
+    },
+    {
+      "t": 58.5,
+      "what": "IMG_9293: the white queen marches up the open f-file, takes the f7 pawn and stops right beside the black king: checkmate."
+    },
+    {
+      "t": 66.0,
+      "what": "IMG_9293: no more moves; Black's player rubs a hand over the face at 62.5 s and White's player breaks into a big grin. The board stays unchanged to the end at 79 s."
+    }
+  ],
+  "funnyDetail": "The black king never took a single step all game and was checkmated on its starting square, boxed in by its own queen and bishop, while the three captured black pawns huddle at the winner's feet like trophies.",
+  "checkedBy": "frames, by eye",
+  "confidence": "high"
+}

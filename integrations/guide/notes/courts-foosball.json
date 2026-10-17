@@ -1,0 +1,54 @@
+{
+  "sceneId": "courts-foosball",
+  "place": "the-courts",
+  "clip": "IMG_7373.mov",
+  "oneLine": "Two players face off at the foosball table on the covered patio at night.",
+  "activity": "A one-on-one foosball game at night on the covered patio next to the table tennis tables. The camera walks one full circle around the table during the 12.4 second clip while both players keep playing.",
+  "people": [
+    "Player in a light gray short-sleeved button-up shirt, light gray shorts, dark shoes, a yellow wristband and a black backpack; on the left side of the table at the start.",
+    "Player in a dark gray hoodie, black shorts and white sneakers, with a black backpack carrying a small pink plush keychain; across the table, on the right at the start.",
+    "Both players wear lanyard badges; no names are legible in the frames.",
+    "A passer-by carrying a laptop walks along the path behind the table around 6.25 to 7.25 s; not part of the game."
+  ],
+  "objects": [
+    "cream-colored foosball table with wooden-handled rods and a blue playfield",
+    "two teams of figures, one with red shorts and one with blue shorts",
+    "bead score counters on the rails at both ends of the table",
+    "blue table tennis tables, one folded upright against the wall",
+    "metal patio chairs",
+    "glass wall with ceiling lights inside",
+    "palm trees, lawn and street lights outside in the dark",
+    "a water bottle on the ground near the table and another in the gray-shirt player's backpack pocket"
+  ],
+  "outcome": "Still undecided: they were mid-game with no goal, no celebration and no final score, so who won is a mystery.",
+  "outcomeEvidence": "IMG_7373.mov is 12.4 s long. Frames every 0.25 s from 0 to 12.25 s and every 0.1 s from 10.6 to 12.3 s show both players with their hands on the rods the whole time, and the last frame (12.37 s) still shows both gripping the rods and looking down at the table. Nobody raises their arms, celebrates or steps away. The only pause is at 12.0 to 12.1 s, when the light-gray-shirt player briefly lifts both hands off the rods with palms open, then grips them again by 12.2 s; nothing in frame shows why. The bead counters at both ends are too small and blurred to read a score, and the far-end counter looks split the same way at 0.0 s and 12.3 s, so no bead change is visible. The ball is not clearly visible in any frame. The other clip, IMG_7372.mov, shows the same patio empty with no game.",
+  "moments": [
+    {
+      "t": 0.0,
+      "what": "Camera at one end of the table: the two players face each other across the rods with a table tennis table behind them; the light-gray-shirt player glances at the camera."
+    },
+    {
+      "t": 3.5,
+      "what": "Camera circles behind the dark-gray-hoodie player; a pink plush keychain dangles from the backpack."
+    },
+    {
+      "t": 6.75,
+      "what": "Camera at the far end, looking out to the lawn and palm trees; a passer-by with a laptop walks past behind, and the hoodie player is smiling down at the game."
+    },
+    {
+      "t": 9.0,
+      "what": "Camera passes behind the light-gray-shirt player, black backpack with a water bottle in the side pocket, table tennis tables in view."
+    },
+    {
+      "t": 12.0,
+      "what": "The light-gray-shirt player lifts both hands off the rods, palms open, for a moment, then grabs them again."
+    },
+    {
+      "t": 12.37,
+      "what": "Clip ends mid-game with both players still at the rods."
+    }
+  ],
+  "funnyDetail": "A little pink plush keychain clipped to the hoodie player's backpack spectates the whole match from behind.",
+  "checkedBy": "frames, by eye",
+  "confidence": "high"
+}

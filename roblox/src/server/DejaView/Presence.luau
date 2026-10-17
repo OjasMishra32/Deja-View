@@ -19,9 +19,12 @@ Presence.people = {} :: { [string]: Person }
 Presence.onActive = nil :: ((active: any) -> ())?
 Presence.onHostEvent = nil :: ((ev: any) -> ())?
 Presence.stateOf = nil :: ((player: Player) -> string?)?
+-- The server says the room we post for no longer exists (archived or deleted): Rooms.roomClosed.
+Presence.onRoomGone = nil :: ((sceneId: string) -> ())?
 
 local serverId = if game.JobId ~= "" then game.JobId else "studio-" .. HttpService:GenerateGUID(false)
 local failures = 0
+local gone = 0 -- 404s in a row for the current room
 local appliedEvents: { [any]: boolean } = {}
 local postedScene: string? = nil
 
@@ -155,6 +158,7 @@ function Presence.start()
 			end
 			if postedScene ~= sceneId then
 				postedScene = sceneId
+				gone = 0
 				Presence.clear()
 			end
 			local ok, res, status = Backend.presence(sceneId, buildPayload())
@@ -163,13 +167,27 @@ function Presence.start()
 			end
 			if ok and type(res) == "table" then
 				failures = 0
+				gone = 0
 				workspace:SetAttribute("Offline", false)
 				if workspace:GetAttribute("Banner") ~= "" then
 					workspace:SetAttribute("Banner", "")
 				end
 				handle(res)
+			elseif status == 404 and type(res) == "table" then
+				-- our server's JSON 404: the room was closed (archived or deleted), the connection is fine
+				failures = 0
+				gone += 1
+				if workspace:GetAttribute("Banner") == "Reconnecting to Déjà View..." then
+					workspace:SetAttribute("Banner", "")
+				end
+				workspace:SetAttribute("Offline", false)
+				-- only once the room is up: a room still loading is the switch's business
+				if gone % 20 == 2 and Presence.onRoomGone and workspace:GetAttribute("Phase") == "room" then
+					task.spawn(Presence.onRoomGone :: any, sceneId)
+				end
 			else
 				failures += 1
+				gone = 0
 				if status == 401 then
 					workspace:SetAttribute("Banner", "Key rejected")
 				elseif failures >= 3 then
@@ -178,6 +196,9 @@ function Presence.start()
 				end
 			end
 			local delay = if failures == 0 then Config.PRESENCE_PERIOD else math.min(0.5 * 2 ^ (failures - 1), 4)
+			if gone > 0 then
+				delay = 1
+			end
 			if status == 429 then
 				delay = 5
 			end

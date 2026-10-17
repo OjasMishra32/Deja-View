@@ -252,6 +252,25 @@ export interface BuiltMap {
   parts: number;
   /** Parsed lazily (only chunked requests need it). */
   parsed?: Record<string, unknown> & { parts: unknown[] };
+  /** Header numbers read once from the body (mapMeta). */
+  meta?: MapMeta;
+  /** The body with the scene's walkBounds spliced in, for the walk box it was made for (mapResponse). */
+  walk?: MapBytes & { sig: string };
+}
+
+/** What a map response sends: the bytes, gzipped, and their ETag. */
+export interface MapBytes {
+  body: Uint8Array;
+  gzip: Uint8Array;
+  etag: string;
+}
+
+export interface MapMeta {
+  /** Scene-frame floor height the builder subtracted (null when the map does not say). */
+  floorY: number | null;
+  studsPerMeter: number;
+  /** Whether the builder already wrote walkBounds itself. */
+  hasWalkBounds: boolean;
 }
 
 export type MapResult =
@@ -608,8 +627,15 @@ export class RobloxMapService {
   }
 }
 
-/** One chunk (1-based) of a built map: the header fields repeated, plus `chunk` and `chunks` (contracts 6.2). */
-export function mapChunk(map: BuiltMap, chunk: number): { ok: true; body: Record<string, unknown> } | { ok: false; error: string } {
+/**
+ * One chunk (1-based) of a built map: the header fields repeated, plus `chunk` and `chunks` (contracts 6.2), and
+ * `walk` as walkBounds when the map has none of its own.
+ */
+export function mapChunk(
+  map: BuiltMap,
+  chunk: number,
+  walk: StudBox | null = null,
+): { ok: true; body: Record<string, unknown> } | { ok: false; error: string } {
   if (!map.parsed) map.parsed = JSON.parse(new TextDecoder().decode(map.body)) as BuiltMap['parsed'];
   const all = map.parsed!.parts;
   const chunks = Math.max(1, Math.ceil(all.length / CHUNK_PARTS));
@@ -617,5 +643,88 @@ export function mapChunk(map: BuiltMap, chunk: number): { ok: true; body: Record
     return { ok: false, error: `chunk must be a whole number from 1 to ${chunks}.` };
   }
   const { parts: _parts, ...header } = map.parsed!;
+  if (walk && header.walkBounds === undefined) header.walkBounds = walk;
   return { ok: true, body: { ...header, chunk, chunks, parts: all.slice((chunk - 1) * CHUNK_PARTS, chunk * CHUNK_PARTS) } };
+}
+
+// ---------------------------------------------------------------- walk bounds (shivin.md Update 4)
+
+/** How far past world.bounds (where the capture camera went) people may walk, in metres on x and z. */
+export const WALK_PAD_M = 0.5;
+
+/** An axis-aligned box in studs, map frame. */
+export interface StudBox {
+  min: V3;
+  max: V3;
+}
+
+const r2 = (n: number) => Math.round(n * 100) / 100 + 0;
+
+function vec3(v: unknown): V3 | null {
+  if (!Array.isArray(v) || v.length < 3) return null;
+  const out: V3 = [Number(v[0]), Number(v[1]), Number(v[2])];
+  return out.every(Number.isFinite) ? out : null;
+}
+
+/**
+ * A scene-frame box in metres (world.bounds) in the map frame, exactly as pipeline/roblox_map.py maps points: the
+ * floor (`floorY`, scene frame, the one the builder subtracted) moves to y = 0, then studs axis for axis, no flips.
+ * Padded `padM` metres on x and z. null when the box is missing or not three finite numbers per corner.
+ */
+export function walkBoundsOf(bounds: unknown, floorY: number, spm = STUDS_PER_METER, padM = WALK_PAD_M): StudBox | null {
+  if (!bounds || typeof bounds !== 'object' || !finite(floorY) || !finite(spm) || spm <= 0) return null;
+  const b = bounds as { min?: unknown; max?: unknown };
+  const lo = vec3(b.min);
+  const hi = vec3(b.max);
+  if (!lo || !hi) return null;
+  const min: V3 = [Math.min(lo[0], hi[0]) - padM, Math.min(lo[1], hi[1]) - floorY, Math.min(lo[2], hi[2]) - padM];
+  const max: V3 = [Math.max(lo[0], hi[0]) + padM, Math.max(lo[1], hi[1]) - floorY, Math.max(lo[2], hi[2]) + padM];
+  return { min: [r2(min[0] * spm), r2(min[1] * spm), r2(min[2] * spm)], max: [r2(max[0] * spm), r2(max[1] * spm), r2(max[2] * spm)] };
+}
+
+/** A built map's header numbers, read once (the body is not kept parsed: a 12000-part map is large in memory). */
+export function mapMeta(map: BuiltMap): MapMeta {
+  if (!map.meta) {
+    const p = (map.parsed ?? JSON.parse(new TextDecoder().decode(map.body))) as Record<string, unknown>;
+    const spm = p.studsPerMeter;
+    map.meta = {
+      floorY: finite(p.floorY) ? p.floorY : null,
+      studsPerMeter: finite(spm) && spm > 0 ? spm : STUDS_PER_METER,
+      hasWalkBounds: p.walkBounds !== undefined && p.walkBounds !== null,
+    };
+  }
+  return map.meta;
+}
+
+/**
+ * The scene's walk box for a built map: world.bounds through the floor the map was built with (the map's own floorY,
+ * else the scene's), padded WALK_PAD_M. null when the scene has no world.bounds.
+ */
+export function mapWalkBounds(map: BuiltMap, scene: Scene | null | undefined): StudBox | null {
+  const w = scene?.world;
+  if (!w?.bounds) return null;
+  const meta = mapMeta(map);
+  const floor = meta.floorY ?? (finite(w.floorY) ? w.floorY : null);
+  if (floor === null) return null;
+  return walkBoundsOf(w.bounds, floor, meta.studsPerMeter);
+}
+
+/**
+ * The bytes to serve for a map: as built, or with `"walkBounds"` spliced in as the first field when the map has none
+ * of its own, so cached maps need no rebuild. The variant is kept on the map for the walk box it was made for, and
+ * has its own ETag.
+ */
+export function mapResponse(map: BuiltMap, walk: StudBox | null): MapBytes {
+  if (!walk || mapMeta(map).hasWalkBounds) return map;
+  const sig = JSON.stringify(walk);
+  if (map.walk && map.walk.sig === sig) return map.walk;
+  const text = new TextDecoder().decode(map.body);
+  const at = text.indexOf('{');
+  if (at < 0) return map;
+  const rest = text.slice(at + 1);
+  const sep = /^\s*\}/.test(rest) ? '' : ',';
+  const body = new TextEncoder().encode(`${text.slice(0, at + 1)}"walkBounds":${sig}${sep}${rest}`);
+  const tag = createHash('sha1').update(sig).digest('hex').slice(0, 8);
+  map.walk = { sig, body, gzip: Bun.gzipSync(body as Uint8Array<ArrayBuffer>, { level: 6 }), etag: `"rm-${map.key}-w${tag}"` };
+  return map.walk;
 }

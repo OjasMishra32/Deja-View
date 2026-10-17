@@ -29,7 +29,7 @@ import {
   type NotesRelay,
   type PresenceSource,
 } from './deepspace.ts';
-import { describeForJob } from './describe.ts';
+import { describeClipForJob, describeForJob, type ClipDescribeOptions } from './describe.ts';
 import { createGuideClient, createGuideProxy, readBodyCapped, type GuideClient, type GuideProxy } from './guide.ts';
 
 export { createPresenceFeed, presenceFromGetter, type PresenceFeed, type PresenceSource } from './deepspace.ts';
@@ -226,6 +226,8 @@ export interface Integrations {
   status(): Promise<IntegrationsStatus>;
   /** describeForJob with this instance's guide client and timeout. */
   describeForJob(imagePath: string): Promise<string | null>;
+  /** describeClipForJob (a Video memory's frames) with this instance's guide client and clip budget. */
+  describeClipForJob(videoPath: string, scene: { id: string; name?: string }, opts?: Pick<ClipDescribeOptions, 'imagePath' | 'packed'>): Promise<string | null>;
   /** Call when a scene becomes ready: caches the greeting with the thumbnail. Never throws. */
   narrateWarmup(sceneId: string): Promise<boolean>;
 }
@@ -286,6 +288,8 @@ export function createIntegrations(opts: IntegrationsOptions): Integrations {
       return { deepspace: deepspace.status(), guide: guideClient.status(), publicUrl: await readPublicUrl(config.publicUrlFile) };
     },
     describeForJob: (imagePath) => describeForJob(imagePath, { client: guideClient, timeoutMs: config.guide.timeouts.describe, log: guideLog }),
+    describeClipForJob: (videoPath, scene, o = {}) =>
+      describeClipForJob(videoPath, scene, { ...o, client: guideClient, timeoutMs: config.guide.timeouts.describeClip, log: guideLog }),
     narrateWarmup: (sceneId) => guide.narrateWarmup(sceneId),
   };
 }

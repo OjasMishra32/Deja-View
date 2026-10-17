@@ -1,5 +1,6 @@
 -- Map JSON -> anchored Parts in batches, with progress, teardown, invisible bounds and baked fallback.
 local CollectionService = game:GetService("CollectionService")
+local Lighting = game:GetService("Lighting")
 local ServerStorage = game:GetService("ServerStorage")
 local Config = require(script.Parent.Config)
 
@@ -29,7 +30,7 @@ template.TopSurface = Enum.SurfaceType.Smooth
 template.BottomSurface = Enum.SurfaceType.Smooth
 template.CanTouch = false
 
-local function invisible(parent: Instance, name: string, size: Vector3, pos: Vector3)
+local function invisible(parent: Instance, name: string, size: Vector3, pos: Vector3): Part
 	local p = template:Clone()
 	p.Name = name
 	p.Size = size
@@ -38,7 +39,67 @@ local function invisible(parent: Instance, name: string, size: Vector3, pos: Vec
 	p.CastShadow = false
 	p.CanQuery = false
 	p.Parent = parent
+	return p
 end
+
+-- Textured rooms are shown unlit (shivin.md Update 10): their textures already hold the light of the photos, so
+-- Roblox must not shade them again. The lighting as it was is kept and put back for block rooms and the lobby.
+local UNLIT = {
+	GlobalShadows = false,
+	Ambient = Color3.fromRGB(255, 255, 255),
+	OutdoorAmbient = Color3.fromRGB(255, 255, 255),
+	Brightness = 0,
+	EnvironmentDiffuseScale = 0,
+	EnvironmentSpecularScale = 0,
+	ExposureCompensation = 0,
+}
+local savedLighting: { [string]: any }? = nil
+local parkedEffects: { [Instance]: any } = {}
+
+function MapBuilder.setUnlit(on: boolean)
+	if on == (savedLighting ~= nil) then
+		return
+	end
+	local L: any = Lighting
+	if on then
+		local saved = {}
+		for k, v in UNLIT do
+			saved[k] = L[k]
+			L[k] = v
+		end
+		savedLighting = saved
+		-- no Atmosphere, Bloom, ColorCorrection, SunRays or blur while a textured room is up
+		for _, e in Lighting:GetChildren() do
+			if e:IsA("PostEffect") then
+				parkedEffects[e] = e.Enabled
+				e.Enabled = false
+			elseif e:IsA("Atmosphere") then
+				parkedEffects[e] = e.Density
+				e.Density = 0
+			end
+		end
+	else
+		for k, v in savedLighting :: { [string]: any } do
+			L[k] = v
+		end
+		savedLighting = nil
+		for e, v in parkedEffects do
+			if e.Parent and e:IsA("PostEffect") then
+				e.Enabled = v
+			elseif e.Parent and e:IsA("Atmosphere") then
+				e.Density = v
+			end
+		end
+		parkedEffects = {}
+	end
+end
+
+-- Every room has a floor: an invisible slab whose top is exactly y = 0 (the map frame's floor) under the walk box,
+-- so nobody falls through a gap in the blocks or the model. The safety floor sits well below it and only catches
+-- someone who slips through anyway (the fall guard then puts them back at spawn).
+local FLOOR_THICK = 2
+local FLOOR_MARGIN = 4
+local SAFETY_TOP = -8
 
 local function boundsOf(map: any): (Vector3, Vector3, number)
 	local minV = Vector3.new(math.huge, math.huge, math.huge)
@@ -136,10 +197,20 @@ local function addBounds(folder: Folder, info: RoomInfo)
 	local c = (mn + mx) / 2
 	local h = math.max(info.ceilingY - mn.Y, 8) + 4
 	local midY = mn.Y + h / 2
-	-- safety floor under everything
-	invisible(bounds, "SafetyFloor", Vector3.new(size.X + 8, 2, size.Z + 8), Vector3.new(c.X, math.min(mn.Y, 0) - 1.5, c.Z))
-	-- Invisible walls around the walkable box (Update 4), tight to its edge.
 	local wmn, wmx = info.walkMin or mn, info.walkMax or mx
+	-- the floor: top exactly at y = 0, under the walk box (the whole bounds without one) and the spawn, plus a margin
+	local fx0 = math.min(wmn.X, info.spawn.X) - FLOOR_MARGIN
+	local fz0 = math.min(wmn.Z, info.spawn.Z) - FLOOR_MARGIN
+	local fx1 = math.max(wmx.X, info.spawn.X) + FLOOR_MARGIN
+	local fz1 = math.max(wmx.Z, info.spawn.Z) + FLOOR_MARGIN
+	local floor = invisible(bounds, "Floor", Vector3.new(fx1 - fx0, FLOOR_THICK, fz1 - fz0),
+		Vector3.new((fx0 + fx1) / 2, -FLOOR_THICK / 2, (fz0 + fz1) / 2))
+	floor.CanCollide = true
+	floor.CanQuery = true -- the spawn raycast lands on it
+	-- safety floor well under everything
+	local safetyTop = math.min(SAFETY_TOP, mn.Y - 4)
+	invisible(bounds, "SafetyFloor", Vector3.new(size.X + 8, 2, size.Z + 8), Vector3.new(c.X, safetyTop - 1, c.Z))
+	-- Invisible walls around the walkable box (Update 4), tight to its edge.
 	local wsize, wc = wmx - wmn, (wmn + wmx) / 2
 	invisible(bounds, "WallN", Vector3.new(wsize.X + 2, h, 1), Vector3.new(wc.X, midY, wmn.Z - 0.5))
 	invisible(bounds, "WallS", Vector3.new(wsize.X + 2, h, 1), Vector3.new(wc.X, midY, wmx.Z + 0.5))
@@ -177,6 +248,9 @@ function MapBuilder.build(map: any, onProgress: ((number, number) -> ())?, opts:
 	local t0 = os.clock()
 	local info = MapBuilder.infoFromMap(map)
 	MapBuilder.current = nil
+	if not collisionOnly then
+		MapBuilder.setUnlit(false) -- a block room: normal lighting (a textured one goes unlit in attachModel)
+	end
 	local folder = newFolder(info)
 	local parts = map.parts
 	local total = #parts
@@ -230,52 +304,253 @@ local function prepareModel(model: Instance, meshCollision: boolean)
 			d.CanTouch = false
 			d.CanCollide = meshCollision
 			d.CanQuery = meshCollision
+			-- unlit look (Update 10): the texture colours as they are
+			d.Material = Enum.Material.SmoothPlastic
+			d.Reflectance = 0
+			d.CastShadow = false
 		elseif d:IsA("Script") or d:IsA("LocalScript") then
 			d:Destroy() -- an imported or uploaded room must never run code
 		end
 	end
 end
 
--- Puts a textured room model into the current Workspace.Room (over invisible collision blocks).
-function MapBuilder.attachModel(model: Instance)
-	local room = workspace:FindFirstChild("Room")
-	if not room then
+-- A loaded room as a Model (ScaleTo and PivotTo need one): a Folder's children move into a new Model; anything else
+-- (a lone MeshPart) goes into it as it is.
+local function asModel(container: Instance): Model
+	if container:IsA("Model") then
+		return container :: Model
+	end
+	local m = Instance.new("Model")
+	m.Name = container.Name
+	for k, v in container:GetAttributes() do
+		m:SetAttribute(k, v)
+	end
+	if container:IsA("Folder") then
+		for _, c in container:GetChildren() do
+			c.Parent = m
+		end
+		container:Destroy()
+	else
+		container.Parent = m
+	end
+	return m
+end
+
+-- The world box of every BasePart in a model: the corners of CFrame * Size / 2 (GetBoundingBox is oriented).
+local function partsBox(model: Instance): (Vector3?, Vector3?)
+	local mn = Vector3.new(math.huge, math.huge, math.huge)
+	local mx = -mn
+	local any = false
+	for _, d in model:GetDescendants() do
+		if d:IsA("BasePart") then
+			local cf, half = d.CFrame, d.Size / 2
+			for i = 0, 7 do
+				local corner = cf * Vector3.new(
+					if i % 2 == 0 then -half.X else half.X,
+					if i % 4 < 2 then -half.Y else half.Y,
+					if i < 4 then -half.Z else half.Z
+				)
+				mn = mn:Min(corner)
+				mx = mx:Max(corner)
+			end
+			any = true
+		end
+	end
+	if not any then
+		return nil, nil
+	end
+	return mn, mx
+end
+
+-- How far off a loaded model may be before it is turned, scaled or moved. Against the server's own box for that model
+-- (exact) any scale error over 2 % is fixed, a turn is taken when the swapped extents fit and the unswapped ones
+-- clearly do not (a nearly square room differs by only a few percent), and the box always lands on it. Against the
+-- block map's bounds (loose: a room imported in Studio) only gross errors are fixed: a wrong unit (3.57x), which
+-- scales x, y and z alike, or a model left outside the map. A model may cover much less ground than the map (newer
+-- ones only cover the walk box), so a different size alone is no reason to scale or move it.
+local EXACT_SCALE = 0.02
+local EXACT_TURN = 0.02 -- the swapped extents agree this well
+local EXACT_TURN_OFF = 0.04 -- and the unswapped ones are at least this far apart (and twice as far as the swapped)
+local LOOSE_SCALE = 0.25
+local LOOSE_AGREE = 0.15 -- the x, y and z ratios of a wrong unit agree this well
+local LOOSE_TURN = 0.1
+local LOOSE_OFFSET = 0.1 -- of the larger horizontal extent
+local LOOSE_DROP = 2 -- studs
+
+-- How far apart some ratios are: the largest over the smallest, minus 1.
+local function spread(a: number, b: number, c: number?): number
+	local cc = c or a
+	return math.max(a, b, cc) / math.min(a, b, cc) - 1
+end
+
+-- Whether two boxes have the same proportions (x : y : z within 3 %), as two boxes of one model do; a quarter turn
+-- about Y counts.
+local function sameShape(a: Vector3, b: Vector3): boolean
+	if a.X <= 0 or a.Y <= 0 or a.Z <= 0 or b.X <= 0 or b.Y <= 0 or b.Z <= 0 then
+		return false
+	end
+	return spread(a.X / b.X, a.Y / b.Y, a.Z / b.Z) < 0.03 or spread(a.X / b.Z, a.Y / b.Y, a.Z / b.X) < 0.03
+end
+
+-- Turns, scales and moves `model` so its world box matches emin..emax: centres on x and z, bottoms on y. A quarter
+-- turn about Y when its x and z extents are swapped; one uniform scale (the mean of the x and z ratios); then a
+-- move. Prints what it did. The collision blocks never move: they are the ground truth.
+local function alignModel(model: Model, emin: Vector3, emax: Vector3, loose: boolean)
+	local amin, amax = partsBox(model)
+	if not amin or not amax then
 		return
 	end
+	local esize, asize = emax - emin, amax - amin
+	if esize.X <= 0 or esize.Z <= 0 or asize.X <= 0 or asize.Z <= 0 then
+		return
+	end
+	-- the y ratio (a turn about Y keeps it); nil when either box is flat
+	local ry = if esize.Y > 0 and asize.Y > 0 then esize.Y / asize.Y else nil
+	-- swapped: the x and z ratios agree against the other axis, not against their own (loose: y agrees as well)
+	local turned = 0
+	local own = spread(asize.X / esize.X, asize.Z / esize.Z)
+	local swapped = spread(asize.X / esize.Z, asize.Z / esize.X)
+	local turn = if loose
+		then ry ~= nil and own >= LOOSE_TURN and spread(esize.Z / asize.X, esize.X / asize.Z, ry) < LOOSE_TURN
+		else swapped < EXACT_TURN and own > math.max(EXACT_TURN_OFF, 2 * swapped)
+	if turn then
+		local centre = (amin + amax) / 2
+		model:PivotTo(CFrame.new(centre) * CFrame.Angles(0, math.pi / 2, 0) * CFrame.new(-centre) * model:GetPivot())
+		turned = 90
+		amin, amax = partsBox(model)
+		if not amin or not amax then
+			return
+		end
+		asize = amax - amin
+	end
+	local rx, rz = esize.X / asize.X, esize.Z / asize.Z
+	local factor = (rx + rz) / 2
+	local scaled = 1
+	local rescale = math.abs(factor - 1) > (if loose then LOOSE_SCALE else EXACT_SCALE)
+	if rescale and loose then
+		rescale = ry ~= nil and spread(rx, rz, ry) < LOOSE_AGREE
+	end
+	if rescale then
+		local ok, err = pcall(function()
+			model:ScaleTo(model:GetScale() * factor)
+		end)
+		if ok then
+			scaled = factor
+			amin, amax = partsBox(model)
+			if not amin or not amax then
+				return
+			end
+		else
+			warn("[DejaView] could not scale the room model:", err)
+		end
+	end
+	local ac, ec = (amin + amax) / 2, (emin + emax) / 2
+	local delta = Vector3.new(ec.X - ac.X, emin.Y - amin.Y, ec.Z - ac.Z)
+	if loose and scaled == 1 and turned == 0 then
+		local tol = LOOSE_OFFSET * math.max(esize.X, esize.Z)
+		local inside = amin.X >= emin.X - tol and amax.X <= emax.X + tol and amin.Z >= emin.Z - tol and amax.Z <= emax.Z + tol
+		if inside and math.abs(delta.Y) < LOOSE_DROP then
+			delta = Vector3.zero -- within the block map and on its floor: it is in the map frame already
+		end
+	end
+	if delta.Magnitude > 0.001 then
+		model:PivotTo(model:GetPivot() + delta)
+	end
+	print(string.format("[DejaView] room model aligned on the %s: scale x%.3f, turned %d deg, offset (%.2f, %.2f, %.2f)",
+		if loose then "block map" else "model box", scaled, turned, delta.X, delta.Y, delta.Z))
+end
+
+-- Lines one part of a multi-part room model up on the server's box for that part ({min, max} in studs), so a part
+-- that loads somewhere of its own still joins the others.
+function MapBuilder.alignPart(model: Model, box: any?)
+	local emin, emax = parseBox(box)
+	if emin and emax then
+		alignModel(model, emin, emax, false)
+	end
+end
+
+-- The server's box for a model ({min, max} in studs) to align it on exactly, or nil. With `checkShape` (a room
+-- imported in Studio, which may be another build than the one the server describes) only when the model has the
+-- box's proportions.
+local function serverBox(model: Model, box: any?, checkShape: boolean?): (Vector3?, Vector3?)
+	local emin, emax = parseBox(box)
+	if not emin or not emax then
+		return nil, nil
+	end
+	if checkShape then
+		local amin, amax = partsBox(model)
+		if not amin or not amax or not sameShape(amax - amin, emax - emin) then
+			return nil, nil
+		end
+	end
+	return emin, emax
+end
+
+-- Puts a textured room model into the current Workspace.Room (over invisible collision blocks), turned, scaled and
+-- moved onto `box` ({min, max} in studs): the server's own box for the model it loaded, else the block map's bounds
+-- (loose). `checkShape`: see serverBox. Returns the model as placed.
+function MapBuilder.attachModel(container: Instance, box: any?, checkShape: boolean?): Model?
+	local room = workspace:FindFirstChild("Room")
+	if not room then
+		container:Destroy()
+		return nil
+	end
+	local model = asModel(container)
 	prepareModel(model, false)
+	local emin, emax = serverBox(model, box, checkShape)
+	local loose = false
+	if not emin or not emax then
+		local info = MapBuilder.current
+		if info then
+			emin, emax, loose = info.boundsMin, info.boundsMax, true
+		end
+	end
+	if emin and emax then
+		alignModel(model, emin, emax, loose)
+	end
 	model.Name = "RoomModel"
 	model.Parent = room
 	room:SetAttribute("HasModel", true)
+	MapBuilder.setUnlit(true)
+	return model
 end
 
--- A textured room with no block map (map fetch failed): the meshes are the collision.
-function MapBuilder.buildFromModel(sceneId: string, name: string, model: Instance): RoomInfo?
+-- A textured room with no block map (map fetch failed): the meshes are the collision. `frame` is the server's model
+-- details (walkBounds, spawn, spawnYaw); `box` the server's own box for this model, to align it on, when known
+-- (`checkShape`: see serverBox).
+function MapBuilder.buildFromModel(sceneId: string, name: string, container: Instance, frame: any?, box: any?,
+	checkShape: boolean?): RoomInfo?
 	generation += 1
+	local model = asModel(container)
 	prepareModel(model, true)
-	local cf, size
-	if model:IsA("Model") then
-		cf, size = model:GetBoundingBox()
-	else
-		local tmp = Instance.new("Model")
-		for _, c in model:GetChildren() do
-			c.Parent = tmp
-		end
-		cf, size = tmp:GetBoundingBox()
-		for _, c in tmp:GetChildren() do
-			c.Parent = model
-		end
+	local emin, emax = serverBox(model, box, checkShape)
+	if emin and emax then
+		alignModel(model, emin, emax, false)
 	end
-	local half = size / 2
-	local mn, mx = cf.Position - half, cf.Position + half
+	local mn, mx = partsBox(model)
+	if not mn or not mx then
+		mn, mx = Vector3.new(-15, 0, -15), Vector3.new(15, 10, 15)
+	end
+	local f = if type(frame) == "table" then frame else {}
 	local spawnAttr = model:GetAttribute("Spawn")
+	local fs = f.spawn
+	local spawn = if typeof(spawnAttr) == "Vector3"
+		then spawnAttr
+		elseif type(fs) == "table" and tonumber(fs[1]) and tonumber(fs[3])
+		then Vector3.new(tonumber(fs[1]) :: number, tonumber(fs[2]) or 0, tonumber(fs[3]) :: number)
+		else Vector3.new((mn.X + mx.X) / 2, if emin then 0 else mn.Y, (mn.Z + mx.Z) / 2)
+	local wmin, wmax = parseBox(f.walkBounds)
 	local info: RoomInfo = {
 		sceneId = sceneId,
 		name = name,
-		spawn = if typeof(spawnAttr) == "Vector3" then spawnAttr else Vector3.new(cf.Position.X, mn.Y, cf.Position.Z),
+		spawn = spawn,
+		spawnYaw = tonumber(f.spawnYaw),
+		walkMin = if wmin then Vector3.new(wmin.X, mn.Y, wmin.Z) else nil,
+		walkMax = if wmax then Vector3.new(wmax.X, mx.Y, wmax.Z) else nil,
 		boundsMin = mn,
 		boundsMax = mx,
 		ceilingY = mx.Y,
-		studsPerMeter = model:GetAttribute("StudsPerMeter") or 3.57,
+		studsPerMeter = model:GetAttribute("StudsPerMeter") or tonumber(f.studsPerMeter) or 3.57,
 		count = #model:GetDescendants(),
 	}
 	local folder = newFolder(info)
@@ -283,9 +558,21 @@ function MapBuilder.buildFromModel(sceneId: string, name: string, model: Instanc
 	model.Parent = folder
 	folder:SetAttribute("HasModel", true)
 	addBounds(folder, info)
+	MapBuilder.setUnlit(true)
 	MapBuilder.current = info
 	print("[DejaView] loaded room model for", sceneId, "(no block map)")
 	return info
+end
+
+-- No room (everyone back in the lobby): removes Workspace.Room and puts the normal lighting back.
+function MapBuilder.clear()
+	generation += 1
+	local old = workspace:FindFirstChild("Room")
+	if old then
+		old:Destroy()
+	end
+	MapBuilder.current = nil
+	MapBuilder.setUnlit(false)
 end
 
 function MapBuilder.hasBaked(sceneId: string): boolean
@@ -318,6 +605,7 @@ function MapBuilder.buildBaked(sceneId: string): RoomInfo?
 		studsPerMeter = folder:GetAttribute("StudsPerMeter") or 3.57,
 		count = folder:GetAttribute("Count") or #folder:GetChildren(),
 	}
+	MapBuilder.setUnlit(folder:GetAttribute("HasModel") == true)
 	print("[DejaView] loaded baked room", sceneId)
 	MapBuilder.current = info
 	return info

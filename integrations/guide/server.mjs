@@ -7,6 +7,8 @@ import { loadCache, saveCache } from './cache.mjs';
 
 const port = Number(process.env.PORT || 8795);
 const MAX_BODY = 15 * 1024 * 1024;
+const MAX_FRAMES = 8;
+const IMAGE_URL = /^data:image\/[^;,]+(?:;[^,]+)?;base64,[a-z0-9+/=\r\n]+$/i;
 const started = Date.now();
 const narrateCache = new Map();
 const hotspotCache = new Map();
@@ -22,7 +24,14 @@ async function readJson(req) {
   for await (const chunk of req) { size += chunk.length; if (size > MAX_BODY) fail('too large', 413); chunks.push(chunk); }
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch { fail('body must be valid JSON'); }
 }
-function image(value) { if (!value) fail('image required'); if (!/^data:image\/[^;,]+(?:;[^,]+)?;base64,[a-z0-9+/=\r\n]+$/i.test(value)) fail('image must be a base64 data URL'); return value; }
+function image(value) { if (!value) fail('image required'); if (!IMAGE_URL.test(value)) fail('image must be a base64 data URL'); return value; }
+// Up to 8 frames from a clip, in order. A longer list keeps 8 evenly spaced ones, first and last included.
+function frames(value) {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || !value.every((frame) => typeof frame === 'string' && IMAGE_URL.test(frame))) fail('frames must be an array of base64 image data URLs');
+  if (value.length <= MAX_FRAMES) return value;
+  return Array.from({ length: MAX_FRAMES }, (_, index) => value[Math.round(index * (value.length - 1) / (MAX_FRAMES - 1))]);
+}
 function audio(value) { if (!/^data:audio\/[^;,]+(?:;[^,]+)?;base64,[a-z0-9+/=\r\n]+$/i.test(value || '')) fail('audio must be a base64 data URL'); return value; }
 function cacheKey(scene, value) { return `${scene?.id || 'anonymous'}:${hash(value)}`; }
 
@@ -39,12 +48,17 @@ async function staticFile(req, res) {
   return true;
 }
 
-createServer(async (req, res) => {
+export const server = createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/health') return send(res, 200, { ok: true, ...geminiHealth(), uptimeS: Math.floor((Date.now() - started) / 1000) });
   if (!secure(req, res)) return;
   if (req.method === 'GET' && (req.url === '/' || req.url.startsWith('/public/'))) return staticFile(req, res);
   if (req.method !== 'POST') return send(res, 404, { error: 'Not found' });
-  if (req.url === '/describe') return endpoint(req, res, async ({ image: rawImage }) => describe(image(rawImage)));
+  if (req.url === '/describe') return endpoint(req, res, async ({ image: rawImage, frames: rawFrames, scene }) => {
+    const clip = frames(rawFrames);
+    if (!clip.length) return describe(image(rawImage));
+    if (rawImage) image(rawImage);
+    return describe(rawImage, { frames: clip, scene: typeof scene === 'string' ? { id: scene } : (scene && typeof scene === 'object' ? scene : {}) });
+  });
   if (req.url === '/hotspots') return endpoint(req, res, async ({ image: rawImage, scene = {} }) => {
     const validImage = image(rawImage); const key = cacheKey(scene, validImage);
     const cached = hotspotCache.get(key) || await loadCache('hotspots', key);

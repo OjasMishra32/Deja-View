@@ -104,7 +104,7 @@ Our own footage leads; Fortnite comes second.
 | --- | --- | --- |
 | 0:00 | Host: "We had a game night. Seb skipped it. He's about to find out what he missed." Seb drops the clip into his DeepSpace app from the table iPhone | Demo mode recognises the clip and replies at once with the thumbnail, the world link, the Roblox link and the map link |
 | 0:15 | The judge puts on the Quest and is inside the game-night memory: the room, the team in 3D, the upset, the yelling, with sound | Déjà View viewer, Video |
-| 0:40 | Floating labels pin onto the screen, the controllers, the snacks. The judge looks at the screen and asks "who won?" The room answers out loud | Gemini `/hotspots`, `/ask` (audio in, speech out) |
+| 0:40 | Floating labels pin onto the foosball table, the ping pong table, the chairs. The judge looks at the game and asks "who won?" The room answers out loud | Gemini `/hotspots`, `/ask` (audio in, speech out) |
 | 1:00 | Host flips the reality check: the AI-imagined parts of the room tint | Reality check (Vobile) |
 | 1:10 | Host: "and every photo is also a game." The host drops the judge into the Fortnite world; Shivin and Brianna join that same world in Roblox (a phone and a laptop) and play tag with the judge (the judge is "it"; rounds are 90 s, set to 25 s for the skit so it ends at about 1:40) | Roblox presence relay, tag events |
 | 1:40 | On the table laptop, the DeepSpace map shows everyone moving live with trails. Brianna clicks a spot on the map and types "Seb would have dropped here first." It pops up in the headset as a sticky note | DeepSpace realtime, notes |

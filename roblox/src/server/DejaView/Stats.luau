@@ -17,7 +17,7 @@ Stats.BADGES = {
 	memory = "Walked into a memory",
 	judge = "Tag with the judge",
 	checkmate = "Checkmate",
-	court = "21 at the court",
+	court = "21 at the Game Lawn",
 }
 
 local profileStore: DataStore? = nil

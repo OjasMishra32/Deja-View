@@ -51,6 +51,9 @@ export const CONTRACT = {
   guideTimeoutMs: { describe: 5000, hotspots: 15000, narrate: 10000, ask: 10000, health: 2000 },
 } as const;
 
+/** /describe for a Video memory (frames from the clip): grabbing the frames and the answer share this budget. */
+export const DESCRIBE_CLIP_TIMEOUT_MS = 12_000;
+
 export type GuideEndpoint = 'describe' | 'hotspots' | 'narrate' | 'ask';
 
 export interface DeepSpaceConfig {
@@ -70,7 +73,10 @@ export interface DeepSpaceConfig {
 export interface GuideConfig {
   url: string | null;
   key: string | null;
-  timeouts: Record<GuideEndpoint | 'health', number>;
+  timeouts: Record<GuideEndpoint | 'health', number> & {
+    /** /describe with a clip's frames, frame grabbing included. Default DESCRIBE_CLIP_TIMEOUT_MS. */
+    describeClip?: number;
+  };
   /** Whole JSON body from the headset. The guide itself accepts 15 MB. */
   maxBodyBytes: number;
   /** One image data URL (the headset sends about 50 to 200 KB). */
@@ -140,6 +146,7 @@ export function integrationsConfigFromEnv(env: Env = process.env): IntegrationsC
       key: secret(env.GUIDE_KEY),
       timeouts: {
         describe: num(env.GUIDE_DESCRIBE_TIMEOUT_MS, t.describe, 500, 30_000),
+        describeClip: num(env.GUIDE_DESCRIBE_CLIP_TIMEOUT_MS, DESCRIBE_CLIP_TIMEOUT_MS, 1000, 60_000),
         hotspots: num(env.GUIDE_HOTSPOTS_TIMEOUT_MS, t.hotspots, 500, 60_000),
         narrate: num(env.GUIDE_NARRATE_TIMEOUT_MS, t.narrate, 500, 60_000),
         ask: num(env.GUIDE_ASK_TIMEOUT_MS, t.ask, 500, 60_000),

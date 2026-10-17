@@ -8,6 +8,48 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 11 (Sat ~5:30 AM): a real floor, and the model lines itself up. Pull, sync, test the court, publish.**
+> **Changed in the game code on `main`** (MapBuilder, Rooms, Presence, Config, one line in Main; no new files). It has
+> not been compiled or run in Studio yet (no Luau toolchain on Ojasva's Mac), so you are the first: post any Output
+> error in the team chat.
+> - **Floor:** an invisible `Room.Bounds.Floor` slab, top exactly at y = 0, 2 studs thick, under the walk box and the
+>   spawn plus 4 studs. `SafetyFloor` moved down to y = -8 (lower if the room goes lower) and `Config.FALL_Y` is now -4,
+>   so anyone who drops onto it goes back to spawn. The walls sit on the walk box.
+> - **Model alignment:** the loaded model is turned, scaled and moved until its box matches `/model` `bounds`. Uploaded
+>   models always; Studio imports (`ServerStorage.Rooms`) only when their shape matches that box within 3%, else
+>   loosely on the block map and only when clearly off. Multi-part models load every part and line each one up on its
+>   own `parts[i].bounds`. Limits: a 180-degree turn can't be seen from a box, and a quarter turn is always fixed as +90.
+> - **Closed rooms:** a JSON 404 from our server for the map (room archived or deleted) shows "That room was closed"
+>   and moves everyone to `the-courts` (`Config.DEFAULT_SCENE`; to the lobby, once, if that is gone too). A presence
+>   404 no longer shows "Reconnecting".
+> - **Lighting:** Update 10's unlit setup and part materials are in MapBuilder: on while a textured room is loaded, the
+>   old lighting back for block rooms and the lobby. Lighting is global, so the lobby is unlit while a textured room
+>   is loaded.
+>
+> **New server fields** (studs, map frame; `contracts.md` 6.2 and 6.2b): `/map` adds `walkBounds`; `/model` adds
+> `bounds` (+ `boundsSource`), `parts[i].bounds`, `walkBounds`, `floorY: 0` (the scene-frame floor is now
+> `sceneFloorY`), `studsPerMeter`, `spawn`. They show on the public link after Ojasva restarts the live server (he
+> posts it); until then the walls fall back to the captured blocks. `the-courts`: `walkBounds` min (-22.74, 0, -36.69),
+> max (24.82, 15.5, 13.32), spawn (-4.65, 0, -5.27).
+>
+> **Your steps:**
+> 1. Pull `main`, `rojo serve roblox/default.project.json`, sync with the Rojo plugin. Check `ServerScriptService.DejaView`
+>    (MapBuilder, Rooms, Presence, Config) and `Main` are updated.
+> 2. Delete `ServerStorage.Rooms.<id>` for every world whose `/model` returns an `assetId` (a Studio import always wins
+>    over the uploaded model); `the-courts` as soon as its model lands.
+> 3. After the restart, play-test `the-courts`: spawn on the floor, walk to every edge (the walls hold you), jump on the
+>    tables, nothing falls through. With a model loaded, show the collision blocks (Play, switch to the server view,
+>    command bar: `for _, p in workspace.Room:GetChildren() do if p:IsA("BasePart") then p.Transparency = 0.6 end end`)
+>    and check the model sits on them. Output should say `loaded uploaded room model ...` and
+>    `room model aligned on the model box: scale ..., turned ..., offset ...`. To test closing, ask Ojasva to archive a
+>    spare room while you are in it: the toast shows and everyone lands at the court.
+> 4. File → Publish to Roblox.
+>
+> **Judge only** `the-courts`, `chess-room`, `kitchen`, `tilted-towers`, `brick-apartment`; the old `fortnite-*` rooms are
+> retired. `the-courts` has no textured model yet. The version 2 models (textures projected from the real photos, sky
+> boxes) come from the server as each one finishes and need no code from you beyond Update 10: its lighting part is
+> done above; the sky faces (`sky` → `Lighting.Sky`) are still yours.
+
 > **Update 10 (Sat ~5:05 AM): make the textured rooms look like the splat viewer. Do this first (15 min).**
 > The model's textures already contain the real lighting from the photos; Roblox lights them again, so they look dark
 > and plasticky. Make Roblox show the texture colours as they are, while a room is loaded:
