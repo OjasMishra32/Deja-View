@@ -6,6 +6,17 @@ local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 
+-- Roblox's chat window and its system notices sit at the bottom left, clear of the room title and our buttons.
+task.spawn(function()
+	local chat = game:GetService("TextChatService"):WaitForChild("ChatWindowConfiguration", 10)
+	if chat then
+		pcall(function()
+			(chat :: any).VerticalAlignment = Enum.VerticalAlignment.Bottom;
+			(chat :: any).HorizontalAlignment = Enum.HorizontalAlignment.Left
+		end)
+	end
+end)
+
 local Modules = script.Parent:WaitForChild("Modules")
 local Ui = require(Modules.Ui)
 local Board = require(Modules.Board)
@@ -105,7 +116,8 @@ end
 local bigScreen = false
 
 -- Phones start with the host panel folded away so it doesn't cover the joystick.
-local hostOpen = not UserInputService.TouchEnabled or UserInputService.KeyboardEnabled
+-- the host menu starts closed (HOST opens it), so the room is what you see first
+local hostOpen = false
 local bootDone = false
 local function refresh()
 	local phase = W("Phase") or "lobby"

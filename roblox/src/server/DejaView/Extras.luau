@@ -97,24 +97,23 @@ local function buildLabels()
 	for i, l in labels do
 		local p = anchorPart("Label" .. i, l.pos, f)
 		p:SetAttribute("Label", l.label)
+		-- a small pill with the name only, seen from nearby and hidden behind walls, so labels never pile up
 		local gui = Theme.make("BillboardGui", {
-			Size = UDim2.fromOffset(220, 64),
-			StudsOffset = Vector3.new(0, 1.2, 0),
-			AlwaysOnTop = true,
+			Size = UDim2.fromOffset(168, 30),
+			StudsOffset = Vector3.new(0, 1.0, 0),
+			AlwaysOnTop = false,
 			LightInfluence = 0,
-			MaxDistance = 140,
+			MaxDistance = 40,
 			Parent = p,
 		})
 		local card = Theme.make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = Theme.Bg,
-			BackgroundTransparency = 0.1, Parent = gui }, { Theme.corner(12), Theme.stroke(Theme.Accent, 1.5) })
+			BackgroundTransparency = 0.25, Parent = gui }, { Theme.corner(15), Theme.stroke(Theme.Accent, 1) })
 		Theme.label({ Name = "Title", Text = string.upper(l.label), FontFace = Theme.Heading, TextColor3 = Theme.Accent,
-			Size = UDim2.new(1, -16, 0.55, 0), Position = UDim2.fromOffset(8, 4), MaxText = 22, Parent = card })
-		Theme.label({ Text = l.blurb, TextColor3 = Theme.Text, Size = UDim2.new(1, -16, 0.38, 0),
-			Position = UDim2.new(0, 8, 0.55, 0), MaxText = 15, Parent = card })
+			Size = UDim2.new(1, -16, 1, -6), Position = UDim2.fromOffset(8, 3), MaxText = 16, Parent = card })
 		-- a small lime dot marks the exact spot
 		local dot = anchorPart("Dot", l.pos, p)
 		dot.Shape = Enum.PartType.Ball
-		dot.Size = Vector3.new(0.6, 0.6, 0.6)
+		dot.Size = Vector3.new(0.35, 0.35, 0.35)
 		dot.Material = Enum.Material.Neon
 		dot.Color = Theme.Accent
 		dot.Transparency = 0.1

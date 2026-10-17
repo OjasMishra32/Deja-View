@@ -191,8 +191,9 @@ local function buildTable(tableCf: CFrame, length: number, width: number, visibl
 	anchor.CFrame = frame * CFrame.new(0, 3.1, 0)
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "Scoreboard"
-	gui.Size = UDim2.fromOffset(420, 96)
-	gui.AlwaysOnTop = true
+	gui.Size = UDim2.fromOffset(360, 80)
+	gui.AlwaysOnTop = false
+	gui.MaxDistance = 60
 	gui.Parent = anchor
 	board = Instance.new("TextLabel")
 	board.Size = UDim2.fromScale(1, 1)
@@ -208,8 +209,9 @@ local function buildTable(tableCf: CFrame, length: number, width: number, visibl
 
 	local signGui = Instance.new("BillboardGui")
 	signGui.Name = "RealPingPongSign"
-	signGui.Size = UDim2.fromOffset(360, 72)
-	signGui.AlwaysOnTop = true
+	signGui.Size = UDim2.fromOffset(300, 56)
+	signGui.AlwaysOnTop = false
+	signGui.MaxDistance = 45
 	-- above the scoreboard (same anchor), so the two never draw over each other
 	signGui.StudsOffset = Vector3.new(0, 3.2, 0)
 	signGui.Parent = anchor
@@ -217,7 +219,7 @@ local function buildTable(tableCf: CFrame, length: number, width: number, visibl
 	sign.Size = UDim2.fromScale(1, 1)
 	sign.BackgroundTransparency = 1
 	sign.Font = Enum.Font.GothamBlack
-	sign.TextSize = 26
+	sign.TextSize = 20
 	sign.TextColor3 = Color3.fromRGB(0, 122, 255)
 	sign.TextStrokeTransparency = 0.2
 	sign.Text = "REAL PING PONG\nhold to charge, release to hit"
