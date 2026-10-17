@@ -21,6 +21,9 @@ local UNLIT = {
 }
 
 local function setSky(room: Instance?)
+	if sky and room and sky.Parent and sky.SkyboxFt == (room:GetAttribute("SkyFt") or "") then
+		return -- same world, same sky
+	end
 	if sky then
 		sky:Destroy()
 		sky = nil
@@ -40,6 +43,7 @@ local function setSky(room: Instance?)
 	s.StarCount = 0
 	s.Parent = Lighting
 	sky = s
+	print("[RoomLook] world skybox on")
 end
 
 local function enter(room: Instance)
@@ -62,6 +66,7 @@ local function enter(room: Instance)
 		for k, v in UNLIT do
 			(Lighting :: any)[k] = v
 		end
+		print("[RoomLook] unlit textured room look on")
 	end
 	setSky(room)
 end
