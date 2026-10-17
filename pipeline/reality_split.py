@@ -221,6 +221,24 @@ def reference_depth(splats_viewer: sio.Splats, cam: InputCamera, long_side: int 
     return d, "input_depth"
 
 
+def project_points(means_viewer: np.ndarray, cam: InputCamera) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Pinhole projection into `cam` pixels. Returns (u, v, z, in_front), z positive along the view axis.
+
+    Pixels use the same convention as InputCamera: pixel i spans [i, i + 1), and u = width is off the right edge.
+    `in_front` only excludes points at or behind the near plane; callers apply their own crop and depth test.
+    """
+    P = np.asarray(means_viewer, np.float64)
+    w2c = np.linalg.inv(cam.c2w)
+    pc = P @ w2c[:3, :3].T + w2c[:3, 3]
+    z = -pc[:, 2]
+    in_front = np.isfinite(z) & (z > NEAR)
+    zs = np.where(in_front, z, 1.0)
+    u = cam.cx + cam.fx * pc[:, 0] / zs
+    v = cam.cy - cam.fy * pc[:, 1] / zs
+    in_front &= np.isfinite(u) & np.isfinite(v)
+    return u, v, z, in_front
+
+
 def classify_seen(
     means_viewer: np.ndarray,
     cam: InputCamera,
@@ -230,21 +248,14 @@ def classify_seen(
     use_crop: bool = True,
 ) -> np.ndarray:
     """Boolean mask: True where the splat centre is SEEN by `cam` given the reference `depth` (covering the image)."""
-    P = np.asarray(means_viewer, np.float64)
-    w2c = np.linalg.inv(cam.c2w)
-    pc = P @ w2c[:3, :3].T + w2c[:3, 3]
-    z = -pc[:, 2]
-    ok = np.isfinite(z) & (z > NEAR)
-    zs = np.where(ok, z, 1.0)
-    u = cam.cx + cam.fx * pc[:, 0] / zs
-    v = cam.cy - cam.fy * pc[:, 1] / zs
+    u, v, z, ok = project_points(means_viewer, cam)
     x0, y0, x1, y1 = 0.0, 0.0, float(cam.width), float(cam.height)
     if use_crop and cam.crop:
         x0 = float(cam.crop.get("x", 0))
         y0 = float(cam.crop.get("y", 0))
         x1 = x0 + float(cam.crop.get("w", cam.width))
         y1 = y0 + float(cam.crop.get("h", cam.height))
-    ok &= (u >= x0) & (u < x1) & (v >= y0) & (v < y1) & np.isfinite(u) & np.isfinite(v)
+    ok &= (u >= x0) & (u < x1) & (v >= y0) & (v < y1)
     dh, dw = depth.shape
     col = np.clip(np.floor(np.where(ok, u, 0) * dw / cam.width), 0, dw - 1).astype(np.int64)
     row = np.clip(np.floor(np.where(ok, v, 0) * dh / cam.height), 0, dh - 1).astype(np.int64)

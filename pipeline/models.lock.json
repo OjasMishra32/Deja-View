@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "note": "Pinned model revisions for the object layer. Weights are never committed; download them by revision.",
+  "models": [
+    {
+      "id": "facebook/sam2.1-hiera-large",
+      "revision": "665f8e2ad61cf5f53d65644ff27c8ee525124610",
+      "license": "apache-2.0",
+      "use": "class-agnostic masks for objects and object parts (GPU)",
+      "loader": "transformers Sam2Model / Sam2Processor"
+    },
+    {
+      "id": "facebook/sam2.1-hiera-small",
+      "revision": "ee5bba1d82bb8749febdf90f45e84b687142ba03",
+      "license": "apache-2.0",
+      "use": "class-agnostic masks on CPU and for tests",
+      "loader": "transformers Sam2Model / Sam2Processor"
+    },
+    {
+      "id": "IDEA-Research/grounding-dino-tiny",
+      "revision": "a2bb814dd30d776dcf7e30523b00659f4f141c71",
+      "license": "apache-2.0",
+      "use": "text prompts to boxes for the object vocabulary",
+      "loader": "transformers GroundingDinoForObjectDetection"
+    },
+    {
+      "id": "microsoft/TRELLIS-image-large",
+      "revision": "25e0d31ffbebe4b5a97464dd851910efc3002d96",
+      "license": "mit",
+      "use": "optional image-to-3D replacement props",
+      "loader": "trellis pipeline"
+    }
+  ]
+}

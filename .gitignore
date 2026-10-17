@@ -11,3 +11,6 @@ __pycache__/
 .context/
 graphify-out/
 .pi/
+
+# model weights are downloaded at setup, never committed
+pipeline/models/
