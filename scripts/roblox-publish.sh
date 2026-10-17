@@ -36,3 +36,12 @@ done
 sed -e 's/[A-Za-z0-9._-]\{40,\}/<redacted>/g' /tmp/roblox-publish.out
 [[ "$code" == 200 ]] || exit 1
 echo "published: https://www.roblox.com/games/$PLACE"
+
+# Running servers keep the old scripts until they stop; restart the universe so new joins get this build.
+rcode="$(curl -sS --max-time 60 -o /tmp/roblox-restart.out -w '%{http_code}' \
+  -X POST "https://apis.roblox.com/cloud/v2/universes/$UNIVERSE:restartServers" \
+  -H "x-api-key: $KEY" -H 'content-type: application/json' -d '{}')"
+echo "restart servers: http $rcode"
+if [[ "$rcode" != 200 ]]; then
+  sed -e 's/[A-Za-z0-9._-]\{40,\}/<redacted>/g' /tmp/roblox-restart.out
+fi
