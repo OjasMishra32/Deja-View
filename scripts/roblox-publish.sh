@@ -21,6 +21,12 @@ echo "building $OUT"
 "$ROJO" build "$ROOT/roblox" -o "$OUT" >/dev/null
 
 KEY="$(tr -d '\r\n' < "$KEY_FILE")"
+# Asset uploads need an assets:write key. Keep it separate from the place publish key.
+ASSET_KEY_FILE="${ROBLOX_ASSET_KEY_FILE:-$HOME/.config/dejaview/roblox-assets.key}"
+ASSET_KEY="$KEY"
+if [[ -s "$ASSET_KEY_FILE" ]]; then
+	ASSET_KEY="$(tr -d '\r\n' < "$ASSET_KEY_FILE")"
+fi
 if [[ "${1:-}" == "--upload-object" ]]; then
 	FILE="${2:-}"
 	NAME="${3:-DejaView object}"
@@ -51,7 +57,7 @@ PY
 	echo "uploading $(du -h "$FILE" | cut -f1) as asset for creator $CREATOR"
 	CODE="$(curl -sS --max-time 180 -o /tmp/object-upload.json -w '%{http_code}' \
 		-X POST https://apis.roblox.com/assets/v1/assets \
-		-H "x-api-key: $KEY" \
+		-H "x-api-key: $ASSET_KEY" \
 		-F "request=$REQ;type=application/json" \
 		-F "fileContent=@$FILE;type=model/gltf-binary")"
 	echo "upload request: http $CODE"
@@ -63,7 +69,7 @@ PY
 	[[ -n "$OP" ]] || { echo "no operation id"; exit 1; }
 	for attempt in $(seq 1 60); do
 		sleep 2
-		curl -sS --max-time 30 -o /tmp/object-op.json -H "x-api-key: $KEY" "https://apis.roblox.com/assets/v1/operations/$OP"
+		curl -sS --max-time 30 -o /tmp/object-op.json -H "x-api-key: $ASSET_KEY" "https://apis.roblox.com/assets/v1/operations/$OP"
 		DONE="$(python3 -c 'import json; d=json.load(open("/tmp/object-op.json")); print(1 if d.get("done") else 0)')"
 		if [[ "$DONE" == "1" ]]; then break; fi
 	done
