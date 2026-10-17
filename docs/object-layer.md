@@ -1,7 +1,8 @@
 # The object layer, splats, and what can actually reach Roblox
 
 Status: design note for `seb/object-layer`. It records the decisions and the survey
-behind them. The first code slice is `pipeline/objects/lift.py`.
+behind them. The direction log is `docs/vision.md`. The first code slice is
+`pipeline/objects/lift.py`.
 
 ## 1. Short verdict
 
@@ -83,23 +84,28 @@ Model revisions are pinned in `pipeline/models.lock.json`.
 
 ## 5. What we deliberately do not borrow
 
-These are good research, but their licenses or dependencies make them a poor base
-for something we might ship.
+These are good research. This project is not commercial, so their licenses are not a
+hard blocker. We are still not vendoring them now: the 3DGS mesh variants are heavy
+CUDA builds, and the unlicensed projects cannot be redistributed in the repo. If the
+bake needs more quality later, we can run SuGaR or 2DGS as an external tool from a
+separate environment.
 
-| Project | Issue |
+| Project | Why not vendored now |
 |---|---|
-| `Anttwo/SuGaR` | No clear license. Built on the original 3DGS code, which is non-commercial |
-| `hbb1/2d-gaussian-splatting` | No clear license. Same 3DGS lineage |
-| `autonomousvision/gaussian-opacity-fields` | No clear license. Same 3DGS lineage |
-| `lkeab/gaussian-grouping` | Apache code, but the 3DGS dependency is non-commercial and the build is heavy |
+| `Anttwo/SuGaR` | No clear license, so it cannot be redistributed. Heavy CUDA build |
+| `hbb1/2d-gaussian-splatting` | No clear license, same 3DGS lineage and build |
+| `autonomousvision/gaussian-opacity-fields` | No clear license, same 3DGS lineage and build |
+| `lkeab/gaussian-grouping` | Apache code, but the 3DGS dependency and CUDA extensions are heavy |
 | `Jumpat/SegAnyGAussians` | Apache code, same 3DGS dependency and CUDA build |
 | `florinshen/FlashSplat` | No clear license |
-| `apple-aiml-research/ml-hugs` | No clear license. Research use only |
+| `apple-aiml-research/ml-hugs` | No clear license, research use only |
 | `ReshotAI/gaussian-splatting-blender-addon` | No license file |
 
 The original 3DGS reference implementation is non-commercial. `gsplat` is a
-permissive reimplementation, which is why it is in the pipeline. A commercial
-release still needs a license review of the trained assets and the method.
+permissive reimplementation, which is why it is in the pipeline. This project is not
+commercial, so the research licenses are allowed. The rule that remains is practical:
+do not copy code we cannot redistribute, and do not make the build depend on a CUDA
+extension we cannot install reproducibly.
 
 ## 6. The object layer
 
