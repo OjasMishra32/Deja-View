@@ -18,7 +18,7 @@ ObjectFixtures.kitchen = {
 			size = { 3.23, 5.883, 3.684 },
 			yaw = 0,
 			shape = "box",
-			color = { 104, 93, 87 },
+			color = { 204, 195, 189 },
 			parts = {},
 			source = { splats = 9085, views = 5, detections = 5, score = 0.8445 },
 		},

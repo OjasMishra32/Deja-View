@@ -15,7 +15,7 @@ end
 check("kitchen has a fallback", ObjectFixtures.kitchen ~= nil)
 local plan = ObjectLayout.plan(ObjectFixtures.kitchen, { inflate = 0.15 })
 check("one fridge is planned", #plan.objects == 1, `n={#plan.objects}`)
-check("the fridge is white", plan.objects[1].color[1] == 245 and plan.objects[1].color[3] == 242)
+check("the fridge keeps its stainless colour", plan.objects[1].color[1] == 204 and plan.objects[1].color[3] == 189)
 check(
 	"the fridge is about 1.65 m tall",
 	math.abs(plan.objects[1].size[2] - 6.183) < 0.01,

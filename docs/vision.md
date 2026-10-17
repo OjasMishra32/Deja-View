@@ -22,7 +22,8 @@ rest of the ideas possible.
 2. Make the Roblox games, the website, and VR compatible where that is possible.
 3. Build object identities, not just scene reconstruction, so a fridge is a fridge.
 4. Use those objects to simplify and reskin the rough scan into clean shapes and
-   flat colors: a white fridge with colored handles, not a cloud of splats.
+   flat colors that keep the real material: this kitchen's fridge is stainless, so
+   the proxy is a light warm grey, not white. Handles come next.
 5. Add styles: flat or cartoon first, then retro, dark, and gamified.
 6. Put people in the room as NPCs, including a literal Ojas avatar as the ping pong
    bot.
@@ -88,8 +89,9 @@ Schema and field rules live in `docs/object-layer.md` section 6.
 
 ## 6. Styling
 
-One style spec drives both renderers. The first style is `flat`: solid body colors,
-dark handles, no texture noise. The same `objects.json` can then be rendered as
+One style spec drives both renderers. The first style is `flat`: one solid body colour taken from the
+scan's dominant lit cluster, dark handles, no texture noise. A label palette can be
+a deliberate theme, but it is not the default: the real fridge is stainless, not white. The same `objects.json` can then be rendered as
 `cartoon`, `retro`, or `dark` with a palette and material change.
 
 Splat stylization is a later experiment. Object-level styling is cleaner, faster, and
