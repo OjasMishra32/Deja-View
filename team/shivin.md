@@ -8,6 +8,24 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 3 (Sat ~3 AM): your Update 2 work is merged, thanks. What is next for you:**
+> 1. **The worlds are changing:** the four rebuilt worlds (real footage, every angle; walking limited to where the camera went): **`tilted-towers`**
+> (outdoor town centre), **`brick-apartment`** (the Brick House apartment), **`the-courts`** (our table-tennis and
+> foosball patio, from 25 photos), **`chess-room`** (the giant-chess lounge). The two video memories, **`courts-foosball`**
+> and **`chess-match`**, put the people from our clips into those places as full 3D people you can walk around, even
+> paused. Only the four worlds go in your picker (the video memories are filtered
+>    out already). Their `.glb` files and `model` details come as each one finishes training (the court first, Saturday
+>    morning); Ojasva posts each in the team chat. Import each into `ServerStorage/Rooms/<sceneId>` with those exact ids.
+>    New worlds after that upload themselves with your key (it is set on the server).
+> 2. **Public link:** as soon as Ojasva posts it (after the server wiring lands), set `dejaview_base` and the
+>    `dejaview_key` secret, `use_mock` = false, publish, and run your transport test against it.
+> 3. **Demo:** you and Brianna join the judge in **`tilted-towers`** at 1:10 (tag round). Then the court is the second
+>    "wow": the patio we actually played in, as a Roblox place on a phone.
+> 4. **Quest:** try the published game in the Roblox app on Ojasva's Quest Saturday afternoon (movement, the HUD, tag).
+> 5. **Optional, only if you have time:** the site moved to a clean Apple style; a lighter HUD (white panels, blue
+>    accent) would match it. Your call; it works as it is.
+> 6. **Devpost:** list the Creator Store sounds you use, with credit.
+
 > **Update 2 (Sat ~2 AM): only Photo worlds go to Roblox, and the room becomes the real room.**
 >
 > 1. **Photo worlds only.** A photo or screenshot of a place becomes a Roblox place; a video memory stays in the headset

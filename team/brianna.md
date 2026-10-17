@@ -9,6 +9,20 @@ Everything below was checked against the live Gemini docs and SDK on Fri Oct 16,
 checked, it says so and tells you how to check it. If something here turns out to be wrong on the night, tell Ojasva
 right away and use the fallback listed for it.
 
+> **Update 3 (Sat ~3 AM): what is next for you:**
+> 1. **The worlds are changing:** the four rebuilt worlds (real footage, every angle; walking limited to where the camera went): **`tilted-towers`**
+> (outdoor town centre), **`brick-apartment`** (the Brick House apartment), **`the-courts`** (our table-tennis and
+> foosball patio, from 25 photos), **`chess-room`** (the giant-chess lounge). The two video memories, **`courts-foosball`**
+> and **`chess-match`**, put the people from our clips into those places as full 3D people you can walk around, even
+> paused. Tune `/hotspots` and `/narrate` on these: the court (table-tennis table,
+>    foosball table, chairs), chess (the giant pieces, the board, the TV, the UF banner), Tilted (the clock tower, the
+>    shops), the apartment. Ojasva sends you a screenshot from each world's spawn on Saturday morning.
+> 2. **"Who won?" for a video memory:** `/describe` may now also get `frames` (up to 8 JPEG data URLs from the clip, in
+>    order, next to or instead of `image`). For frames, return a `caption` that says what happens in two sentences: who
+>    is playing what and who wins or is winning. The server stores it on the scene, and your `/ask` gets it back as
+>    `scene.caption`, so "who won?" has a real answer. Keep `image`-only calls exactly as they are.
+> 3. **Devpost:** a short list of every Gemini feature you used and where judges see it, plus the AI tools you used.
+
 > **Update after your pushes (Sat ~2 AM):** your service is merged into `main` (`integrations/guide/`). `/ask` now hears
 > the spoken `audio` and both `/ask` and `/narrate` return `speech`, so the contract is complete. Next: tune answers on
 > real headset views with Ojasva on Saturday (the 0:40 beat: labels on entry, "who won?" answered within 2.5 s).

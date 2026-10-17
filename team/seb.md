@@ -10,6 +10,20 @@ up in the headset) and powers the finale (2:00 to 2:25, the judge's own photo be
 
 ---
 
+**Update 3 (Sat ~3 AM): what is next for you (the update box below still stands):**
+1. **The worlds are changing:** the four rebuilt worlds (real footage, every angle; walking limited to where the camera went): **`tilted-towers`**
+(outdoor town centre), **`brick-apartment`** (the Brick House apartment), **`the-courts`** (our table-tennis and
+foosball patio, from 25 photos), **`chess-room`** (the giant-chess lounge). The two video memories, **`courts-foosball`**
+and **`chess-match`**, put the people from our clips into those places as full 3D people you can walk around, even
+paused. "Add a memory" and your gallery need nothing new: they read
+   `GET /api/scenes` like before.
+2. **The domain's tunnel token:** when you have it, send it to Ojasva privately; the server's tunnel runs with it on
+   the demo Mac.
+3. **Vultr:** the backup worker is ready in the repo (`vultr/README.md`: push, setup, start, point the server at it,
+   destroy after). When your A40 access works, do one practice run with Ojasva Saturday evening, then destroy it.
+4. **Optional, a nice extra for the map:** `GET BASE/api/replay/<sceneId>/heat` (Tiger Data, once Ojasva turns it on)
+   returns person-seconds per floor cell; shading your map's floor with it shows where everyone hung out.
+
 ## Update, Saturday early morning: Photon is out, a domain comes in
 
 This box wins over anything below it. Keep everything you have already built; this only moves time around.

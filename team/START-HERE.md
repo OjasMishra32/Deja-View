@@ -8,6 +8,11 @@ same world is a Roblox place** friends play on the Quest Roblox app or a phone) 
 a room with the real footage standing in it in 3D; headset and browser only, not Roblox). Walk around in a Meta Quest 3S
 or a browser.
 
+**Update 3 (Sat ~3 AM):** the worlds are now four rebuilt from real footage: `tilted-towers`, `brick-apartment`,
+`the-courts` (our ping-pong and foosball patio) and `chess-room`, plus two video memories (`courts-foosball`,
+`chess-match`) with the people in full 3D you can walk around, even paused. Each guide has an Update 3 box with your
+next steps.
+
 **The demo (a short skit, then a live finale):** "We had a game night. Seb skipped it." Seb drops the game-night video into his
 Déjà View memory board (the DeepSpace app), the world comes back, the judge puts on the headset and is standing in it with sound. Gemini
 pins labels on things and answers "who won?" out loud. A reality-check toggle tints what the AI imagined. Shivin and
