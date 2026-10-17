@@ -8,6 +8,22 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 10 (Sat ~5:05 AM): make the textured rooms look like the splat viewer. Do this first (15 min).**
+> The model's textures already contain the real lighting from the photos; Roblox lights them again, so they look dark
+> and plasticky. Make Roblox show the texture colours as they are, while a room is loaded:
+> - `Lighting`: `GlobalShadows = false`, `Ambient = (255,255,255)`, `OutdoorAmbient = (255,255,255)`, `Brightness = 0`,
+>   `EnvironmentDiffuseScale = 0`, `EnvironmentSpecularScale = 0`, `ExposureCompensation = 0` (tune ±0.3 by eye), no
+>   Atmosphere/Bloom/ColorCorrection effects while in a room (restore them in the lobby).
+> - Every model part: `Material = SmoothPlastic`, `Reflectance = 0`, `CastShadow = false`.
+> - Compare against the splat viewer at the same spot (`/view?scene=<id>`): colours should match closely.
+> Also coming from the server (no work for you yet): version 2 room models built from the rebuilt worlds (much cleaner
+> geometry, more detail), plus a 360-degree **skybox** per world rendered from the splat viewer at the spawn: six
+> images uploaded to your account. `GET /api/roblox/<id>/model` will add `sky: {front, back, left, right, up, down}`
+> asset ids; set them on `Lighting.Sky` (`SkyboxFt`, `SkyboxBk`, `SkyboxLf`, `SkyboxRt`, `SkyboxUp`, `SkyboxDn`) while in that
+> room, so far scenery (sky, buildings, palms) looks exactly like the splat viewer and only the nearby room is geometry.
+> Don't judge the look on the old one-screenshot worlds (`fortnite-*`): their geometry falls apart away from the spawn.
+> Judge it on `the-courts` once its version 2 model lands.
+
 > **Update 9 (Sat ~5 AM): Updates 6-8 are merged, amazing. Next: make every world a real, polished game.**
 > 1. **Playable end to end, every world:** join from a phone, a laptop and the Quest Roblox app into `the-courts`,
 >    `chess-room`, `kitchen`, `tilted-towers`, `brick-apartment` (as each lands): spawn on the floor, walls hold you in,
