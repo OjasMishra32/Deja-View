@@ -116,6 +116,7 @@ let loader = null;
 let assets = [];
 let current = null;
 let model = null;
+let loadToken = 0;
 const canvas = document.getElementById('viewer');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -157,15 +158,31 @@ function frame() {
 }
 document.getElementById('reset').onclick = frame;
 
+function disposeScene(root) {
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    o.geometry?.dispose();
+    for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+      if (!m) continue;
+      m.map?.dispose();
+      m.dispose();
+    }
+  });
+}
+
 function loadModel(url) {
   if (!loader) return;
-  if (model) { scene.remove(model); model.traverse(o => { if (o.isMesh) { o.geometry?.dispose(); o.material?.map?.dispose(); o.material?.dispose(); } }); model = null; }
+  const token = ++loadToken;
+  if (model) { scene.remove(model); disposeScene(model); model = null; }
   loader.load(url, (gltf) => {
+    if (token !== loadToken) { disposeScene(gltf.scene); return; }
     model = gltf.scene;
     model.traverse(o => { if (o.isMesh) { o.material.side = THREE.DoubleSide; o.material.needsUpdate = true; } });
     scene.add(model);
     frame();
-  }, undefined, (err) => { document.getElementById('status').textContent = 'Could not load the mesh: ' + err; });
+  }, undefined, (err) => {
+    if (token === loadToken) document.getElementById('status').textContent = 'Could not load the mesh: ' + err;
+  });
 }
 
 function badge(a) {
