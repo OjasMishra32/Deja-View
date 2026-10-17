@@ -8,6 +8,16 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 16 (Sat ~1 PM): Seb takes Roblox over.** Your account can't use Studio, so Seb now owns the experience,
+> the uploads, the asset maker and the censor pass (seb.md Update 8). He starts a new experience on his account,
+> because LoadAssetAsync only loads the creator's own assets. Your handover, today:
+> 1. Push everything Roblox to `shivin/roblox` (the Rojo sources under `roblox/src` and the latest place file), even
+>    half-done work, and tell Seb what is unfinished.
+> 2. Write down in the team chat everything that lives only in Studio or Creator Hub and not in the repo: Experience
+>    Config keys and values, badges, game passes, DataStore names, and any settings you changed by hand.
+> 3. Don't upload, publish or make new Roblox accounts. Don't run the old upload paths with your key.
+> Ojasva will tell you what to pick up next.
+
 > **Update 15 (Sat ~1 PM): commit rule.** No `Co-Authored-By` lines (or any tool attribution) in commit messages
 > from now on, and no timestamps in messages. If your git tool adds a trailer, delete it before you commit. Ojasva will
 > decide what happens to the earlier commits that have one; please don't rewrite or force-push anything yourself. Run

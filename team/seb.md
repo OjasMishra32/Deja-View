@@ -10,6 +10,77 @@ up in the headset) and powers the finale (2:00 to 2:25, the judge's own photo be
 
 ---
 
+**Update 8 (Sat ~1 PM): Roblox is yours now. Shivin is banned from Studio.** You own the experience, every upload,
+the asset maker (the object layer) and the censor pass that every texture goes through before Roblox sees it. This
+update is written so you can hand each task below to a coding agent as is: paste the "Rules for every agent" block,
+then one task. Tasks A, B and C can run in parallel (separate agents, separate branches); D needs C; E needs A.
+
+Rules for every agent (paste this first):
+
+```text
+Repo: Déjà View (this checkout). Work on your own branch (seb/<task>), commit there, push the branch; Ojasva merges.
+Commit messages: plain sentences, no timestamps, no Co-Authored-By or any tool attribution. Run once per clone:
+  git config core.hooksPath .githooks      (its commit-msg hook strips those lines)
+Code: write it yourself. Libraries and models come in only as pinned dependencies, credited in THIRD_PARTY.md. Never
+copy another project's files in, and never name other repositories in code headers or commit messages.
+Secrets: Roblox keys live only in ~/.config/dejaview/roblox-assets.key (chmod 600). Never print, log or commit a key.
+Data: never delete anything under data/; move it to data/archive/ instead.
+Roblox: nothing is uploaded unless pipeline/objects/preflight.py passed AND a human approved that exact file with
+pipeline/objects/review.py (the approval is bound to the file's SHA1). One upload at a time, never in bulk.
+Fortnite-derived worlds (tilted-towers, brick-apartment and any fortnite-*) never go to Roblox: Epic's art.
+BASE (the live server) = the link Ojasva posts in the team chat; today https://highlighted-filter-surf-other.trycloudflare.com
+It changes whenever the tunnel restarts.
+```
+
+**Task A: take the experience over (Studio, your account).**
+- Why: `LoadAssetAsync` only loads assets owned by the experience's creator, so the experience and every room and
+  object asset must belong to the same owner: your account, or a group you own. Shivin's place `106038900865360` and
+  his asset ids (Game Lawn room `91874647541773`, its sky faces, the chess rooms) will not load in your experience.
+- Source of truth is the repo: the Rojo project `roblox/default.project.json` (`roblox/src/{server,client,shared}`)
+  and the latest place file `roblox/DejaView-pingpong-v4.rbxlx`. Create a new experience on your account, open the
+  place file in Studio, sync `roblox/src` with Rojo, publish. Turn on VR (Meta Quest) in the experience settings.
+- Set the Experience Config `dejaview_base` to BASE (Creator Hub; live at once, no publish). The fallback when it is
+  missing is `BASE_FALLBACK` in `roblox/src/server/DejaView/Config.luau`.
+- Done when: a Studio Play test on the Game Lawn shows the block map from `GET BASE/api/roblox/the-courts/map`, your
+  ping pong on the real table (from `features`), and the game's presence posts reaching the server (Ojasva confirms
+  from the log). Post the new place id in the team chat.
+
+**Task B: the asset maker, world by world (our own photo worlds only).**
+- The pipeline is yours already (`docs/object-layer.md` sections 6 to 15): `segment.py` -> `build.py` (objects.json)
+  -> `mesh.py` (one textured GLB per object) -> `preflight.py` -> `review.py` -> `scripts/roblox-upload-assets.sh`.
+- Worlds: `the-courts` (Game Lawn: ping-pong table, foosball table, chairs, benches), `chess-room` (the giant board
+  and pieces), `kitchen` (fridge, counters, stools; it is being rebuilt for the whole room now, so take it last).
+- Room files come from the live server, so no access to Ojasva's Mac is needed:
+  `GET BASE/api/roblox/<id>/model` (JSON: `parts[].url`, `skyFiles`, `features`) and `GET BASE<parts[].url>`.
+- Done when: each world has `objects.json` plus one GLB per object, every GLB under Roblox's limits (20,000 triangles
+  per MeshPart; textures above 1024 px get downscaled), and a contact sheet from `preflight.py` for each.
+
+**Task C: the censor pass (extend `pipeline/objects/preflight.py`).** It catches QR codes and barcodes today. Make it
+catch everything Roblox moderation flags in an image, and mark each hit as blocking or for review:
+1. Text: OCR every texture. Block URLs, emails, phone numbers, handles and promotional words; send any other readable
+   text to review. Pick a pinned, offline OCR (credit it in THIRD_PARTY.md).
+2. Faces: detect people's faces in textures (a real person in a photo is the likeliest one). Block until blurred.
+3. Logos and brand marks: send big high-contrast marks to review (the human decides).
+4. QR and barcodes: keep the current check; a decodable payload blocks.
+5. Fix-ups: `--fix` blurs faces and text regions (or runs the existing `mesh.py --ink` pass on signs and posters),
+   writes a new GLB, and re-runs the scan, so the approval is always for the fixed file.
+6. It must also take a room: `--glb roblox.glb --sky-dir <dir with the six sky faces>` scans every texture atlas of the room
+   and the sky faces (the Game Lawn's sky has real trees and a building; check it for signs).
+- Done when: `python pipeline/objects/preflight.py --glb <file>` prints one line per texture (OK / REVIEW / BLOCK
+  with the reason and a box), writes the contact sheet with hits outlined, and exits non-zero on any BLOCK; tests in
+  `tests/pipeline/` cover a synthetic QR, a URL, a face and a clean texture.
+
+**Task D: the gate for rooms too (needs C).** Today the gate covers objects only.
+- Extend `scripts/roblox-upload-assets.sh` (or a sibling script) to upload a world's room: every room part GLB and
+  the six sky faces, each only with a matching `approval.json`. Upload with your key, as you (or your group).
+- Send Ojasva the new ids per world (room parts and the six sky faces). He swaps them into the server's upload ledger,
+  so `GET BASE/api/roblox/<id>/model` hands your ids to the game. (The server's own uploader stays off.)
+- Done when: the Game Lawn room loads with `LoadAssetAsync` in your experience, with its sky, and a second upload of
+  an unchanged file is refused as already uploaded.
+
+**Task E: the games on the real furniture (needs A).** Your ping pong and foosball are on `main`; pool once the game-room
+pool table is filmed and rebuilt. Chess: `features.chessBoard` comes in `/model` and `/map` for `chess-room`.
+
 **Update 7 (Sat ~9:20 AM): your object layer is merged; one repo rule, and Roblox uploads are paused.**
 - Merged on `main` (b5d7939, a108ef1): objects found in the splats, described, and planned as Roblox parts. Tests pass.
 - Repo rule from Ojasva: models and libraries come in only as pinned dependencies, credited in `THIRD_PARTY.md` and on
