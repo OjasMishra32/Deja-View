@@ -166,9 +166,13 @@ local function buildTable(tableCf: CFrame, length: number, width: number, visibl
 		centre.CFrame = frame * CFrame.new(0, 0.01, 0)
 	end
 
-	net = ensurePart("Net", Vector3.new(Sim.NET_L, Sim.NET_H, 0.05), Color3.fromRGB(235, 235, 235), folder)
-	net.Transparency = 0.15
+	net = ensurePart("Net", Vector3.new(Sim.NET_L, Sim.NET_H, 0.12), Color3.fromRGB(245, 245, 245), folder)
+	net.Material = Enum.Material.Neon
+	net.Transparency = 0.05
 	net.CFrame = frame * CFrame.new(0, Sim.NET_H / 2, 0)
+	local netTop = ensurePart("NetTop", Vector3.new(Sim.NET_L + 0.2, 0.1, 0.16), Color3.fromRGB(255, 60, 40), folder)
+	netTop.Material = Enum.Material.Neon
+	netTop.CFrame = frame * CFrame.new(0, Sim.NET_H, 0)
 
 	ball = Instance.new("Part")
 	ball.Name = "PPBall"
@@ -278,6 +282,28 @@ local function placeForScene(host: Player?, features: any?, cameraLook: Vector3?
 	buildTable(CFrame.new(centre2) * CFrame.Angles(0, math.atan2(look.X, look.Z), 0), Sim.LEN, Sim.WID, true)
 end
 
+-- Power to distance: a soft return still clears the net, half power lands in the far half, full power reaches the
+-- far edge or out from close range. Faster flight as the charge grows, and a lift that guarantees net clearance.
+local function aimedVelocity(p0: Vector3, dirLocal: Vector3, charge: number): Vector3
+	local reach = len * (0.72 + charge * 0.62)
+	local flight = math.clamp(0.55 - charge * 0.33, 0.22, 0.55)
+	local target = p0 + dirLocal * reach
+	if target.Y < Sim.TOP_Y + Sim.BALL_R then
+		target = Vector3.new(target.X, Sim.TOP_Y + Sim.BALL_R, target.Z)
+	end
+	local v = Sim.assistVelocity(p0, target, flight)
+	local tCross = math.abs(p0.Z) / math.max(1, math.abs(v.Z))
+	local yAtNet = p0.Y + v.Y * tCross - 0.5 * Sim.GRAVITY * tCross * tCross
+	local need = Sim.NET_H + Sim.BALL_R + 0.2
+	if yAtNet < need then
+		v = v + Vector3.new(0, (need - yAtNet) / math.max(0.12, tCross), 0)
+	end
+	if v.Magnitude > Sim.MAX_SPEED then
+		v = v.Unit * Sim.MAX_SPEED
+	end
+	return v
+end
+
 local function launch(to: string, p0: Vector3, flight: number, aim: number)
 	state.to = to
 	state.p = p0
@@ -286,6 +312,7 @@ local function launch(to: string, p0: Vector3, flight: number, aim: number)
 	state.serving = false
 	state.lastTouch = state.t
 	state.bounces = 0
+	state.receiverBounces = 0
 	state.shot += 1
 	state.rally = state.rally or 0
 	lastHitter = other(to)
@@ -307,6 +334,7 @@ local function serve(wait: boolean)
 	local p = Sim.servePos(serverSide, len)
 	state.p, state.v, state.t = p, Vector3.zero, now()
 	state.live, state.lastTouch, state.bounces = true, now(), 0
+	state.receiverBounces = 0
 	state.to = serverSide
 	state.serving = true
 	lastHitter, lastBounce = nil, nil
@@ -427,10 +455,20 @@ local function step(dt: number)
 	local ev = Sim.step(state, dt, len, wid)
 	ball.CFrame = frame * CFrame.new(state.p)
 	if ev.table then
-		lastBounce = ev.table
 		state.serveInFlight = false
 		state.lastTouch = state.t
+		local hitter = other(state.to)
+		if ev.table == hitter then
+			point(state.to, "Fault: it did not cross the net")
+			return
+		end
+		lastBounce = ev.table
+		state.receiverBounces = (state.receiverBounces or 0) + 1
 		updateBoard()
+		if state.receiverBounces >= 2 then
+			point(hitter, "Double bounce")
+			return
+		end
 		if ev.table == state.to then
 			botReturn()
 		end
@@ -474,9 +512,13 @@ local function onHit(player: Player, payload: any)
 	if not side or side ~= state.to or state.serving then
 		return
 	end
-	-- the ball must be on their half; a volley there is allowed (friendlier than a strict bounce gate)
-	local onSide = (side == "A" and state.p.Z < 0) or (side == "B" and state.p.Z > 0)
-	if not onSide then
+	-- the ball must bounce on their half first: no volleys, and they must be near it
+	if lastBounce ~= side then
+		return
+	end
+	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	local ballWorld = frame:PointToWorldSpace(state.p)
+	if not hrp or (hrp.Position - ballWorld).Magnitude > 9 then
 		return
 	end
 	if type(payload) ~= "table" then
@@ -491,17 +533,7 @@ local function onHit(player: Player, payload: any)
 	state.best = math.max(state.best or 0, state.rally)
 	if aimed and payload.vr ~= true then
 		-- hold to charge, aim with the camera: reach and pace grow with the hold, and a late aim sails out
-		local reach = (len / 2) * (0.55 + charge * 0.95)
-		local dirLocal = frame:VectorToObjectSpace((dir :: Vector3).Unit)
-		local target = p0 + dirLocal * reach
-		if target.Y < Sim.TOP_Y + Sim.BALL_R then
-			target = Vector3.new(target.X, Sim.TOP_Y + Sim.BALL_R, target.Z)
-		end
-		local flight = math.clamp(0.95 - charge * 0.45, 0.45, 0.95)
-		local v = Sim.assistVelocity(p0, target, flight)
-		if v.Magnitude > Sim.MAX_SPEED then
-			v = v.Unit * Sim.MAX_SPEED
-		end
+		local v = aimedVelocity(p0, frame:VectorToObjectSpace((dir :: Vector3).Unit), charge)
 		state.to = other(side)
 		lastHitter = side
 		lastBounce = nil
@@ -565,17 +597,7 @@ local function serveHit(player: Player, payload: any)
 	local charge = type(payload) == "table" and math.clamp(tonumber(payload.charge) or 0.3, 0, 1) or 0.3
 	local dir = type(payload) == "table" and payload.dir or nil
 	if typeof(dir) == "Vector3" and dir.Magnitude > 0.1 then
-		local reach = (len / 2) * (0.55 + charge * 0.95)
-		local dirLocal = frame:VectorToObjectSpace(dir.Unit)
-		local target = state.p + dirLocal * reach
-		if target.Y < Sim.TOP_Y + Sim.BALL_R then
-			target = Vector3.new(target.X, Sim.TOP_Y + Sim.BALL_R, target.Z)
-		end
-		local flight = math.clamp(0.95 - charge * 0.45, 0.45, 0.95)
-		local v = Sim.assistVelocity(state.p, target, flight)
-		if v.Magnitude > Sim.MAX_SPEED then
-			v = v.Unit * Sim.MAX_SPEED
-		end
+		local v = aimedVelocity(state.p, frame:VectorToObjectSpace(dir.Unit), charge)
 		state.to = other(side)
 		lastHitter = side
 		lastBounce = nil
