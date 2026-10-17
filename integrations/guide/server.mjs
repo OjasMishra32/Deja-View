@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { ask, describe, health as geminiHealth, hotspots, narrate } from './gemini.mjs';
 import { loadCache, saveCache } from './cache.mjs';
+import { logRequest } from './log.mjs';
 
 const port = Number(process.env.PORT || 8795);
 const MAX_BODY = 15 * 1024 * 1024;
@@ -36,8 +37,14 @@ function audio(value) { if (!/^data:audio\/[^;,]+(?:;[^,]+)?;base64,[a-z0-9+/=\r
 function cacheKey(scene, value) { return `${scene?.id || 'anonymous'}:${hash(value)}`; }
 
 async function endpoint(req, res, handler) {
-  try { send(res, 200, await handler(await readJson(req))); }
-  catch (error) { send(res, error.status || 400, { error: error.message || 'bad request' }); }
+  try {
+    const body = await readJson(req);
+    const result = await handler(body);
+    // what the request log may say about it (log.mjs): never the answer, the image, the audio or the key
+    const scene = typeof body?.scene === 'string' ? body.scene : body?.scene?.id;
+    res.guideMeta = { scene, cached: result?.cached, degraded: result?.degraded, error: result?.error, mock: result?.error === 'mock mode' };
+    send(res, 200, result);
+  } catch (error) { send(res, error.status || 400, { error: error.message || 'bad request' }); }
 }
 
 async function staticFile(req, res) {
@@ -49,6 +56,11 @@ async function staticFile(req, res) {
 }
 
 export const server = createServer(async (req, res) => {
+  const t0 = performance.now();
+  // one line per request (log.mjs); not the health checks the host page polls, nor the test page's files
+  if (!(req.method === 'GET' && (req.url === '/health' || req.url === '/' || req.url.startsWith('/public/')))) {
+    res.on('finish', () => logRequest({ method: req.method, path: req.url, status: res.statusCode, ms: performance.now() - t0, meta: res.guideMeta }));
+  }
   if (req.method === 'GET' && req.url === '/health') return send(res, 200, { ok: true, ...geminiHealth(), uptimeS: Math.floor((Date.now() - started) / 1000) });
   if (!secure(req, res)) return;
   if (req.method === 'GET' && (req.url === '/' || req.url.startsWith('/public/'))) return staticFile(req, res);

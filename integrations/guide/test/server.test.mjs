@@ -9,7 +9,7 @@ import { after, afterEach, before, describe, test } from 'node:test';
 
 const jpeg = (text) => `data:image/jpeg;base64,${Buffer.from(text).toString('base64')}`;
 const decoded = (part) => Buffer.from(part.inlineData.data, 'base64').toString();
-let base, dir, server, setClient, DESCRIBE_SYSTEM, FRAMES_SYSTEM;
+let base, dir, server, setClient, setLogSink, DESCRIBE_SYSTEM, FRAMES_SYSTEM;
 
 function stubGemini(reply) {
   const calls = [];
@@ -29,6 +29,7 @@ before(async () => {
   ({ setClient } = await import('../gemini.mjs'));
   ({ DESCRIBE_SYSTEM, FRAMES_SYSTEM } = await import('../prompts.mjs'));
   ({ server } = await import('../server.mjs'));
+  ({ setLogSink } = await import('../log.mjs'));
   if (!server.listening) await once(server, 'listening');
   base = `http://127.0.0.1:${server.address().port}`;
 });
@@ -98,5 +99,28 @@ describe('POST /ask', () => {
     const { status, body } = await post('/ask', { image: jpeg('chess'), question: 'who won?', scene: { id: 'chess-match', name: 'Chess', mode: 'video' } });
     assert.equal(status, 200);
     assert.deepEqual([body.question, body.answer, body.degraded], ['who won?', 'Black won with the queen', true]);
+  });
+});
+
+describe('request log', () => {
+  test('one line per request, with the Gemini code of a degraded call and nothing private', async () => {
+    const lines = [];
+    const prev = setLogSink((line) => lines.push(line));
+    try {
+      setClient(stubGemini(new Error('got status: 429 Too Many Requests. RESOURCE_EXHAUSTED')));
+      const img = jpeg('the private photo bytes');
+      const r = await post('/narrate', { image: img, scene: { id: 'chess-match', name: 'Chess' } });
+      assert.equal(r.status, 200);
+      assert.equal(r.body.degraded, true);
+      await post('/hotspots', { scene: { id: 'chess-match' } });  // no image: a 400
+      await fetch(`${base}/health`);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.equal(lines.length, 2, lines.join('\n'));
+      assert.match(lines[0], /^guide POST \/narrate status=200 ms=\d+ scene=chess-match cached=0 degraded=1 gemini=429$/);
+      assert.match(lines[1], /^guide POST \/hotspots status=400 ms=\d+$/);
+      const all = lines.join(' ');
+      assert.ok(!all.includes(img.split(',')[1]) && !all.includes('private photo'));
+      assert.ok(!all.includes(r.body.answer));  // the spoken answer never reaches the log
+    } finally { setLogSink(prev); }
   });
 });
