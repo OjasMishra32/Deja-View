@@ -312,3 +312,18 @@ def test_a_cancel_during_the_walk_zone_is_not_a_failed_zone(tmp_path, monkeypatc
         L.add_walk_zone(out, {"world": {}}, tmp_path / "work", log=lambda *_: None, reraise=(run_job.Cancelled,))
     r = L.add_walk_zone(out, {"world": {}}, tmp_path / "work", log=lambda *_: None)  # without it: a failed zone
     assert r["ok"] is False and "Cancelled" in r["reason"]
+
+
+@pytest.mark.parametrize("value,on", [(True, True), (1, True), ("true", True), ("1", True), (" TRUE ", True),
+                                      (False, False), (0, False), ("false", False), ("0", False), ("", False),
+                                      (None, False), ("yes", False), (2, False), ([], False)])
+def test_listing_flag_from_a_form(value, on):
+    import run_job
+
+    assert run_job.param_on(value) is on
+
+
+def test_listing_flag_missing_is_off():
+    import run_job
+
+    assert run_job.param_on({}.get("listing")) is False

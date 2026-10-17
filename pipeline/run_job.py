@@ -335,6 +335,18 @@ def _local_photo_room(job: Job, image: Path) -> dict:
     return {"world": world, "thumb": "thumb.jpg", "caption": DEPTH_FRAME_CAPTION if _from_clip(job) else DEPTH_ROOM_CAPTION}
 
 
+def param_on(value) -> bool:
+    """A yes/no job param as a form or JSON sends it: true, 1, "true" and "1" (any case, spaces ignored) are on;
+    everything else, including "false", "0", "" and a missing param, is off."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value == 1
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1")
+    return False
+
+
 def run_reconstruct(job: Job) -> dict:
     ok, why = runner_available("anysplat")
     images, videos = job.input_images(), job.input_videos()
@@ -349,7 +361,7 @@ def run_reconstruct(job: Job) -> dict:
     if img_dir.exists():
         shutil.rmtree(img_dir)
     img_dir.mkdir(parents=True)
-    listing = bool(job.params.get("listing")) and bool(images)
+    listing = param_on(job.params.get("listing")) and bool(images)
     job.stage("Preparing the photos", 0.01)
     if images:
         for i, p in enumerate(images):
