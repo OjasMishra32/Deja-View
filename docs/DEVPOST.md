@@ -32,9 +32,13 @@ Déjà View has two modes.
   at zero, and you can walk wherever the camera went. A single photo, a game screenshot or just a sentence also
   works: the model generates everything the camera missed. We built three worlds from single OG Tilted Towers
   screenshots, and only 14%, 21.7% and 22.9% of each world's million splats were actually in the screenshot.
+  Old real-estate listing photos work too: the watermarks and logos are found and removed on their own, and our
+  teammate's old family kitchen in Pennsylvania came back from four of them.
 - **Video:** the people in a clip become full 3D people standing in the rebuilt room, moving in time with the
   footage and its sound. Walk all the way around your friends at the foosball table, pause mid-game and look at
-  them from behind, or step back to where the phone was and see the original video line up with them.
+  them from behind, or step back to where the phone was and see the original video line up with them. In the
+  kitchen, Seb opens the fridge and carries the milk out, and the door and the jug move with him. At the giant chess
+  board, both players stand there mid-game.
 
 Then the room becomes social:
 
@@ -56,8 +60,8 @@ writes the caption the world model uses to imagine what the camera never saw, th
 labels and spoken answers. **HiPerGator** (with a **Vultr** A40 as the planned second GPU) builds a world in seconds,
 which is the only reason a judge can make one live at the table. The **reality check**, built for **Vobile**,
 separates what was captured from what was imagined. **Roblox** lets friends without a headset be there, and
-**DeepSpace** remembers who was there and what they said, with live presence and notes that persist. [Confirm before
-submitting: a free **GoDaddy Registry** domain gives Roblox, the headset and every phone one link that never changes.]
+**DeepSpace** remembers who was there and what they said, with live presence and notes that persist. Our own domain,
+**deja-view.photo**, gives Roblox, the headset and every phone one link that never changes.
 
 ### Sponsor challenges: what each one does and where to see it
 
@@ -76,7 +80,9 @@ submitting: a free **GoDaddy Registry** domain gives Roblox, the headset and eve
   textures projected onto them, proper collisions, centred and at life size (3.57 studs per metre). The server also
   tells the game where the real ping-pong table, foosball table and chessboard are, so the games are played on the
   real furniture. Friends join from the Roblox app and play tag with the person in the headset, who sees them as
-  ghosts. *See it:* the Roblox app on a laptop or phone, next to the headset.
+  ghosts. Nothing from a real place reaches Roblox unchecked: every texture is scanned for text, faces, logos and QR
+  codes, a person approves that exact file (the approval is tied to its hash), and only then is it uploaded. *See
+  it:* the Roblox app on a laptop or phone, next to the headset.
 - **Solana (devnet):** when a Roblox match ends and the game reports it (`game.result`), the server writes it to
   Solana devnet as one signed Memo transaction: world, game, round, winner, loser, score, time, and whether it was a
   draw. A retry from Roblox never writes a second memo, the transaction signature is saved before it is sent, and the
@@ -125,7 +131,9 @@ worker, jobs fall back to a batch Slurm job, then the public FlashWorld Space, t
 a clip and mask people out, COLMAP 3.11 solves the cameras, and our own gsplat training loop (MCMC densification, a
 depth term, per-clip colour, pose refinement for video frames) trains the splats in about 12 minutes on one RTX PRO
 6000. Then we measure the floor and the real scale on the splats themselves, put the floor at zero, crop to the room,
-and let you walk only where the camera actually went, so you never step into a part nobody photographed. The surprise
+and let you walk only where the camera actually went, so you never step into a part nobody photographed. The walk
+zone is found automatically: we render the world from a grid of spots at eye height in eight directions, keep the
+spots that look good, and build the fence and collider around them. The surprise
 was symmetric furniture: a ping-pong table looks the same from either end, and COLMAP put whole stretches of video on
 a mirrored copy of the room until we limited matching to nearby frames.
 
@@ -161,7 +169,7 @@ WebSocket, so a note typed on the map shows up within a couple of seconds. The r
 into the input camera and checks it against depth: anything behind the camera, outside the frame or hidden behind
 something the camera saw is marked as imagined.
 
-**Testing:** more than 500 TypeScript tests and more than 200 Python tests pass, plus opt-in headless-Chrome checks
+**Testing:** more than 850 TypeScript tests and more than 450 Python tests pass, plus opt-in headless-Chrome checks
 of the viewer and the guide, and a WebXR emulator for the headset code paths. We also built mock versions of the
 guide and DeepSpace services so every hop could be tested before the real ones existed.
 
@@ -192,7 +200,7 @@ in our credits fill in what the camera never saw.
 - Real places rebuilt from phone photos at real scale, and the people from a phone clip standing in them as full 3D
   people you can walk around, in sync with the video and its sound.
 - One room, three ways in: a headset, a browser, Roblox.
-- More than 700 automated tests across TypeScript and Python, written during the event.
+- More than 1,300 automated tests across TypeScript and Python, written during the event.
 
 ## What we learned
 
@@ -219,8 +227,9 @@ roblox, luau, deepspace, meta-quest-3s, solana, capital-one-nessie, tiger-data, 
 ## Team
 
 - **Ojasva:** server, viewer, GPU pipelines on HiPerGator, Roblox map voxelizer, presence and notes relays, reality
-  check, the Solana scoreboard, the Nessie tab, Tiger Data replays, Auth0 sign-in
-- **Shivin:** the Roblox experience: room loader, room picker, VR ghost, tag rounds
+  check, the Solana scoreboard, the Nessie tab, Tiger Data replays, Auth0 sign-in, the deja-view.photo domain
+- **Shivin:** the Roblox experience (room loader, room picker, VR ghost, tag rounds), automatic walk zones,
+  listing photos to a home, and the one-command video memory chain
 - **Brianna:** the Gemini guide: captions, labels, narration, spoken answers
 - **Seb:** the DeepSpace app ("Add a memory", live map, trails, notes, gallery), the Roblox games on the real
-  furniture, the Vultr GPU, the domain
+  furniture, the object maker and its censor gate for Roblox uploads, the Vultr GPU
