@@ -44,6 +44,7 @@ local Remotes: Folder
 local PPHit: RemoteEvent
 local PPPaddle: UnreliableRemoteEvent
 local PPState: RemoteEvent
+local PPSide: RemoteEvent
 
 local function now(): number
 	return workspace:GetServerTimeNow()
@@ -94,6 +95,8 @@ local function updateBoard()
 			scoreB = score.B,
 			serve = serverSide,
 			to = state and state.to or nil,
+			bounce = lastBounce,
+			serving = state and state.serving or false,
 		})
 	end
 end
@@ -250,6 +253,7 @@ local function launch(to: string, p0: Vector3, flight: number, aim: number)
 	state.v = v
 	ball.CFrame = frame * CFrame.new(state.p)
 	broadcastState()
+	updateBoard()
 end
 
 local function serve(wait: boolean)
@@ -310,6 +314,15 @@ local function finish(winnerSide: string)
 		score.A, score.B = 0, 0
 		pointsPlayed = 0
 		matchStart = now()
+		local loserSide = other(winnerSide)
+		local nextPlayer = table.remove(queue, 1)
+		if nextPlayer and nextPlayer.Parent then
+			sides[loserSide] = nextPlayer
+			if PPSide then
+				PPSide:FireClient(nextPlayer, loserSide)
+			end
+			World.toast("You are up next", nextPlayer)
+		end
 		serverSide = other(serverSide)
 		serve(true)
 	end)
@@ -373,12 +386,20 @@ local function step(dt: number)
 	ball.CFrame = frame * CFrame.new(state.p)
 	if ev.table then
 		lastBounce = ev.table
+		state.serveInFlight = false
 		state.lastTouch = state.t
+		updateBoard()
 		if ev.table == state.to then
 			botReturn()
 		end
 	end
 	if ev.net then
+		if state.serveInFlight then
+			state.serveInFlight = false
+			World.toast("Let, serve again")
+			serve(true)
+			return
+		end
 		-- a net touch kills the rally; the receiver takes the point
 		point(state.to, "Net")
 		return
@@ -423,6 +444,33 @@ local function onHit(player: Player, payload: any)
 	state.serving = false
 	state.rally = (state.rally or 0) + 1
 	state.best = math.max(state.best or 0, state.rally)
+	if payload.vr == true and typeof(payload.cf) == "CFrame" and typeof(payload.vel) == "Vector3" then
+		-- the paddle really hit it: reflect off the blade and let the ball fly
+		local blade = payload.cf :: CFrame
+		local claimed = payload.p
+		if typeof(claimed) == "Vector3" and (claimed - state.p).Magnitude > 2 then
+			broadcastState()
+			return
+		end
+		if (blade.Position - state.p).Magnitude > 2.2 then
+			broadcastState()
+			return
+		end
+		local before = state.v
+		Sim.paddleHit(state, blade.UpVector, payload.vel :: Vector3, 0.8)
+		if state.v == before then
+			broadcastState() -- the ball was moving away; nothing to return
+			return
+		end
+		state.to = other(side)
+		lastHitter = side
+		lastBounce = nil
+		state.lastTouch = state.t
+		ball.CFrame = frame * CFrame.new(state.p)
+		broadcastState()
+		updateBoard()
+		return
+	end
 	launch(other(side), p0, flight, aim)
 end
 
@@ -432,6 +480,7 @@ local function serveHit(player: Player, payload: any)
 		return false
 	end
 	state.serving = false
+	state.serveInFlight = true
 	local aim = type(payload) == "table" and (tonumber(payload.aim) or 0) or 0
 	launch(other(side), state.p, 0.8, aim)
 	return true
@@ -480,6 +529,9 @@ function PingPong.join(player: Player)
 	for _, s in { "A", "B" } do
 		if not sides[s] then
 			sides[s] = player
+			if PPSide then
+				PPSide:FireClient(player, s)
+			end
 			World.toast(if s == "A" then "You are on the near side" else "You are on the far side", player)
 			if over then
 				return
@@ -518,6 +570,7 @@ function PingPong.start()
 	PPHit = remote("PPHit", "RemoteEvent")
 	PPPaddle = remote("PPPaddle", "UnreliableRemoteEvent")
 	PPState = remote("PPState", "RemoteEvent")
+	PPSide = remote("PPSide", "RemoteEvent")
 
 	PPHit.OnServerEvent:Connect(function(player, payload)
 		if state and state.serving then
