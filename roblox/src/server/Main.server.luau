@@ -1,7 +1,6 @@
 -- Boots Déjà View: lobby -> loading -> room. Owns remotes and host actions.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local StarterGui = game:GetService("StarterGui")
 
 local DV = script.Parent:WaitForChild("DejaView")
 local Config = require(DV.Config)
@@ -14,10 +13,6 @@ local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local Vote = Remotes:WaitForChild("Vote") :: RemoteEvent
 local HostAction = Remotes:WaitForChild("HostAction") :: RemoteEvent
 
-pcall(function()
-	StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
-end)
-
 for name, value in {
 	Phase = "lobby", SceneId = "", RoomName = "", LoadProgress = 0, LoadStage = "", Banner = "",
 	Offline = false, JudgeHere = false, JudgeName = "", RoundState = "idle", RoundEndsAt = 0,
@@ -27,8 +22,11 @@ for name, value in {
 	workspace:SetAttribute(name, value)
 end
 
-Config.init()
-workspace:SetAttribute("UsingMock", Config.useMock())
+-- GetConfigAsync can block for ~30 s when the place is unpublished; never hold up the boot for it.
+task.spawn(function()
+	Config.init()
+	workspace:SetAttribute("UsingMock", Config.useMock())
+end)
 World.init()
 
 Presence.stateOf = TagGame.stateOf
