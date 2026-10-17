@@ -9,3 +9,6 @@ __pycache__/
 *.log
 .DS_Store
 .context/
+
+# borrowed model weights are downloaded, never committed
+pipeline/models/
