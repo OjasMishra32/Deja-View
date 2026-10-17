@@ -165,25 +165,26 @@ function Ui.build()
 end
 
 function Ui.fadeOut(frame: Frame, seconds: number)
-	local tweens = {}
+	local saved: { [Instance]: number } = { [frame] = frame.BackgroundTransparency }
+	local info = TweenInfo.new(seconds)
+	TweenService:Create(frame, info, { BackgroundTransparency = 1 }):Play()
 	for _, d in frame:GetDescendants() do
 		if d:IsA("TextLabel") then
-			table.insert(tweens, TweenService:Create(d, TweenInfo.new(seconds), { TextTransparency = 1 }))
+			saved[d] = d.TextTransparency
+			TweenService:Create(d, info, { TextTransparency = 1 }):Play()
 		elseif d:IsA("Frame") and d.BackgroundTransparency < 1 then
-			table.insert(tweens, TweenService:Create(d, TweenInfo.new(seconds), { BackgroundTransparency = 1 }))
+			saved[d] = d.BackgroundTransparency
+			TweenService:Create(d, info, { BackgroundTransparency = 1 }):Play()
 		end
-	end
-	table.insert(tweens, TweenService:Create(frame, TweenInfo.new(seconds), { BackgroundTransparency = 1 }))
-	for _, t in tweens do
-		t:Play()
 	end
 	task.delay(seconds, function()
 		frame.Visible = false
-		-- reset for next time
-		frame.BackgroundTransparency = 0
-		for _, d in frame:GetDescendants() do
-			if d:IsA("TextLabel") then
-				d.TextTransparency = 0
+		-- restore for the next time it is shown
+		for inst, v in saved do
+			if inst:IsA("TextLabel") then
+				inst.TextTransparency = v
+			else
+				(inst :: Frame).BackgroundTransparency = v
 			end
 		end
 	end)
