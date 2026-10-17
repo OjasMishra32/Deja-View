@@ -5,7 +5,7 @@
 // Backends that share a lane run one job at a time; other jobs wait in FIFO order.
 
 import { appendFile, copyFile, link, mkdir, readdir, rename, rm, stat, unlink, constants as fsc } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { Backend, JobProgress, JobResult, Scene, SceneMode } from '../shared/types.ts';
 import { GENERIC_FAILURE, MODE_NAME, NOTHING_AVAILABLE, sentence, waitingInLine } from './copy.ts';
 import { safeJoin } from './files.ts';
@@ -265,11 +265,20 @@ const MODE_REQUIREMENT: Record<SceneMode, (r: JobResult) => string | null> = {
 const OUT_SKIP = new Set(['scene.json', 'log.txt', 'progress.json', 'DONE', 'FAILED']);
 
 /**
- * Files that describe one particular world. A rebuild that brings a new world without them removes the old ones, so
- * the reality check, the input camera and the stored labels never belong to the previous world. (Roblox maps key
- * their cache on the world file and rebuild by themselves.)
+ * Files that describe one particular world. A rebuild that brings a new world without them moves the old ones out of
+ * the scene folder, so the reality check, the input camera, the stored labels and the walk zone (collider, fence,
+ * plan view) never belong to the previous world. Nothing is deleted: they go to data/archive/scenes/<id>/<time>/.
+ * (Roblox maps key their cache on the world file and rebuild by themselves.)
  */
-export const WORLD_DERIVED = ['reality.json', 'world-seen.spz', 'world-imagined.spz', 'input_camera.json', 'input_depth.npy', 'hotspots.json'];
+export const WORLD_DERIVED = [
+  'reality.json', 'world-seen.spz', 'world-imagined.spz', 'input_camera.json', 'input_depth.npy', 'hotspots.json',
+  'collider.glb', 'walkzone.json', 'walkzone-topdown.png',
+];
+
+/** Where a scene's replaced files go: data/archive/scenes/<id>/<time>/ next to data/scenes/ (we never delete). */
+export function archiveDir(sceneDir: string, at = new Date()): string {
+  return join(dirname(dirname(sceneDir)), 'archive', 'scenes', basename(sceneDir), at.toISOString().replace(/[:.]/g, '-'));
+}
 
 export class JobRunner {
   private active = new Map<string, { abort: AbortController; done: Promise<void> }>();
@@ -659,9 +668,16 @@ export class JobRunner {
       await rename(part, dst);
     }
     if (result.world) {
-      const stale = WORLD_DERIVED.filter((f) => !toCopy.has(f));
-      const gone = (await Promise.all(stale.map((f) => unlink(join(ctx.sceneDir, f)).then(() => f, () => null)))).filter(Boolean);
-      if (gone.length) ctx.log(`removed what belonged to the previous world: ${gone.join(', ')}`);
+      const stale: string[] = [];
+      for (const f of WORLD_DERIVED.filter((f) => !toCopy.has(f))) {
+        if (await stat(join(ctx.sceneDir, f)).then((s) => s.isFile(), () => false)) stale.push(f);
+      }
+      if (stale.length) {
+        const arch = archiveDir(ctx.sceneDir);
+        await mkdir(arch, { recursive: true });
+        for (const f of stale) await rename(join(ctx.sceneDir, f), join(arch, f));
+        ctx.log(`moved what belonged to the previous world to ${arch}: ${stale.join(', ')}`);
+      }
     }
     ctx.log(`outputs: ${[...toCopy].join(', ')}`);
     return (s: Scene): Scene => {
