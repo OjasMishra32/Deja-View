@@ -60,6 +60,20 @@ reach localhost. Verified: scenes, maps with 202 retries, 4 Hz presence with `st
 Copy the printed `https://….trycloudflare.com`, set it as `dejaview_base`, publish, join the live game, then in
 the server console: `require(game.ServerScriptService.DejaView.TransportTest)()`.
 
+## Emergency overrides (F9 → Server console on a live server)
+
+```lua
+workspace:SetAttribute("DejaViewBase", "https://new-url")  -- switch server instantly, no republish
+workspace:SetAttribute("DejaViewMock", true)               -- fall back to mock data
+```
+
+`require(...Config).set(...)` from the console does NOT work: the console gets its own copy of the module.
+
+## Failure drill (passed Fri night)
+
+Server unreachable at boot → "Reconnecting to Déjà View..." banner + fixture (or first baked) room within ~15 s, then
+the real room once it answers. Server killed mid-game → banner, room stays; back up → banner clears in ~2 s.
+
 ## Sounds
 
 `Theme.Sounds` uses built-in client sounds as placeholders. Swap in Roblox-made Creator Store audio and credit it on Devpost.

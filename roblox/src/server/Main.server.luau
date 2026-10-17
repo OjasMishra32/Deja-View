@@ -105,6 +105,9 @@ HostAction.OnServerEvent:Connect(function(player, action, value)
 end)
 
 TagGame.start10Hz()
+-- First requests wait for the live config so they go to dejaview_base, not the built-in fallback.
+-- (Unpublished places take ~30 s to fail; 10 s is the cap.)
+Config.waitLoaded(10)
 Presence.start()
 Rooms.start()
 
@@ -124,13 +127,27 @@ task.spawn(function()
 		end
 		task.wait(0.25)
 	end
-	Rooms.waitForList(15)
+	local reached = Rooms.waitForList(15)
 	local target = launchScene or Rooms.newestReady()
 	if target then
 		Rooms.switchTo(target)
-	else
-		warn("[DejaView] no ready rooms yet; waiting in the lobby")
+		return
 	end
+	if not reached then
+		-- Déjà View unreachable: put up a baked or fixture room now, then switch to a real one once it answers.
+		warn("[DejaView] Déjà View unreachable at boot; loading a fallback room")
+		Rooms.loadFallback()
+		local fallbackScene = workspace:GetAttribute("SceneId")
+		while not Rooms.isListLoaded() do
+			task.wait(3)
+		end
+		local real = Rooms.newestReady()
+		if real and workspace:GetAttribute("SceneId") == fallbackScene then
+			Rooms.switchTo(real)
+		end
+		return
+	end
+	warn("[DejaView] no ready rooms yet; waiting in the lobby")
 end)
 
 -- Later deep-link joiners: if we are still in the lobby phase, load their room.

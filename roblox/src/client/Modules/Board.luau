@@ -94,7 +94,7 @@ function Board.render(container: Instance, cards: { any }, current: string?, onC
 		end
 	end
 	if #cards == 0 then
-		label({ Text = "No rooms yet. Text a photo to the group chat.", TextColor3 = Theme.Muted,
+		label({ Text = "No rooms yet. Add a memory in Déjà View.", TextColor3 = Theme.Muted,
 			Size = UDim2.fromScale(1, 0.2), Parent = container })
 		return
 	end

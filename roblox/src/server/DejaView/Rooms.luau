@@ -162,11 +162,22 @@ local function publishBoard()
 	end
 end
 
+local listFailures = 0
+
 local function refreshList()
-	local ok, data = Backend.scenes()
+	local ok, data, status = Backend.scenes()
 	if not ok or type(data) ~= "table" then
+		-- The presence loop owns the banner once a room is loaded; before that, the room list does.
+		listFailures += 1
+		if listFailures >= 3 and (workspace:GetAttribute("SceneId") or "") == "" then
+			workspace:SetAttribute("Banner", if status == 401 then "Key rejected" else "Reconnecting to Déjà View...")
+		end
 		return
 	end
+	if listFailures >= 3 and (workspace:GetAttribute("SceneId") or "") == "" then
+		workspace:SetAttribute("Banner", "")
+	end
+	listFailures = 0
 	local fresh = {}
 	for _, s in data do
 		if type(s) == "table" and type(s.id) == "string" then
@@ -398,6 +409,30 @@ function Rooms.newestReady(): string?
 		end
 	end
 	return nil
+end
+
+-- Something to stand in when Déjà View cannot be reached: the first baked room, else the fixture room.
+function Rooms.loadFallback()
+	local baked = game:GetService("ServerStorage"):FindFirstChild("BakedRooms")
+	local first = baked and baked:GetChildren()[1]
+	local info = if first then MapBuilder.buildBaked(first.Name) else nil
+	if not info then
+		info = MapBuilder.build(HttpService:JSONDecode(Fixtures.MAP_SMALL))
+	end
+	if not info then
+		return
+	end
+	workspace:SetAttribute("SceneId", info.sceneId)
+	workspace:SetAttribute("RoomName", info.name)
+	workspace:SetAttribute("Phase", "room")
+	if workspace:GetAttribute("AutoJoin") == true then
+		Rooms.joinAll(true)
+	end
+	publishBoard()
+end
+
+function Rooms.isListLoaded(): boolean
+	return listLoaded
 end
 
 function Rooms.waitForList(timeout: number)
