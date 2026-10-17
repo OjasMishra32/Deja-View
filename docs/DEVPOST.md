@@ -13,6 +13,11 @@ Every group chat has a camera roll full of nights you weren't at. You get a 12-s
 had to be there." We wanted the next best thing to having been there: to actually stand in the room, turn around, and
 see who was sitting where.
 
+It goes further than a night out. Most of us have a home we can't go back to: the house you grew up in, sold years
+ago, still up on a real-estate site with its old listing photos. One of us rebuilt his family's old kitchen in
+Pennsylvania from four of those photos and walked around it again. And a phone clip can hold someone who isn't here
+any more: Video mode stands them back in the room where it was filmed, so you can see them where they were.
+
 Two other things pushed us. World models have gotten good enough to imagine the part of a room behind the camera from
 a single photo, and a Meta Quest 3S is cheap enough to have one sitting on the table. Our host sponsor protects real
 content, which raised a question we couldn't drop: if the AI made up most of the room, shouldn't you be able to see
