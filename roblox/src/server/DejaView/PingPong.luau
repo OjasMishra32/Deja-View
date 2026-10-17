@@ -616,7 +616,34 @@ function PingPong.start()
 			return
 		end
 		local info = Rooms.modelInfo("the-courts")
-		PingPong.placeForRoom(nil, info and info.features or nil, nil)
+		local features = info and info.features or nil
+		if not (features and features.pingPongTable) and not Config.PINGPONG_TABLES["the-courts"] then
+			-- Temporary: the model has no features yet. Put a visible table in the middle of the lawn so the game is
+			-- playable today; features.pingPongTable replaces it as soon as the server sends it.
+			local room = workspace:FindFirstChild("Room")
+			local mn = room and room:GetAttribute("BoundsMin")
+			local mx = room and room:GetAttribute("BoundsMax")
+			if typeof(mn) == "Vector3" and typeof(mx) == "Vector3" then
+				local c = (mn + mx) / 2
+				buildTable(CFrame.new(c.X, c.Y + 2.71, c.Z), Sim.LEN, Sim.WID, true)
+				roundId = string.format(
+					"pp-%s",
+					string.upper(
+						(game.JobId:sub(1, 8) ~= "" and game.JobId:sub(1, 8) or "studio")
+							.. tostring(math.floor(os.clock() * 1000))
+					)
+				)
+				matchStart = now()
+				score.A, score.B = 0, 0
+				pointsPlayed, over = 0, false
+				serverSide = "A"
+				state = nil
+				sides.A, sides.B = nil, nil
+				updateBoard()
+				return
+			end
+		end
+		PingPong.placeForRoom(nil, features, nil)
 	end
 
 	workspace:GetAttributeChangedSignal("Phase"):Connect(function()
