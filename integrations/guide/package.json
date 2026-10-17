@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node --env-file=.env server.mjs",
     "dev": "node --watch --env-file=.env server.mjs",
-    "test": "node --test test/",
+    "test": "node --test test/*.test.mjs",
     "notes": "node --env-file=.env scripts/video-notes.mjs",
     "jq": "node-jq",
     "ffmpeg": "node scripts/ffmpeg.mjs"
