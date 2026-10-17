@@ -9,6 +9,7 @@ local Rooms = require(DV.Rooms)
 local Presence = require(DV.Presence)
 local TagGame = require(DV.TagGame)
 local Extras = require(DV.Extras)
+local Chess = require(DV.Chess)
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local Vote = Remotes:WaitForChild("Vote") :: RemoteEvent
@@ -83,6 +84,11 @@ local actions: { [string]: (Player, any) -> () } = {
 	end_hunt = function()
 		Extras.endHunt(nil)
 	end,
+	chess = function(p, cameraLook)
+		local sceneId = workspace:GetAttribute("SceneId")
+		local info = type(sceneId) == "string" and Rooms.modelInfo(sceneId) or nil
+		Chess.placeForRoom(p, info and info.features or nil, if typeof(cameraLook) == "Vector3" then cameraLook else nil)
+	end,
 	auto_join = function(_, v)
 		workspace:SetAttribute("AutoJoin", v == true)
 	end,
@@ -122,6 +128,7 @@ end)
 
 TagGame.start10Hz()
 Extras.start()
+Chess.start()
 
 -- The judge's avatar (Update 4 item 4): one plain R15 rig for every client to clone and drive locally.
 task.spawn(function()

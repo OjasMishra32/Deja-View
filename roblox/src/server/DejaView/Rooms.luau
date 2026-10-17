@@ -105,6 +105,10 @@ local function modelInfo(sceneId: string): any?
 	return modelInfos[sceneId] or nil
 end
 
+Rooms.modelInfo = function(sceneId: string): any?
+	return modelInfo(sceneId)
+end
+
 -- The textured room the server uploaded with Open Cloud (contract 6.2b), loaded by asset id; nil without one.
 local function uploadedRoom(sceneId: string): Instance?
 	local info = modelInfo(sceneId)

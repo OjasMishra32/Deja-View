@@ -32,6 +32,9 @@ local Config = {
 	DEFAULT_SCENE = "fortnite-tilted-night", -- Update 4: the test world to join until the real four arrive
 	-- Auto-join on boot. Set false for the skit (everyone waits in the lobby until JOIN).
 	AUTO_JOIN_DEFAULT = true,
+	-- Hand-tuned chess boards per scene until /model sends features.chessBoard (Update 5):
+	-- ["chess-room"] = { centre = { x, y, z }, yaw = 0, size = 32 }   (studs; yaw = the way white looks)
+	CHESS_BOARDS = {} :: { [string]: any },
 	-- Extra Roblox user ids that get host controls (the owner always does).
 	HOST_USER_IDS = {} :: { number },
 
