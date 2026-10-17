@@ -12,6 +12,8 @@ local PPPaddle = Remotes:WaitForChild("PPPaddle") :: UnreliableRemoteEvent
 local PPHit = Remotes:WaitForChild("PPHit") :: RemoteEvent
 local PPState = Remotes:WaitForChild("PPState") :: RemoteEvent
 local PPSide = Remotes:WaitForChild("PPSide") :: RemoteEvent
+local PPJoin = Remotes:WaitForChild("PPJoin") :: RemoteEvent
+local PPWho = Remotes:WaitForChild("PPWho") :: RemoteFunction
 
 local GRIP = CFrame.new(0, 0, -0.35) * CFrame.Angles(math.rad(-20), 0, 0)
 local PADDLE_SEND = 1 / 30
@@ -119,12 +121,22 @@ reticleCorner.Parent = reticle
 
 local function refreshHitButton()
 	local mine = mySide
-	if not active or not mine then
+	if not active then
 		hitButton.Visible = false
 		canHit = false
 		return
 	end
 	hitButton.Visible = true
+	version.Text = if mine
+		then "PING PONG v3  ·  side " .. mine .. "  ·  hold to charge"
+		else "PING PONG v3  ·  press JOIN to play"
+	if not mine then
+		hitButton.Text = "JOIN"
+		canHit = false
+		hitButton.BackgroundTransparency = 0.1
+		hitButton.TextColor3 = Color3.fromRGB(0, 122, 255)
+		return
+	end
 	local serveNow = serving and serveSide == mine
 	canHit = serveNow or bounce == mine
 	if charging then
@@ -215,7 +227,11 @@ end
 
 hitButton.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		beginCharge()
+		if active and not mySide then
+			PPJoin:FireServer()
+		else
+			beginCharge()
+		end
 	end
 end)
 hitButton.InputEnded:Connect(function(input)
@@ -312,6 +328,17 @@ PPPaddle.OnClientEvent:Connect(function(userId, cf)
 	end
 end)
 
+task.spawn(function()
+	local ok, side = pcall(function()
+		return PPWho:InvokeServer()
+	end)
+	if ok and (side == "A" or side == "B") then
+		mySide = side
+		print("[PingPong] my side:", side)
+		refreshHitButton()
+	end
+end)
+
 PPSide.OnClientEvent:Connect(function(side)
 	if side == "A" or side == "B" then
 		mySide = side
@@ -322,6 +349,15 @@ end)
 PPState.OnClientEvent:Connect(function(msg)
 	if type(msg) ~= "table" then
 		return
+	end
+	if type(msg.sides) == "table" then
+		if msg.sides.A == player.UserId then
+			mySide = "A"
+		elseif msg.sides.B == player.UserId then
+			mySide = "B"
+		elseif mySide and msg.sides[mySide] ~= player.UserId then
+			mySide = nil
+		end
 	end
 	if msg.active ~= nil then
 		active = msg.active == true
