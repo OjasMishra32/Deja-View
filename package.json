@@ -1,0 +1,29 @@
+{
+  "name": "thirdwheel",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Snap a room and live in it rent free. Film your friend cooking and third-wheel it in VR.",
+  "scripts": {
+    "dev": "bun --hot server/index.ts",
+    "start": "NODE_ENV=production bun server/index.ts",
+    "https": "THIRDWHEEL_HTTPS=1 bun --hot server/index.ts",
+    "cert": "bun scripts/make-cert.ts",
+    "samples": "bun scripts/fetch-samples.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests"
+  },
+  "dependencies": {
+    "@gradio/client": "2.7.1",
+    "@sparkjsdev/spark": "2.3.1",
+    "three": "0.186.1",
+    "three-mesh-bvh": "0.9.15"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.0",
+    "@types/three": "0.186.0",
+    "iwer": "2.5.0",
+    "playwright-core": "1.63.0",
+    "typescript": "5.9.3"
+  }
+}
