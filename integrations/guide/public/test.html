@@ -10,19 +10,25 @@
 <main>
   <h1>Déjà View · Guide test</h1>
   <p>Choose a room image, then test Gemini hotspots and a typed question.</p>
+  <label>Guide key <input id="key" type="password" autocomplete="off"></label><br>
   <input id="file" type="file" accept="image/*"><br>
   <button id="hotspots">Find hotspots</button>
   <label>Question <input id="question" value="What is in this room?"></label>
   <button id="ask">Ask the room</button>
+  <button id="talk">Hold to talk</button>
   <div id="stage"><img id="photo" alt="Selected room"><canvas id="overlay"></canvas></div>
   <pre id="output">Waiting for an image.</pre>
 </main>
 <script type="module">
+  import { start, stop, play } from './voice-client.js';
   const file = document.querySelector('#file'), photo = document.querySelector('#photo'), overlay = document.querySelector('#overlay'), output = document.querySelector('#output');
   let dataUrl = '';
   file.onchange = () => { const reader = new FileReader(); reader.onload = () => { dataUrl = reader.result; photo.src = dataUrl; overlay.width = overlay.height = 0; }; reader.readAsDataURL(file.files[0]); };
-  async function request(path, payload) { const response = await fetch(path, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }); const json = await response.json(); if (!response.ok) throw new Error(json.error); return json; }
+  async function request(path, payload) { const key = document.querySelector('#key').value; const headers = {'Content-Type':'application/json'}; if (key) headers['X-Guide-Key'] = key; const response = await fetch(path, { method:'POST', headers, body:JSON.stringify(payload) }); const json = await response.json(); if (!response.ok) throw new Error(json.error); return json; }
   document.querySelector('#hotspots').onclick = async () => { try { const result = await request('/hotspots', { image:dataUrl }); output.textContent = JSON.stringify(result, null, 2); overlay.width = photo.clientWidth; overlay.height = photo.clientHeight; const ctx = overlay.getContext('2d'); ctx.fillStyle = '#c6ff3d'; ctx.font = 'bold 15px system-ui'; result.hotspots.forEach(({label,x,y}) => { ctx.beginPath(); ctx.arc(x * overlay.width, y * overlay.height, 7, 0, Math.PI * 2); ctx.fill(); ctx.fillText(label, x * overlay.width + 10, y * overlay.height - 8); }); } catch (error) { output.textContent = error.message; } };
   document.querySelector('#ask').onclick = async () => { try { const result = await request('/ask', { image:dataUrl, question:document.querySelector('#question').value, scene:{id:'test-room',name:'Test room',mode:'photo'} }); output.textContent = JSON.stringify(result, null, 2); } catch (error) { output.textContent = error.message; } };
+  const talk = document.querySelector('#talk');
+  talk.onpointerdown = async () => { try { await start(); talk.textContent = 'Release to ask'; } catch (error) { output.textContent = error.message; } };
+  talk.onpointerup = async () => { try { const recording = await stop(); const result = await request('/ask', { image:dataUrl, audio:recording.dataUrl, scene:{id:'test-room',name:'Test room',mode:'photo'} }); output.textContent = JSON.stringify({...result, recordedSeconds:recording.seconds}, null, 2); await play(result.speech); } catch (error) { output.textContent = error.message; } finally { talk.textContent = 'Hold to talk'; } };
 </script>
 </html>
