@@ -55,6 +55,39 @@ describe('configuration', () => {
     expect(c.qos).toBe('acc');
     expect(c.partition).toBe('hpg-b200');
   });
+  test('PACE profile uses its own Slurm and SSH defaults', () => {
+    const c = hpgConfig({ HPG_PROFILE: 'pace' });
+    expect(c.site).toBe('PACE ICE');
+    expect(c.socket).toBe(join(homedir(), '.ssh/cm-pace-ice'));
+    expect(c.user).toBe('bmorgan62');
+    expect(c.host).toBe('login-ice.pace.gatech.edu');
+    expect(c.root).toBe('/home/hice1/bmorgan62/scratch/thirdwheel');
+    expect(c.account).toBe('math');
+    expect(c.qos).toBe('coe-ice');
+    expect(c.partition).toBe('ice-bw-gpu');
+    expect(c.slurm).toBe(true);
+    expect(c.login).toBe('socket');
+    expect(hpgConfig({}).host).toBe('hpg.rc.ufl.edu');
+  });
+  test('PACE profile accepts explicit overrides', () => {
+    const c = hpgConfig({
+      HPG_PROFILE: 'pace',
+      PACE_SOCKET: '~/x/pace.sock',
+      PACE_USER: 'pace-user',
+      PACE_HOST: 'pace.example',
+      PACE_ROOT: '/scratch/pace/',
+      PACE_ACCOUNT: 'acct',
+      PACE_QOS: 'qos',
+      PACE_PARTITION: 'gpu',
+    });
+    expect(c.socket).toBe(join(homedir(), 'x/pace.sock'));
+    expect(c.user).toBe('pace-user');
+    expect(c.host).toBe('pace.example');
+    expect(c.root).toBe('/scratch/pace');
+    expect(c.account).toBe('acct');
+    expect(c.qos).toBe('qos');
+    expect(c.partition).toBe('gpu');
+  });
 });
 
 describe('command construction', () => {
@@ -261,7 +294,9 @@ echo "$ID;hipergator"
     expect(await Bun.file(join(lcfg.root, 'repo', 'pipeline', 'run_job.py')).text()).toBe('# pipeline');
     expect(await Bun.file(join(lcfg.root, 'repo', 'hpg', 'job.sbatch')).exists()).toBe(true);
     expect(await Bun.file(join(lcfg.root, 'repo', 'pipeline', '__pycache__', 'x.pyc')).exists()).toBe(false);
-    expect((await Bun.file(join(base, 'ssh.log')).text()).trim().split('\n').every((l) => l === 'sbernalorta@hpg.rc.ufl.edu')).toBe(true);
+    // rsync passes the user with -l and the host alone; ssh passes user@host.
+    const sshTargets = (await Bun.file(join(base, 'ssh.log')).text()).trim().split('\n');
+    expect(sshTargets.every((l) => l === 'sbernalorta@hpg.rc.ufl.edu' || l === 'hpg.rc.ufl.edu')).toBe(true);
   });
 
   async function setup(driverName: 'hpg-worker' | 'hpg-batch', pendingTimeoutMs?: number) {

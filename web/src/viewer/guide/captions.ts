@@ -6,6 +6,7 @@
 // Both show the same CaptionState: listening (with a live level), thinking, speaking, a hint, an error.
 
 import * as THREE from 'three';
+import { drawGlass, GLASS } from '../xr-text.ts';
 import { wrapLines } from './hotspots.ts';
 
 export type CaptionMode = 'hidden' | 'hint' | 'listening' | 'thinking' | 'speaking' | 'answer' | 'error';
@@ -23,6 +24,9 @@ export interface CaptionState {
 // Apple colours: the question is a blue sent bubble, the answer a gray received one.
 const ACCENT = '#007AFF';
 const BUBBLE = '#E9E9EB';
+/** In the headset the panel is the same dark glass as the wrist menu, with the dark-mode blue. */
+const XR_ACCENT = '#0A84FF';
+const XR_QUESTION = '#6CB2FF';
 const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", Roboto, system-ui, sans-serif';
 
 export const STATUS_TEXT: Record<CaptionMode, string> = {
@@ -472,14 +476,12 @@ export class XrCaptionPanel {
     const lh = size * 1.24;
     const used = Math.min(PH, Math.max(150, Math.ceil((lines.length ? y + lines.length * lh : y) + 34)));
 
-    rr(6, 6, PW - 12, used - 12, 48);
-    g.fillStyle = 'rgba(233,233,235,0.97)';
-    g.fill();
+    drawGlass(g, 6, 6, PW - 12, used - 12, 48, 0);
 
     g.textBaseline = 'middle';
     g.textAlign = 'left';
     g.font = `600 30px ${FONT}`;
-    g.fillStyle = s.mode === 'error' ? '#d70015' : '#6e6e73';
+    g.fillStyle = s.mode === 'error' ? GLASS.red : GLASS.secondary;
     const eyebrow = s.title ?? STATUS_TEXT[s.mode];
     g.fillText(eyebrow, 70, 62);
 
@@ -491,7 +493,7 @@ export class XrCaptionPanel {
         const wob = 0.55 + 0.45 * Math.sin(this.time * 9 + i * 0.9) * Math.sin(this.time * 3.3 + i * 0.37);
         const h = 6 + Math.min(1, this.level * 1.4) * 38 * env * wob;
         rr(x0 + i * 11, 62 - h / 2, 6, h, 3);
-        g.fillStyle = ACCENT;
+        g.fillStyle = XR_ACCENT;
         g.fill();
       }
     } else if (s.mode === 'thinking') {
@@ -501,7 +503,7 @@ export class XrCaptionPanel {
         g.globalAlpha = 0.35 + 0.65 * up;
         g.beginPath();
         g.arc(PW - 130 + i * 30, 62, 9, 0, Math.PI * 2);
-        g.fillStyle = '#8e8e93';
+        g.fillStyle = GLASS.secondary;
         g.fill();
       }
       g.globalAlpha = 1;
@@ -509,12 +511,12 @@ export class XrCaptionPanel {
 
     if (question) {
       g.font = `400 34px ${FONT}`;
-      g.fillStyle = ACCENT;
+      g.fillStyle = XR_QUESTION;
       g.fillText(question, 70, qY);
     }
     if (lines.length) {
       g.font = `400 ${size}px ${FONT}`;
-      g.fillStyle = '#000';
+      g.fillStyle = GLASS.text;
       lines.forEach((l, i) => g.fillText(l, 70, y + lh / 2 + i * lh - 4));
     }
 

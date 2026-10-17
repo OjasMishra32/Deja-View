@@ -8,6 +8,7 @@
 
 import type { CheckName, HostCheck, HostScene, HostStatus } from '../../server/host.ts';
 import { LiveEvents, modeKind, type HealthInfo, type Scene, type ServerEvent } from './api.ts';
+import { authHeaders, mountSignIn } from './auth.ts';
 import {
   describeEvent,
   isBuilding,
@@ -123,18 +124,25 @@ class HostError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** The server wants a signed-in person (server/auth), not the event key. */
+    readonly signIn = false,
   ) {
     super(message);
   }
 }
 
-/** fetch with the event key (when this device has one); throws HostError with the server's sentence. */
+/** fetch with the event key (when this device has one) and, for a cue, the sign-in; throws HostError with the server's sentence. */
 async function hostFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
     res = await fetch(path, {
       ...init,
-      headers: { Accept: 'application/json', ...(key ? { 'x-dejaview-key': key } : {}), ...(init.headers ?? {}) },
+      headers: {
+        Accept: 'application/json',
+        ...(key ? { 'x-dejaview-key': key } : {}),
+        ...(init.method && init.method !== 'GET' ? authHeaders() : {}),
+        ...(init.headers ?? {}),
+      },
     });
   } catch {
     throw new HostError("Can't reach the server. Check that it is still running.", 0);
@@ -148,7 +156,7 @@ async function hostFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   if (!res.ok) {
     const msg = typeof body?.error === 'string' && body.error.trim() ? body.error : `The server answered ${res.status}.`;
-    throw new HostError(msg, res.status);
+    throw new HostError(msg, res.status, res.status === 401 && body?.signIn === true);
   }
   return body as T;
 }
@@ -511,6 +519,10 @@ function showBanner(msg: string | null) {
 
 function onRequestError(e: unknown) {
   const err = e instanceof HostError ? e : new HostError('Something went wrong. Try again.', 0);
+  if (err.signIn) {
+    toast(`${err.message} Use Sign in at the top.`, true);
+    return;
+  }
   if (err.status === 401) {
     $('#key-form')!.hidden = false;
     $<HTMLInputElement>('#key-input')?.focus();
@@ -637,6 +649,7 @@ function main() {
     el?.addEventListener('click', () => void flip(el.dataset.action as 'reality' | 'labels', el));
   }
   $('#refresh')?.addEventListener('click', () => void refreshStatus(true));
+  void mountSignIn($('#sign-in')).then((err) => err && toast(err, true));
   $<HTMLFormElement>('#key-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
     const v = $<HTMLInputElement>('#key-input')?.value.trim() ?? '';

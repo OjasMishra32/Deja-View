@@ -32,6 +32,8 @@ local server = "A" -- who serves next
 local rally = 0
 local best = 0
 local over = false
+local roundId = ""
+local startedAt = 0
 
 -- The ball in flight: towards `to` (the side that must return it).
 local shot: any = nil
@@ -158,6 +160,8 @@ function Pong.point(winnerSide: string, why: string)
 		World.Moment:FireAllClients({ type = "winner", title = string.upper(nameOf(winnerSide)) .. " WINS PING PONG",
 			mvp = finalScore .. " · best rally " .. best })
 		local sceneId = workspace:GetAttribute("SceneId")
+		Backend.gameResult({ game = "pingpong", round = roundId, winner = sides[winnerSide], loser = sides[other(winnerSide)],
+			score = string.format("%d-%d", score[winnerSide], score[other(winnerSide)]), startedAt = startedAt })
 		Stats.win(sides[winnerSide], "pingpong")
 		if sceneId == "the-courts" then
 			Stats.badge(sides[winnerSide], "court")
@@ -308,6 +312,7 @@ function Pong.place(centre: Vector3, yaw: number, length: number?, width: number
 	scoreLabel = Theme.label({ Text = "", FontFace = Theme.Heading, TextXAlignment = Enum.TextXAlignment.Center,
 		Size = UDim2.new(1, -20, 1, -12), Position = UDim2.fromOffset(10, 6), MaxText = 26, Parent = card })
 	sides, score, server, rally, over = { A = nil, B = nil }, { A = 0, B = 0 }, "A", 0, false
+	roundId, startedAt = Backend.newRound("pingpong"), os.clock()
 	updateBoard()
 	World.toast("Ping pong: stand at an end of the table and press HIT")
 	task.delay(2, serve)

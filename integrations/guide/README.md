@@ -38,4 +38,4 @@ The project includes local `jq` and FFmpeg binaries. Use `npm run jq -- --versio
 
 ## AI tools used
 
-Gemini through the Google Gen AI SDK (`@google/genai`) in the product; Claude Code for engineering help.
+Gemini through the Google Gen AI SDK (`@google/genai`) in the product.

@@ -133,7 +133,7 @@ export function parseRobloxPresence(body: unknown, spm = STUDS_PER_METER): Parse
 // ---------------------------------------------------------------- POST /api/roblox/:sceneId/event
 
 const PERSON_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/;
-const TYPE_RE = /^[a-z][a-z0-9_]{0,23}$/;
+const TYPE_RE = /^[a-z][a-z0-9_.]{0,23}$/;
 const MAX_SCORES = 64;
 const MAX_EXTRA_FIELDS = 16;
 
@@ -185,7 +185,7 @@ function parseScores(raw: unknown): { ok: true; value: Record<string, number> } 
 export function parseRobloxEvent(body: unknown): Parsed<RobloxEventIn> {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return { ok: false, error: 'The body must be a JSON object.' };
   const o = body as Record<string, unknown>;
-  if (typeof o.type !== 'string' || !TYPE_RE.test(o.type)) return { ok: false, error: 'type must be "tag" or "round".' };
+  if (typeof o.type !== 'string' || !TYPE_RE.test(o.type)) return { ok: false, error: 'type must be a short lowercase name such as "tag", "round" or "game.result".' };
   if (o.type === 'tag') {
     const by = personId(o.by);
     const target = personId(o.target);
@@ -254,7 +254,7 @@ export interface BuiltMap {
   parsed?: Record<string, unknown> & { parts: unknown[] };
   /** Header numbers read once from the body (mapMeta). */
   meta?: MapMeta;
-  /** The body with the scene's walkBounds spliced in, for the walk box it was made for (mapResponse). */
+  /** The body with the scene's walkBounds (and features) spliced in, for the ones it was made for (mapResponse). */
   walk?: MapBytes & { sig: string };
 }
 
@@ -271,6 +271,8 @@ export interface MapMeta {
   studsPerMeter: number;
   /** Whether the builder already wrote walkBounds itself. */
   hasWalkBounds: boolean;
+  /** Whether the builder already wrote features itself (then the file's are not spliced in). */
+  hasFeatures?: boolean;
 }
 
 export type MapResult =
@@ -505,6 +507,11 @@ export class RobloxMapService {
     return false;
   }
 
+  /** The scene's directory (features.json sits next to the map files). */
+  dirOf(sceneId: string): string {
+    return this.opts.sceneDir(sceneId);
+  }
+
   // ---------------------------------------------------------------- internals
 
   private async scriptVersion(): Promise<string> {
@@ -628,13 +635,14 @@ export class RobloxMapService {
 }
 
 /**
- * One chunk (1-based) of a built map: the header fields repeated, plus `chunk` and `chunks` (contracts 6.2), and
- * `walk` as walkBounds when the map has none of its own.
+ * One chunk (1-based) of a built map: the header fields repeated, plus `chunk` and `chunks` (contracts 6.2), `walk`
+ * as walkBounds and `features` (contracts 6.6) when the map has none of its own.
  */
 export function mapChunk(
   map: BuiltMap,
   chunk: number,
   walk: StudBox | null = null,
+  features: Record<string, unknown> | null = null,
 ): { ok: true; body: Record<string, unknown> } | { ok: false; error: string } {
   if (!map.parsed) map.parsed = JSON.parse(new TextDecoder().decode(map.body)) as BuiltMap['parsed'];
   const all = map.parsed!.parts;
@@ -644,6 +652,7 @@ export function mapChunk(
   }
   const { parts: _parts, ...header } = map.parsed!;
   if (walk && header.walkBounds === undefined) header.walkBounds = walk;
+  if (features && header.features === undefined) header.features = features;
   return { ok: true, body: { ...header, chunk, chunks, parts: all.slice((chunk - 1) * CHUNK_PARTS, chunk * CHUNK_PARTS) } };
 }
 
@@ -691,6 +700,7 @@ export function mapMeta(map: BuiltMap): MapMeta {
       floorY: finite(p.floorY) ? p.floorY : null,
       studsPerMeter: finite(spm) && spm > 0 ? spm : STUDS_PER_METER,
       hasWalkBounds: p.walkBounds !== undefined && p.walkBounds !== null,
+      hasFeatures: p.features !== undefined && p.features !== null,
     };
   }
   return map.meta;
@@ -711,20 +721,26 @@ export function mapWalkBounds(map: BuiltMap, scene: Scene | null | undefined): S
 
 /**
  * The bytes to serve for a map: as built, or with `"walkBounds"` spliced in as the first field when the map has none
- * of its own, so cached maps need no rebuild. The variant is kept on the map for the walk box it was made for, and
- * has its own ETag.
+ * of its own, and `"features"` (contracts 6.6, studs) after it the same way, so cached maps need no rebuild. The
+ * variant is kept on the map for the walk box and features it was made for, and has its own ETag (`-w` for the walk
+ * box, `-f` for the features), so a game that cached the map sees new features.
  */
-export function mapResponse(map: BuiltMap, walk: StudBox | null): MapBytes {
-  if (!walk || mapMeta(map).hasWalkBounds) return map;
-  const sig = JSON.stringify(walk);
+export function mapResponse(map: BuiltMap, walk: StudBox | null, features: Record<string, unknown> | null = null): MapBytes {
+  const meta = mapMeta(map);
+  const addWalk = walk && !meta.hasWalkBounds ? JSON.stringify(walk) : null;
+  const addFeatures = features && !meta.hasFeatures ? JSON.stringify(features) : null;
+  if (!addWalk && !addFeatures) return map;
+  const sig = addFeatures ? `${addWalk ?? ''}|${addFeatures}` : addWalk!;
   if (map.walk && map.walk.sig === sig) return map.walk;
   const text = new TextDecoder().decode(map.body);
   const at = text.indexOf('{');
   if (at < 0) return map;
   const rest = text.slice(at + 1);
   const sep = /^\s*\}/.test(rest) ? '' : ',';
-  const body = new TextEncoder().encode(`${text.slice(0, at + 1)}"walkBounds":${sig}${sep}${rest}`);
-  const tag = createHash('sha1').update(sig).digest('hex').slice(0, 8);
-  map.walk = { sig, body, gzip: Bun.gzipSync(body as Uint8Array<ArrayBuffer>, { level: 6 }), etag: `"rm-${map.key}-w${tag}"` };
+  const fields = [addWalk && `"walkBounds":${addWalk}`, addFeatures && `"features":${addFeatures}`].filter(Boolean).join(',');
+  const body = new TextEncoder().encode(`${text.slice(0, at + 1)}${fields}${sep}${rest}`);
+  const tag = (s: string) => createHash('sha1').update(s).digest('hex').slice(0, 8);
+  const etag = `"rm-${map.key}${addWalk ? `-w${tag(addWalk)}` : ''}${addFeatures ? `-f${tag(addFeatures)}` : ''}"`;
+  map.walk = { sig, body, gzip: Bun.gzipSync(body as Uint8Array<ArrayBuffer>, { level: 6 }), etag };
   return map.walk;
 }

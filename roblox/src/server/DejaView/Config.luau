@@ -7,7 +7,7 @@ local Config = {
 	-- Flip to false once the public BASE is live (or create a boolean config "use_mock").
 	USE_MOCK = false,
 	-- Ojasva's public link (Update 4). A dejaview_base Experience Config overrides it.
-	BASE_FALLBACK = "https://prozac-covered-burke-oklahoma.trycloudflare.com",
+	BASE_FALLBACK = "https://highlighted-filter-surf-other.trycloudflare.com",
 	SECRET_NAME = "dejaview_key",
 
 	ROUND_SECONDS = 90,
@@ -17,6 +17,8 @@ local Config = {
 	COUNTDOWN = 3,
 	TAG_CHECK_HZ = 10,
 
+	-- Unlit textured rooms are applied per player on the client; true switches to the server's global version
+	SERVER_UNLIT = false,
 	MAX_PARTS = 12000, -- finer blocks (1.1-stud voxels on Tilted Towers vs 1.64 at 6000); max_parts config lowers it
 	BATCH = 400,
 
@@ -39,7 +41,11 @@ local Config = {
 	CHESS_BOARDS = {} :: { [string]: any },
 	-- Hand-tuned ping pong tables until features.pingPongTable (studs; centre = table top centre; yaw: long axis):
 	-- ["the-courts"] = { centre = { x, y, z }, yaw = 0, length = 14, width = 8, visible = false }
-	PINGPONG_TABLES = {} :: { [string]: any },
+	PINGPONG_TABLES = {
+		-- The real table at the Infinity Hall Game Lawn, found in the block map (blue top, 9.8 x 5.4 studs, 45 degrees).
+		-- Net and lines only: the table itself is the world's. Shared with Seb's real-physics ping pong.
+		["the-courts"] = { centre = { 1.88, 3.0, -17.01 }, yaw = 0.781, length = 9.8, width = 5.4, visible = false },
+	} :: { [string]: any },
 	-- Hand-tuned foosball tables until features.foosballTable (same shape as PINGPONG_TABLES; length 16, width 9)
 	FOOSBALL_TABLES = {} :: { [string]: any },
 	-- Extra Roblox user ids that get host controls (the owner always does).

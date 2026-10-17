@@ -568,3 +568,67 @@ describe('the uploader', () => {
     expect(fake.creates[0]!.request.displayName.length).toBe(50);
   });
 });
+
+describe('the upload ledger', () => {
+  test("a rebuild's fresh sidecar reuses the assets of files that came out the same; changed files go up", async () => {
+    const fake = fakeRoblox2();
+    const uploader = new RobloxAssetUploader({ apiKey: 'k', creatorId: '42', fetch: fake.fetchImpl, sleep: async () => {} });
+    const r = await rig({ uploader });
+    await writeV2(r.dir);
+    await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL);
+    await r.models.settle('room-a');
+    expect(fake.creates.length).toBe(8);
+    const ledger = JSON.parse(await readFile(join(r.dir, 'room-a', 'roblox-uploads.json'), 'utf8'));
+    expect(Object.keys(ledger).length).toBe(8);
+    // the pipeline writes a fresh sidecar (no upload records) for the same files, except a new part 2
+    const sums = await writeV2(r.dir);
+    const path = join(r.dir, 'room-a', 'roblox-model.json');
+    const s = JSON.parse(await readFile(path, 'utf8'));
+    expect(s.sky.up.upload).toBeUndefined();
+    const p2 = fakeGlb(77);
+    await writeFile(join(r.dir, 'room-a', 'roblox-2.glb'), p2);
+    s.parts[1] = { file: 'roblox-2.glb', sha1: sha1(p2) };
+    await writeFile(path, JSON.stringify(s));
+    const a = (await (await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL)).json()) as Record<string, any>;
+    expect(a.assetId).toBeUndefined();
+    await r.models.settle('room-a');
+    expect(fake.creates.map((c) => c.file.name)).toEqual([
+      'roblox.glb', 'roblox-2.glb', ...FACES.map((f) => `sky-${f}.png`), 'roblox-2.glb',
+    ]);
+    const b = (await (await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL)).json()) as Record<string, any>;
+    expect(b.upload).toMatchObject({ state: 'done', done: 8, total: 8 });
+    expect(b.assetId).toBe('770001'); // part 1 unchanged: the same asset
+    expect(b.parts[1].assetId).toBe('770009');
+    expect(b.sky).toEqual({ front: '770003', back: '770004', left: '770005', right: '770006', up: '770007', down: '770008' });
+    const stored = JSON.parse(await readFile(path, 'utf8'));
+    expect(stored.sky.up.upload).toMatchObject({ assetId: '770007', reused: true });
+    expect(stored.upload).toMatchObject({ assetId: '770001', sha1: sums.p1 });
+  });
+
+  test('records an older server left only in the sidecar are learned before a rebuild replaces them', async () => {
+    const fake = fakeRoblox2();
+    const uploader = new RobloxAssetUploader({ apiKey: 'k', creatorId: '42', fetch: fake.fetchImpl, sleep: async () => {} });
+    const r = await rig({ uploader });
+    await writeV2(r.dir);
+    const path = join(r.dir, 'room-a', 'roblox-model.json');
+    const s = JSON.parse(await readFile(path, 'utf8'));
+    // uploaded by a server without a ledger: records in the sidecar only, part 2 still missing
+    s.upload = { assetId: '555', sha1: s.sha1, operationId: 'op-x', at: 1 };
+    for (const [i, f] of FACES.entries()) s.sky[f].upload = { assetId: `66${i}`, sha1: s.sky[f].sha1, at: 1 };
+    await writeFile(path, JSON.stringify(s));
+    await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL);
+    await r.models.settle('room-a');
+    expect(fake.creates.map((c) => c.file.name)).toEqual(['roblox-2.glb']);
+    // now a fresh sidecar for the same files: nothing goes up
+    await writeV2(r.dir);
+    await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL);
+    await r.models.settle('room-a');
+    expect(fake.creates.length).toBe(1);
+    const b = (await (await r.routes[MODEL]!(req('/api/roblox/room-a/model'), LOCAL)).json()) as Record<string, any>;
+    expect(b.assetId).toBe('555');
+    expect(b.sky.down).toBe('665');
+    // a ledger entry of the wrong kind or a malformed file is ignored, never trusted
+    await writeFile(join(r.dir, 'room-a', 'roblox-uploads.json'), '{"not json');
+    expect(await r.models.ledger('room-a')).toEqual({});
+  });
+});

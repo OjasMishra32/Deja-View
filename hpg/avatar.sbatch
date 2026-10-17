@@ -1,16 +1,20 @@
 #!/bin/bash
-# Déjà View avatars: people in a clip -> avatar-<k>.glb (pipeline/avatar/run.py), one GPU job.
+# Déjà View avatars: people in a clip -> avatar-<k>.glb (pipeline/avatar/run.py), on one GPU.
 #
-#   sbatch --export=ALL,VIDEO=...,POSES=...,WORK=...,OUT=...[,WORLD=world.spz,PEOPLE=2,BACKVIEW=auto,FPS=30,START=0,STEPS=all,FORCE=] \
+#   sbatch --export=ALL,VIDEO=...,POSES=...,WORK=...,OUT=...[,WORLD=world.spz,PEOPLE=2,BACKVIEW=auto,FPS=30,START=0,STEPS=all,FORCE=,ARGS=] \
 #          $HPG_ROOT/repo/hpg/avatar.sbatch
 #
-# STEPS / FORCE take colon-separated step names (ground:texture), since --export splits on commas.
+# STEPS / FORCE take colon-separated step names (ground:texture), since --export splits on commas. ARGS: more run.py
+# flags (--refine legs, --photofit off, --holdout FILE, ...). SNAP: run from a synced snapshot instead of the repo.
+# The group's GPUs are shared, so a long clip runs in three jobs that each stay under 30 minutes:
+#   this script with STEPS=hmr; hpg/avatar-cpu.sbatch (ground ... fill, CPU only); this script with STEPS=photofit:glb.
 #
 # VIDEO: the clip; POSES: its <clip>-poses.json from pipeline/recon/frame.py post (camera per frame + intrinsics);
 # WORK: a work folder on /blue (frames, masks, caches); OUT: where avatar-<k>.glb and avatar.json go.
 # WORLD (optional): the scene's world.spz; furniture in it (the foosball table) hides the legs when texturing.
-# The GPU runs the pose network (about a minute for 12 s at 30 fps) and, only when a person's back was never
-# filmed, Qwen-Image-Edit-2511 for the generated back; the rest is CPU. Steps are cached in WORK.
+# The GPU runs the pose network (about a minute for 12 s at 30 fps), the photofit (about 15 minutes for two people
+# and 12 s) and, only when a person's back was never filmed, Qwen-Image-Edit-2511 for the generated back; the rest is
+# CPU (about 15 minutes for two people and 12 s). Steps are cached in WORK.
 #SBATCH --job-name=tw-avatar
 #SBATCH --account=phz3152
 #SBATCH --qos=phz3152
@@ -18,7 +22,7 @@
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=96G
-#SBATCH --time=00:45:00
+#SBATCH --time=00:29:00
 #SBATCH --output=/blue/phz3152/sbernalorta/thirdwheel/logs/avatar-%j.log
 set -euo pipefail
 
@@ -36,9 +40,9 @@ tw_use_env avatar || tw_die "no avatar env (bash hpg/setup-avatar.sh submit)"
 : "${VIDEO:?set VIDEO}" "${POSES:?set POSES}" "${WORK:?set WORK}" "${OUT:?set OUT}"
 STEPS="${STEPS:-all}"; STEPS="${STEPS//:/,}"
 FORCE="${FORCE:-}"; FORCE="${FORCE//:/,}"
-cd "$HPG_ROOT/repo"
+cd "${SNAP:-$HPG_ROOT/repo}"
 tw_say "avatar job ${SLURM_JOB_ID:-local} on $(hostname): $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)"
 python -W ignore -m pipeline.avatar.run --work "$WORK" --video "$VIDEO" --poses "$POSES" --out-dir "$OUT" \
   --people "${PEOPLE:-2}" --backview "${BACKVIEW:-auto}" --fps "${FPS:-30}" --start "${START:-0}" \
-  --clip "${CLIP:-play}" --steps "$STEPS" --force "$FORCE" ${WORLD:+--world "$WORLD"}
+  --clip "${CLIP:-play}" --steps "$STEPS" --force "$FORCE" ${WORLD:+--world "$WORLD"} ${ARGS:-}
 tw_say "done: $(ls "$OUT")"

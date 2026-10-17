@@ -3,7 +3,8 @@
 //   GET  /api/presence/:sceneId           everyone in a scene, metres
 //   POST /api/presence/:sceneId           headset / browser viewer (4 Hz, metres) -> everyone else
 //   GET  /api/roblox/:sceneId/map         the room as coloured boxes in studs (built once, cached, gzip), plus
-//                                         walkBounds (world.bounds in studs) when the scene has them
+//                                         walkBounds (world.bounds in studs) when the scene has them and features
+//                                         (features.json in studs, contracts 6.6; features.ts) when it has that
 //   POST /api/roblox/:sceneId/presence    a Roblox game server's players (4 Hz, studs) -> everyone else in studs
 //   POST /api/roblox/:sceneId/event       a Roblox moment (tag, round) -> onEvent subscribers (the /ws layer)
 //
@@ -27,9 +28,11 @@ import {
   SOCIAL_CORS,
   type RequestIpSource,
 } from './http.ts';
+import { FEATURES_FILE, sceneFeatures } from './features.ts';
 import { parsePresenceBody, PresenceStore, type PresenceOptions } from './presence.ts';
 import {
   mapChunk,
+  mapMeta,
   mapResponse,
   mapWalkBounds,
   parseRobloxEvent,
@@ -252,13 +255,16 @@ export function createSocialRoutes(deps: SocialRouteDeps): SocialRoutes {
     const map = r.map;
     // the walk box (scene.json world.bounds in studs) is added at response time, so cached maps stay valid
     const walk = mapWalkBounds(map, scene);
+    // the tables (features.json, metres) go through the floor and stud scale this map was built with
+    const meta = mapMeta(map);
+    const features = await sceneFeatures(join(maps.dirOf(sceneId), FEATURES_FILE), scene, meta.floorY, meta.studsPerMeter, log);
     const chunkRaw = url.searchParams.get('chunk');
     if (chunkRaw !== null && chunkRaw !== '') {
-      const c = mapChunk(map, Number(chunkRaw), walk);
+      const c = mapChunk(map, Number(chunkRaw), walk, features);
       if (!c.ok) return fail(400, c.error);
       return json(c.body, 200, { 'Cache-Control': 'no-cache', 'X-Map-Parts': String(map.parts) });
     }
-    const out = mapResponse(map, walk);
+    const out = mapResponse(map, walk, features);
     const headers: Record<string, string> = {
       ...SOCIAL_CORS,
       'Content-Type': 'application/json; charset=utf-8',

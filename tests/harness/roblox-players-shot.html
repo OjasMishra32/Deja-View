@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Roblox players shot</title>
+  <style>html, body { margin: 0; background: #0c0c0e; } canvas { display: block; }</style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/node_modules/three/build/three.module.js",
+        "three/addons/": "/node_modules/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+<script type="module">
+  // A world's Roblox room (roblox-model.json v2: parts + skybox, unlit as the game shows it) with two blocky players
+  // in a rally on the real ping-pong table (features.json pingPongTable). window.__views lists the cameras;
+  // window.__render(i) draws one into the canvas. Read by tests/harness/roblox-players-shot.ts.
+  import * as THREE from 'three';
+  import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+  import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+  const p = new URLSearchParams(location.search);
+  const sceneId = p.get('scene');
+  const dir = p.get('model') || `data/scenes/${sceneId}`;
+  const W = Number(p.get('w') || 1600), H = Number(p.get('h') || 1000), FOV = Number(p.get('fov') || 55);
+  const STUD = 1 / 3.57; // metres per stud: the room is life size, so the players are their in-game size
+
+  try {
+    const scene = await (await fetch(`/data/scenes/${sceneId}/scene.json`)).json();
+    const feats = await (await fetch(`/data/scenes/${sceneId}/features.json`)).json();
+    const meta = await (await fetch(`/${dir}/roblox-model.json`)).json();
+    const spm = meta.studsPerMeter;
+
+    const gl = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    gl.setPixelRatio(1);
+    gl.setSize(W, H);
+    gl.outputColorSpace = THREE.SRGBColorSpace;
+    gl.autoClear = false;
+    document.body.appendChild(gl.domElement);
+    const camera = new THREE.PerspectiveCamera(FOV, W / H, 0.03, 600);
+
+    // the room, unlit (the game's look), in metres
+    const room = new THREE.Scene();
+    const loader = new GLTFLoader();
+    for (const f of (meta.parts?.length ? meta.parts.map((x) => x.file) : ['roblox.glb'])) {
+      const g = await loader.loadAsync(`/${dir}/${f}`);
+      g.scene.scale.setScalar(1 / spm);
+      g.scene.traverse((o) => {
+        if (!o.isMesh) return;
+        // the floor is seen at a grazing angle: full anisotropic filtering keeps its texture sharp into the distance
+        if (o.material.map) o.material.map.anisotropy = gl.capabilities.getMaxAnisotropy();
+        o.material = new THREE.MeshBasicMaterial({ map: o.material.map, vertexColors: !o.material.map });
+      });
+      room.add(g.scene);
+    }
+    // the skybox: six planes at infinity, as roblox-model-preview.html draws them
+    const sky = new THREE.Scene();
+    sky.background = new THREE.Color(0x0c0c0e);
+    if (meta.sky && meta.skyInfo) {
+      const tl = new THREE.TextureLoader();
+      for (const [face, e] of Object.entries(meta.sky)) {
+        const info = meta.skyInfo.faces[face];
+        const tex = await tl.loadAsync(`/${dir}/${e.file}`);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        const fwd = new THREE.Vector3(...info.look), up = new THREE.Vector3(...info.imageUp);
+        const right = new THREE.Vector3().crossVectors(fwd, up);
+        const plane = new THREE.Mesh(new THREE.PlaneGeometry(2.002, 2.002),
+          new THREE.MeshBasicMaterial({ map: tex, depthTest: false, depthWrite: false }));
+        plane.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, fwd.clone().negate()));
+        plane.userData.fwd = fwd;
+        sky.add(plane);
+      }
+    }
+
+    // the players are lit (Roblox lights characters even where the room's look is unlit)
+    room.add(new THREE.HemisphereLight(0xffffff, 0x8a7f70, 1.6));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+    sun.position.set(2, 6, 3);
+    room.add(sun);
+
+    const T = feats.pingPongTable;
+    const C = new THREE.Vector3(...T.centre);
+    const L = new THREE.Vector3(...T.longAxis).setY(0).normalize();
+    const P = new THREE.Vector3(-L.z, 0, L.x);
+    const half = T.length / 2, top = T.height;
+
+    const faceTex = (() => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 256;
+      const g = c.getContext('2d');
+      g.fillStyle = '#111';
+      for (const x of [88, 168]) { g.beginPath(); g.ellipse(x, 104, 13, 24, 0, 0, Math.PI * 2); g.fill(); }
+      g.lineWidth = 12; g.lineCap = 'round'; g.strokeStyle = '#111';
+      g.beginPath(); g.arc(128, 128, 62, 0.22 * Math.PI, 0.78 * Math.PI); g.stroke();
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    })();
+    const blob = (() => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 128;
+      const g = c.getContext('2d');
+      const gr = g.createRadialGradient(64, 64, 4, 64, 64, 64);
+      gr.addColorStop(0, 'rgba(0,0,0,0.55)'); gr.addColorStop(0.6, 'rgba(0,0,0,0.25)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+      return new THREE.CanvasTexture(c);
+    })();
+    const shadow = (r, y) => {
+      const m = new THREE.Mesh(new THREE.CircleGeometry(r, 40),
+        new THREE.MeshBasicMaterial({ map: blob, transparent: true, depthWrite: false }));
+      m.rotation.x = -Math.PI / 2;
+      m.position.y = y;
+      return m;
+    };
+    const mat = (hex) => new THREE.MeshStandardMaterial({ color: hex, roughness: 0.55, metalness: 0 });
+    const box = (w, h, d, m) => new THREE.Mesh(new RoundedBoxGeometry(w * STUD, h * STUD, d * STUD, 3, 0.12 * STUD), m);
+
+    // a classic blocky player (R6 proportions, studs), feet at y = 0, facing +Z; pose in radians
+    function player(colors, pose) {
+      const g = new THREE.Group();
+      const skin = mat(colors.skin), shirt = mat(colors.shirt), pants = mat(colors.pants), arms = mat(colors.arms ?? colors.skin);
+      const hip = 2 * STUD, shoulder = 4 * STUD;
+      const body = new THREE.Group();
+      body.position.y = hip;
+      body.rotation.y = pose.twist ?? 0;
+      body.rotation.x = pose.lean ?? 0;
+      g.add(body);
+      const torso = box(2, 2, 1, shirt);
+      torso.position.y = 1 * STUD;
+      body.add(torso);
+      const head = box(1.25, 1.25, 1.25, skin);
+      head.position.y = 2.62 * STUD;
+      body.add(head);
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(1.1 * STUD, 1.1 * STUD),
+        new THREE.MeshBasicMaterial({ map: faceTex, transparent: true }));
+      face.position.set(0, 2.62 * STUD, 0.63 * STUD);
+      body.add(face);
+      const limb = (x, y, m, rx, rz) => {
+        const pivot = new THREE.Group();
+        pivot.position.set(x, y, 0);
+        pivot.rotation.set(rx, 0, rz);
+        const part = box(1, 2, 1, m);
+        part.position.y = -1 * STUD;
+        pivot.add(part);
+        return pivot;
+      };
+      const armR = limb(-1.5 * STUD, 1.9 * STUD, arms, pose.armR[0], pose.armR[1]);
+      const armL = limb(1.5 * STUD, 1.9 * STUD, arms, pose.armL[0], pose.armL[1]);
+      body.add(armR, armL);
+      // legs hang from the hips, outside the twisted torso group so the feet stay planted
+      g.add(limb(-0.5 * STUD, hip, pants, pose.legR[0], pose.legR[1]), limb(0.5 * STUD, hip, pants, pose.legL[0], pose.legL[1]));
+      // the paddle in the right hand
+      const paddle = new THREE.Group();
+      const red = new THREE.MeshStandardMaterial({ color: 0xd22b2b, roughness: 0.7 });
+      const black = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.7 });
+      const wood = new THREE.MeshStandardMaterial({ color: 0xc89b5f, roughness: 0.6 });
+      const R = 0.1, th = 0.012;
+      const faceA = new THREE.Mesh(new THREE.CylinderGeometry(R, R, th / 2, 40), red);
+      faceA.position.y = th / 4;
+      const faceB = new THREE.Mesh(new THREE.CylinderGeometry(R, R, th / 2, 40), black);
+      faceB.position.y = -th / 4;
+      const blade = new THREE.Group();
+      blade.add(faceA, faceB);
+      blade.rotation.x = Math.PI / 2;
+      blade.position.y = -0.17;
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.11, 0.022), wood);
+      handle.position.y = -0.05;
+      paddle.add(blade, handle);
+      paddle.position.y = -2 * STUD;
+      paddle.rotation.z = pose.paddle ?? 0;
+      armR.add(paddle);
+      g.add(shadow(0.42, 0.012));
+      return g;
+    }
+
+    // two players at the ends of the table, facing it
+    const placePlayer = (pl, sign) => {
+      const at = C.clone().addScaledVector(L, sign * (half + 0.55)).addScaledVector(P, sign * 0.18);
+      pl.position.set(at.x, 0, at.z);
+      const face = C.clone().sub(at).setY(0).normalize();
+      pl.rotation.y = Math.atan2(face.x, face.z);
+      room.add(pl);
+      return pl;
+    };
+    // A: just hit a forehand (arm forward and up, body turned through the ball); B: ready, paddle up
+    const A = placePlayer(player({ skin: 0xf5cd30, shirt: 0x0d69ac, pants: 0xa4bd47 },
+      { armR: [-1.35, -0.75], armL: [0.55, 0.3], legR: [0.3, -0.08], legL: [-0.32, 0.08], twist: 0.35, lean: 0.1, paddle: -0.4 }), -1);
+    const B = placePlayer(player({ skin: 0xcc8e69, shirt: 0xc4281c, pants: 0x27313d, arms: 0xc4281c },
+      { armR: [-0.95, -0.35], armL: [-0.55, 0.3], legR: [0.05, -0.2], legL: [-0.05, 0.2], twist: -0.15, lean: 0.18, paddle: 0.2 }), 1);
+
+    // the ball on its way over the net, with a short trail behind it, and its shadow on the table
+    const ballMat = new THREE.MeshStandardMaterial({ color: 0xff8a1f, roughness: 0.35, emissive: 0x552200 });
+    const arc = (t) => {
+      const from = C.clone().addScaledVector(L, -half + 0.05).addScaledVector(P, -0.1).setY(top + 0.22);
+      const to = C.clone().addScaledVector(L, half * 0.55).addScaledVector(P, 0.15).setY(top + 0.02);
+      const q = from.clone().lerp(to, t);
+      q.y += Math.sin(Math.PI * t) * 0.16;
+      return q;
+    };
+    const tBall = 0.46;
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.05, 24, 16), ballMat);
+    ball.position.copy(arc(tBall));
+    room.add(ball);
+    for (let k = 1; k <= 7; k++) {
+      const s = new THREE.Mesh(new THREE.SphereGeometry(0.05 * (1 - k * 0.09), 16, 12),
+        new THREE.MeshBasicMaterial({ color: 0xffc27a, transparent: true, opacity: 0.6 * (1 - k / 9), depthWrite: false }));
+      s.position.copy(arc(tBall - k * 0.03));
+      room.add(s);
+    }
+    const bs = shadow(0.07, top + 0.004);
+    bs.position.x = ball.position.x; bs.position.z = ball.position.z;
+    room.add(bs);
+
+    // cameras round the table, looking at the rally
+    const look = C.clone().setY(top + 0.35);
+    const cam = (name, dirV, dist, y, aim = look) => {
+      const eye = C.clone().addScaledVector(dirV.clone().normalize(), dist).setY(y);
+      return { name, eye: eye.toArray(), target: aim.toArray() };
+    };
+    // pitched down so the shot is the players and the room, not the ceiling
+    const low = C.clone().setY(0.55);
+    const views = [
+      cam('hero-lawn', P.clone().multiplyScalar(-0.85).addScaledVector(L, -0.55), 3.7, 2.15, low),
+      cam('hero-lawn-wide', P.clone().multiplyScalar(-0.85).addScaledVector(L, -0.55), 4.4, 2.3, low),
+      cam('hero-lawn-side', P.clone().multiplyScalar(-1).addScaledVector(L, -0.2), 3.6, 2.1, low),
+      cam('hero-glass', P.clone().multiplyScalar(0.85).addScaledVector(L, -0.55), 3.7, 2.15, low),
+      cam('hero-side', P, 3.3, 2.1, low),
+      cam('three-quarter-c', P.clone().multiplyScalar(-0.85).addScaledVector(L, -0.55), 3.8, 1.9),
+    ];
+    window.__views = views.map((v) => v.name);
+    window.__bounds = scene.world.bounds ?? null;
+    window.__render = (i) => {
+      const v = views[i];
+      camera.position.set(...v.eye);
+      camera.lookAt(new THREE.Vector3(...v.target));
+      camera.updateMatrixWorld();
+      for (const pl of sky.children) pl.position.copy(camera.position).add(pl.userData.fwd);
+      gl.clear();
+      gl.render(sky, camera);
+      gl.clearDepth();
+      gl.render(room, camera);
+      return v;
+    };
+    // distance from the camera per pixel (metres / 20, white = sky), for a depth-of-field pass afterwards
+    const depthMat = new THREE.ShaderMaterial({
+      vertexShader: 'varying float vD; void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vD = -mv.z; gl_Position = projectionMatrix * mv; }',
+      fragmentShader: 'varying float vD; void main() { float d = clamp(vD / 20.0, 0.0, 1.0); gl_FragColor = vec4(d, d, d, 1.0); }',
+    });
+    window.__renderDepth = (i) => {
+      window.__render(i);
+      gl.setClearColor(0xffffff, 1);
+      gl.clear();
+      room.overrideMaterial = depthMat;
+      gl.render(room, camera);
+      room.overrideMaterial = null;
+      gl.setClearColor(0x000000, 0);
+    };
+    // depth of field like a camera's: sharp between `near` and `far` metres (the players and the table), softening
+    // towards the far lawn and the floor at your feet. A gather blur over a golden-angle disc where a sample only
+    // counts if its own blur reaches this pixel, so sharp players never smear into the soft background.
+    const colorRT = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, samples: 4 });
+    const depthRT = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType });
+    const post = new THREE.Scene();
+    const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const dofMat = new THREE.ShaderMaterial({
+      uniforms: { tColor: { value: colorRT.texture }, tDepth: { value: depthRT.texture }, px: { value: new THREE.Vector2(1 / W, 1 / H) },
+        near: { value: 2.4 }, far: { value: 5.6 }, maxR: { value: 12 } },
+      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: `
+        uniform sampler2D tColor, tDepth; uniform vec2 px; uniform float near, far, maxR; varying vec2 vUv;
+        float coc(vec2 uv) {
+          float d = texture2D(tDepth, uv).r * 20.0;
+          if (d > far) return min((d - far) / 5.0, 1.0) * maxR;
+          if (d < near) return min((near - d) / 1.4, 1.0) * maxR * 0.7;
+          return 0.0;
+        }
+        void main() {
+          float c0 = coc(vUv);
+          vec3 sum = texture2D(tColor, vUv).rgb; float wsum = 1.0;
+          for (int i = 1; i < 48; i++) {
+            float r = sqrt(float(i) / 48.0) * c0;
+            float a = float(i) * 2.39996323;
+            vec2 uv = vUv + vec2(cos(a), sin(a)) * r * px;
+            float w = clamp(coc(uv) / max(r, 1.0), 0.0, 1.0);
+            sum += texture2D(tColor, uv).rgb * w; wsum += w;
+          }
+          gl_FragColor = vec4(sum / wsum, 1.0);
+          #include <colorspace_fragment>
+        }`,
+    });
+    post.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), dofMat));
+    window.__renderDof = (i, nearM = 2.4, farM = 5.6, maxR = 12) => {
+      const v = views[i];
+      camera.position.set(...v.eye);
+      camera.lookAt(new THREE.Vector3(...v.target));
+      camera.updateMatrixWorld();
+      for (const pl of sky.children) pl.position.copy(camera.position).add(pl.userData.fwd);
+      gl.setRenderTarget(colorRT);
+      gl.setClearColor(0x000000, 1);
+      gl.clear();
+      gl.render(sky, camera);
+      gl.clearDepth();
+      gl.render(room, camera);
+      gl.setRenderTarget(depthRT);
+      gl.setClearColor(0xffffff, 1);
+      gl.clear();
+      room.overrideMaterial = depthMat;
+      gl.render(room, camera);
+      room.overrideMaterial = null;
+      gl.setRenderTarget(null);
+      gl.setClearColor(0x000000, 0);
+      Object.assign(dofMat.uniforms.near, { value: nearM });
+      Object.assign(dofMat.uniforms.far, { value: farM });
+      Object.assign(dofMat.uniforms.maxR, { value: maxR });
+      gl.clear();
+      gl.render(post, postCam);
+    };
+    window.__ready = true;
+  } catch (e) {
+    window.__error = String((e && e.stack) || e);
+  }
+</script>
+</body>
+</html>

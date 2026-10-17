@@ -1,14 +1,12 @@
-// In-headset visuals: stylised controller models, pointer rays, the teleport arc and landing
-// ring, and a wrist panel with buttons (selected with the trigger).
+// In-headset visuals: stylised controller models, pointer rays with a cursor, the teleport arc and
+// landing ring. The panels themselves (wrist menu, Video transport, arrival card) are xr-overlay.ts.
 
 import * as THREE from 'three';
-import { BRAND } from './hud.ts';
 
 // Apple system colours, the same as the site.
 const ACCENT = 0x007aff;
 const OK = 0x34c759;
 const BAD = 0xff3b30;
-const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", Roboto, system-ui, sans-serif';
 
 let matcapTex: THREE.Texture | null = null;
 
@@ -71,11 +69,13 @@ export function makeControllerModel(hand: 'left' | 'right'): THREE.Group {
   return g;
 }
 
-/** Pointer ray in target-ray space (along -Z), fading out with distance. */
+/** Pointer ray in target-ray space (along -Z), fading out with distance, and a cursor where it rests on a panel. */
 export class PointerRay {
   readonly mesh: THREE.Mesh;
   private mat: THREE.ShaderMaterial;
   readonly dot: THREE.Mesh;
+  private dotMat: THREE.MeshBasicMaterial;
+  private pressed = false;
 
   constructor() {
     this.mat = new THREE.ShaderMaterial({
@@ -91,18 +91,26 @@ export class PointerRay {
     geo.translate(0, 0, -0.5);
     this.mesh = new THREE.Mesh(geo, this.mat);
     this.mesh.renderOrder = 900;
-    this.dot = new THREE.Mesh(new THREE.SphereGeometry(0.006, 12, 8), new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, depthTest: false }));
-    this.dot.renderOrder = 901;
+    // the cursor draws after the panels it sits on
+    this.dotMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false, toneMapped: false });
+    this.dot = new THREE.Mesh(new THREE.SphereGeometry(0.003, 12, 8), this.dotMat);
+    this.dot.renderOrder = 1000;
     this.dot.visible = false;
   }
 
   setLength(len: number, hovering: boolean): void {
     this.mesh.scale.set(1, 1, len);
     this.mat.uniforms.len.value = 1;
-    this.mat.uniforms.strength.value = hovering ? 0.9 : 0.5;
-    (this.mat.uniforms.color.value as THREE.Color).set(hovering ? ACCENT : 0xffffff);
+    this.mat.uniforms.strength.value = hovering ? 0.8 : 0.5;
     this.dot.visible = hovering;
     this.dot.position.set(0, 0, -len);
+  }
+
+  /** The cursor shrinks while the trigger (or pinch) is held on a button. */
+  setPressed(on: boolean): void {
+    if (on === this.pressed) return;
+    this.pressed = on;
+    this.dot.scale.setScalar(on ? 0.7 : 1);
   }
 }
 
@@ -186,181 +194,5 @@ export class TeleportVisual {
 
   hide(): void {
     this.group.visible = false;
-  }
-}
-
-export interface PanelButton {
-  id: string;
-  label: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  enabled: boolean;
-}
-
-/** Canvas-textured panel attached to the left controller. */
-export class WristPanel {
-  readonly mesh: THREE.Mesh;
-  private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
-  private tex: THREE.CanvasTexture;
-  readonly width = 0.2;
-  readonly height = 0.1125;
-  private buttons: PanelButton[] = [];
-  private hover: string | null = null;
-  private state = { title: '', playing: false, hasVideo: false, time: '', sub: '' };
-  private dirty = true;
-
-  constructor() {
-    this.canvas = document.createElement('canvas');
-    this.canvas.width = 640;
-    this.canvas.height = 360;
-    this.ctx = this.canvas.getContext('2d')!;
-    this.tex = new THREE.CanvasTexture(this.canvas);
-    this.tex.colorSpace = THREE.SRGBColorSpace;
-    this.tex.anisotropy = 4;
-    const mat = new THREE.MeshBasicMaterial({ map: this.tex, transparent: true, depthWrite: false, side: THREE.DoubleSide });
-    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(this.width, this.height), mat);
-    this.mesh.name = 'wrist-panel';
-    this.mesh.renderOrder = 960;
-    // above the left controller, tilted toward the face
-    this.mesh.position.set(0.01, 0.075, -0.02);
-    this.mesh.rotation.set(-0.85, 0, 0);
-  }
-
-  setState(s: Partial<WristPanel['state']>): void {
-    for (const [k, v] of Object.entries(s)) {
-      if ((this.state as Record<string, unknown>)[k] !== v) {
-        (this.state as Record<string, unknown>)[k] = v;
-        this.dirty = true;
-      }
-    }
-  }
-
-  setOpacity(o: number): void {
-    (this.mesh.material as THREE.MeshBasicMaterial).opacity = o;
-  }
-
-  setHover(id: string | null): void {
-    if (id !== this.hover) {
-      this.hover = id;
-      this.dirty = true;
-    }
-  }
-
-  /** Button id under a point given in the panel's local coordinates. */
-  hit(local: THREE.Vector3): string | null {
-    const px = (local.x / this.width + 0.5) * this.canvas.width;
-    const py = (0.5 - local.y / this.height) * this.canvas.height;
-    for (const b of this.buttons) if (b.enabled && px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h) return b.id;
-    return null;
-  }
-
-  redraw(): void {
-    if (!this.dirty) return;
-    this.dirty = false;
-    const g = this.ctx, W = this.canvas.width, H = this.canvas.height;
-    g.clearRect(0, 0, W, H);
-    const round = (x: number, y: number, w: number, h: number, r: number) => {
-      g.beginPath();
-      g.moveTo(x + r, y);
-      g.arcTo(x + w, y, x + w, y + h, r);
-      g.arcTo(x + w, y + h, x, y + h, r);
-      g.arcTo(x, y + h, x, y, r);
-      g.arcTo(x, y, x + w, y, r);
-      g.closePath();
-    };
-    // a light iOS-style panel: brand and time, the world's name, four tiles
-    round(4, 4, W - 8, H - 8, 40);
-    g.fillStyle = 'rgba(255,255,255,0.94)';
-    g.fill();
-
-    g.fillStyle = '#6e6e73';
-    g.font = `500 24px ${FONT}`;
-    g.fillText(BRAND, 36, 58);
-    g.textAlign = 'right';
-    g.fillText(this.state.time, W - 36, 58);
-    g.textAlign = 'left';
-    g.fillStyle = '#1d1d1f';
-    g.font = `600 44px ${FONT}`;
-    let title = this.state.title || BRAND;
-    while (g.measureText(title).width > W - 72 && title.length > 4) title = title.slice(0, -2);
-    if (title !== (this.state.title || BRAND)) title += '…';
-    g.fillText(title, 36, 116);
-
-    const defs: Array<[string, string, boolean]> = [
-      ['play', this.state.playing ? 'Pause' : 'Play', this.state.hasVideo],
-      ['restart', 'Restart', this.state.hasVideo],
-      ['spawn', 'Start point', true],
-      ['exit', 'Exit VR', true],
-    ];
-    this.buttons = [];
-    const bw = (W - 72 - 3 * 14) / 4, bh = 150, by = H - 36 - bh;
-    defs.forEach(([id, label, enabled], i) => {
-      const x = 36 + i * (bw + 14);
-      this.buttons.push({ id, label, x, y: by, w: bw, h: bh, enabled });
-      const hov = this.hover === id && enabled;
-      round(x, by, bw, bh, 28);
-      g.fillStyle = !enabled ? 'rgba(118,118,128,0.06)' : hov ? '#007aff' : 'rgba(118,118,128,0.12)';
-      g.fill();
-      g.fillStyle = !enabled ? 'rgba(60,60,67,0.3)' : hov ? '#ffffff' : '#007aff';
-      g.strokeStyle = g.fillStyle;
-      this.icon(id, x + bw / 2, by + 58, this.state.playing);
-      g.fillStyle = !enabled ? 'rgba(60,60,67,0.3)' : hov ? '#ffffff' : '#1d1d1f';
-      g.font = `500 24px ${FONT}`;
-      g.textAlign = 'center';
-      g.fillText(label, x + bw / 2, by + bh - 28);
-      g.textAlign = 'left';
-    });
-    this.tex.needsUpdate = true;
-  }
-
-  private icon(id: string, cx: number, cy: number, playing: boolean): void {
-    const g = this.ctx;
-    g.lineWidth = 5;
-    g.lineCap = 'round';
-    g.lineJoin = 'round';
-    g.beginPath();
-    if (id === 'play') {
-      if (playing) {
-        g.fillRect(cx - 16, cy - 20, 11, 40);
-        g.fillRect(cx + 5, cy - 20, 11, 40);
-      } else {
-        g.moveTo(cx - 12, cy - 22);
-        g.lineTo(cx + 20, cy);
-        g.lineTo(cx - 12, cy + 22);
-        g.closePath();
-        g.fill();
-      }
-      return;
-    }
-    if (id === 'restart') {
-      g.arc(cx, cy, 19, -Math.PI * 0.85, Math.PI * 0.75);
-      g.stroke();
-      g.beginPath();
-      g.moveTo(cx - 22, cy - 22);
-      g.lineTo(cx - 17, cy - 8);
-      g.lineTo(cx - 4, cy - 14);
-      g.stroke();
-      return;
-    }
-    if (id === 'spawn') {
-      g.arc(cx, cy - 6, 13, Math.PI, 0);
-      g.lineTo(cx, cy + 22);
-      g.closePath();
-      g.stroke();
-      g.beginPath();
-      g.arc(cx, cy - 6, 4, 0, Math.PI * 2);
-      g.fill();
-      return;
-    }
-    if (id === 'exit') {
-      g.moveTo(cx - 16, cy - 16);
-      g.lineTo(cx + 16, cy + 16);
-      g.moveTo(cx + 16, cy - 16);
-      g.lineTo(cx - 16, cy + 16);
-      g.stroke();
-    }
   }
 }

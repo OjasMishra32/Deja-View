@@ -1,0 +1,471 @@
+/* Déjà View scoreboard: white, the system font, big type, flat fills. Phone first, 16 px gutters. */
+
+:root {
+  --bg: #ffffff;
+  --card: #f5f5f7;
+  --line: rgba(60, 60, 67, 0.12);
+  --text: #1d1d1f;
+  --muted: #6e6e73;
+  --dim: #86868b;
+  --link: #0066cc;
+  --green: #34c759;
+  --green-ink: #248a3d;
+  --orange-ink: #c93400;
+  --red-ink: #d70015;
+  --radius: 20px;
+  --gutter: 16px;
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 17px;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+:focus-visible {
+  outline: 3px solid rgba(0, 102, 204, 0.4);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.s-wrap {
+  width: 100%;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+
+/* ---------- Top bar ---------- */
+
+.s-top {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--line);
+  padding-top: env(safe-area-inset-top);
+}
+
+.s-top .s-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+}
+
+.s-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.s-brand:hover {
+  text-decoration: none;
+}
+
+.s-mark {
+  width: 26px;
+  height: 26px;
+}
+
+.s-spacer {
+  flex: 1;
+}
+
+.s-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--dim);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.s-live::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.s-live[data-state='ok'] {
+  color: var(--green-ink);
+}
+
+.s-live[data-state='warn'] {
+  color: var(--orange-ink);
+}
+
+/* ---------- Hero ---------- */
+
+.s-main {
+  padding-bottom: calc(56px + env(safe-area-inset-bottom));
+}
+
+.s-hero {
+  padding: 44px 0 8px;
+}
+
+.s-title {
+  margin: 0;
+  font-size: clamp(40px, 9vw, 64px);
+  line-height: 1.05;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.s-lede {
+  margin: 12px 0 0;
+  max-width: 34em;
+  color: var(--muted);
+  font-size: clamp(19px, 3.2vw, 24px);
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+.s-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  margin-top: 20px;
+  font-size: 15px;
+}
+
+.s-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.s-link::after {
+  content: ' \2197';
+}
+
+#all-worlds.s-link::after {
+  content: '';
+}
+
+/* ---------- Sections ---------- */
+
+.s-section {
+  margin-top: 44px;
+}
+
+.s-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.s-h2 {
+  margin: 0 0 14px;
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.s-count {
+  color: var(--dim);
+  font-size: 15px;
+}
+
+/* ---------- Leaders ---------- */
+
+.s-leaders {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 12px;
+}
+
+.s-leader {
+  padding: 18px 20px;
+  border-radius: var(--radius);
+  background: var(--card);
+  min-width: 0;
+}
+
+.s-rank {
+  color: var(--dim);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.s-leader-name {
+  margin-top: 4px;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.s-record {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Matches ---------- */
+
+.s-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.s-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'main score'
+    'proof proof';
+  align-items: center;
+  gap: 4px 16px;
+  padding: 20px 22px;
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.s-row.s-new {
+  animation: s-in 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+@keyframes s-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.s-row-main {
+  grid-area: main;
+  min-width: 0;
+}
+
+.s-game {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.s-players {
+  margin-top: 2px;
+  font-size: clamp(21px, 4vw, 26px);
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+}
+
+.s-win {
+  font-weight: 700;
+}
+
+.s-beat {
+  color: var(--dim);
+  font-weight: 400;
+}
+
+.s-lose {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.s-where {
+  margin-top: 4px;
+  color: var(--dim);
+  font-size: 15px;
+}
+
+.s-score {
+  grid-area: score;
+  font-size: clamp(32px, 7vw, 44px);
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.s-proof {
+  grid-area: proof;
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.s-proof a,
+.s-proof span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.s-proof svg {
+  flex: none;
+}
+
+.s-proof .s-pending {
+  color: var(--muted);
+}
+
+.s-proof .s-failed {
+  color: var(--red-ink);
+}
+
+/* ---------- States ---------- */
+
+.s-notice {
+  padding: 28px 24px;
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--muted);
+  font-size: 17px;
+}
+
+.s-notice b {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.s-skel {
+  height: 132px;
+  border-radius: var(--radius);
+  background: var(--card);
+  animation: s-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes s-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.s-foot {
+  margin: 48px 0 0;
+  max-width: 40em;
+  color: var(--dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* A phone: the leaders become one grouped list, a row each. */
+@media (max-width: 559px) {
+  .s-leaders {
+    display: block;
+    border-radius: var(--radius);
+    background: var(--card);
+    overflow: hidden;
+  }
+
+  .s-leader {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    padding: 14px 20px;
+    border-radius: 0;
+    background: none;
+  }
+
+  .s-leader + .s-leader {
+    border-top: 1px solid var(--line);
+  }
+
+  .s-rank {
+    flex: none;
+    width: 14px;
+    font-size: 15px;
+  }
+
+  .s-leader-name {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: 19px;
+  }
+
+  .s-record {
+    flex: none;
+    margin: 0;
+  }
+}
+
+@media (min-width: 720px) {
+  .s-hero {
+    padding-top: 72px;
+  }
+
+  .s-row {
+    padding: 22px 26px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .s-row.s-new,
+  .s-skel {
+    animation: none;
+  }
+}

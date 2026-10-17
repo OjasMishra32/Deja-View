@@ -1,13 +1,15 @@
 // WebXR for Quest 3S: local-floor session, a rig that locomotion moves, left-stick smooth
-// walking relative to the head, right-stick snap turn and teleport arc, A/B buttons, trigger UI,
-// comfort vignette, fixed foveation.
+// walking relative to the head, right-stick snap turn and teleport arc, A/B buttons, comfort
+// vignette, fixed foveation, and the headset interface (xr-overlay.ts): the palm-up wrist menu, the
+// Video memory transport and the arrival card, pointed at with the right ray (trigger or pinch).
 
 import * as THREE from 'three';
 import type { Bounds } from './analysis.ts';
 import { damp, GRAVITY, groundHeight, slideMove, softBoundary, type Body, type GroundOptions, type P3 } from './physics.ts';
 import { DEFAULT_ARC, traceArc, type LandingRules } from './teleport.ts';
 import type { CollisionWorld } from './voxels.ts';
-import { makeControllerModel, PointerRay, TeleportVisual, WristPanel } from './xr-ui.ts';
+import { XrOverlay, type OverlayFrame, type XrViewerLinks } from './xr-overlay.ts';
+import { makeControllerModel, PointerRay, TeleportVisual } from './xr-ui.ts';
 
 export interface XrHost {
   renderer: THREE.WebGLRenderer;
@@ -53,6 +55,14 @@ interface Hand {
 }
 
 const SNAP = THREE.MathUtils.degToRad(30);
+const SCENE_ID = /^[a-z0-9][a-z0-9-]{0,95}$/;
+/** The left stick click opens and closes the wrist menu (the Quest keeps its menu button for itself). */
+const MENU_BUTTON = 3;
+
+/** The viewer as app.ts publishes it for tests and tools (window.__viewerApp); XrSystem.viewer can be pointed elsewhere. */
+function viewerFromWindow(): XrViewerLinks | null {
+  return (globalThis as { __viewerApp?: XrViewerLinks }).__viewerApp ?? null;
+}
 const MOVE_SPEED = 1.5;
 /** Splats are fill-rate bound on a Quest: a steady 72 Hz beats a 90 Hz target that drops frames. */
 export const PREFERRED_FRAME_RATE = 72;
@@ -83,7 +93,15 @@ export class XrSystem {
   private session: XRSession | null = null;
   private hands: Hand[] = [];
   private teleport = new TeleportVisual();
-  private panel = new WristPanel();
+  /** Wrist menu, Video transport and arrival card: made on the first Enter VR (a screen or a phone never pays for it). */
+  private ui: XrOverlay | null = null;
+  /** Where the headset interface finds the scene, video layer, guide and photo intro. */
+  viewer: () => XrViewerLinks | null = viewerFromWindow;
+  private select = { left: false, right: false };
+  private pendingUrl: string | null = null;
+  private navTimer = 0;
+  /** Seconds into the fade to dark before leaving VR from a panel (0: not leaving, -1: the session is ending). */
+  private leaving = 0;
   private vel = new THREE.Vector2();
   private vy = 0;
   private snapArmed = true;
@@ -103,16 +121,32 @@ export class XrSystem {
   private headWorld = new THREE.Vector3();
   private tmp = new THREE.Vector3();
   private tmpQ = new THREE.Quaternion();
-  private raycaster = new THREE.Raycaster();
-  private hoverId: string | null = null;
-  private panelShown = false;
-  private panelFade = 0;
+  private gaze = new THREE.Vector3();
+  /** What the headset interface gets each frame (filled in place). */
+  private overlayIn: OverlayFrame = { head: this.headWorld, yaw: 0, gaze: this.gaze, ray: null, raySource: null, trigger: false, leftGrip: null, menuButton: false, busy: false };
   /** Debug/test readout. */
   readonly debug = { aiming: false, valid: false, reason: '', snapTurns: 0, teleports: 0, moved: 0, heightOffset: 0 };
 
-  /** The right pointer is on a wrist-panel button (its trigger press belongs to the panel). */
+  /** The right pointer is on a headset panel (its trigger press belongs to the panel). */
   get panelHovered(): boolean {
-    return this.hoverId !== null;
+    return !!this.ui?.hovering;
+  }
+
+  get overlay(): XrOverlay {
+    if (!this.ui) {
+      const host = this.host;
+      this.ui = new XrOverlay({
+        links: () => this.viewer(),
+        sceneName: () => host.sceneName(),
+        videoReady: () => host.video().has,
+        playToggle: () => host.playToggle(),
+        recenter: () => this.resetToSpawn(),
+        exit: () => this.leave(),
+        openWorld: (id) => this.openWorld(id),
+      });
+      host.scene.add(this.ui.group);
+    }
+    return this.ui;
   }
 
   constructor(private host: XrHost, private opts: XrOptions) {
@@ -132,10 +166,10 @@ export class XrSystem {
         hand.handedness = src?.handedness ?? 'none';
         grip.remove(hand.model);
         hand.model = makeControllerModel(hand.handedness === 'left' ? 'left' : 'right');
+        // tracked hands show themselves; only controllers get the model
+        hand.model.visible = !src?.hand;
         grip.add(hand.model);
-        if (hand.handedness === 'left') grip.add(this.panel.mesh);
-        else if (this.panel.mesh.parent === grip) grip.remove(this.panel.mesh);
-        ray.visible = grip.visible = !!src?.gamepad;
+        ray.visible = grip.visible = !!src;
         hand.pointer.mesh.visible = hand.handedness !== 'left';
       });
       ray.addEventListener('disconnected', () => {
@@ -166,6 +200,9 @@ export class XrSystem {
     });
     this.session = session;
     session.addEventListener('end', this.onEnd);
+    // a pinch (hand tracking) arrives as select events; with controllers they mirror the trigger
+    session.addEventListener('selectstart', this.onSelect);
+    session.addEventListener('selectend', this.onSelect);
     // Feet on the floor from the very first XR frame: the desktop rig holds the eye height, and the
     // headset adds the wearer's own height on top of whatever the rig says.
     const { rig, camera } = this.host;
@@ -193,6 +230,8 @@ export class XrSystem {
     this.placePending = 2;
     this.fadeLevel = 1;
     this.fade = { phase: 'in', t: 0, target: null };
+    this.select.left = this.select.right = false;
+    this.overlay.enter();
     this.host.onEnter();
   }
 
@@ -200,11 +239,20 @@ export class XrSystem {
     void this.session?.end();
   }
 
+  private onSelect = (e: XRInputSourceEvent) => {
+    const hand = e.inputSource.handedness === 'left' ? 'left' : 'right';
+    this.select[hand] = e.type === 'selectstart';
+  };
+
   private onEnd = () => {
     const { camera } = this.host;
+    this.session?.removeEventListener('selectstart', this.onSelect);
+    this.session?.removeEventListener('selectend', this.onSelect);
     this.session = null;
     this.presenting = false;
+    this.leaving = 0;
     this.teleport.hide();
+    this.ui?.end();
     this.vignetteLevel = 0;
     this.fadeLevel = 0;
     // hand the head pose of the last XR frame back to the desktop walker (the camera's world
@@ -214,7 +262,39 @@ export class XrSystem {
     camera.quaternion.identity();
     camera.updateMatrixWorld();
     this.host.onExit(pose);
+    if (this.pendingUrl) this.navigate();
   };
+
+  /**
+   * Opens another world from the wrist menu: leaves VR (through the photo, when app.ts wraps exit()), then loads the
+   * page on that world. Press Enter VR again when it appears.
+   */
+  openWorld(id: string): void {
+    if (!SCENE_ID.test(id) || this.pendingUrl) return;
+    const q = new URLSearchParams(location.search);
+    q.set('scene', id);
+    this.pendingUrl = `${location.pathname}?${q}`;
+    if (!this.session) return this.navigate();
+    this.leave();
+    // the session normally ends within two seconds; go anyway if it does not
+    this.navTimer = window.setTimeout(() => this.navigate(), 5000);
+  }
+
+  /**
+   * Leaves VR from a panel: through the photo when the world has one (app.ts wraps exit() for that), else after a
+   * short fade to dark, so the world never just vanishes.
+   */
+  leave(): void {
+    if (!this.session || this.leaving > 0) return;
+    if (this.viewer()?.memory?.canLeave) this.exit();
+    else this.leaving = 1e-3;
+  }
+
+  private navigate(): void {
+    const url = this.pendingUrl;
+    clearTimeout(this.navTimer);
+    if (url) location.assign(url);
+  }
 
   /** World yaw of the head (rotation about +Y, three.js convention), from the latest pose. */
   private headYaw(): number {
@@ -228,7 +308,11 @@ export class XrSystem {
     this.headWorld.copy(this.headLocal).applyMatrix4(rig.matrixWorld);
     const d = this.tmp.set(0, 0, -1).applyQuaternion(camera.quaternion);
     const yaw = rig.rotation.y + Math.atan2(-d.x, -d.z);
-    this.lastPose = { x: this.headWorld.x, y: rig.position.y - this.heightOffset, z: this.headWorld.z, yaw: Math.atan2(Math.sin(yaw), Math.cos(yaw)) };
+    const p = this.lastPose;
+    p.x = this.headWorld.x;
+    p.y = rig.position.y - this.heightOffset;
+    p.z = this.headWorld.z;
+    p.yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw));
   }
 
   /** Measures the eye-level offset from the current head pose (see XrHost.eyeLevel). */
@@ -275,9 +359,14 @@ export class XrSystem {
     this.updateHead();
 
     let left: Gamepad | null = null, right: Gamepad | null = null;
-    let rightHand: Hand | null = null;
+    let rightHand: Hand | null = null, leftHand: Hand | null = null;
+    /** The hand that points at panels: the right one, controller or tracked hand. */
+    let pointing: Hand | null = null;
     for (const h of this.hands) {
-      const gp = h.source?.gamepad;
+      if (!h.source) continue;
+      if (h.handedness === 'left') leftHand = h;
+      else pointing = h;
+      const gp = h.source.gamepad;
       if (!gp) continue;
       if (h.handedness === 'left') left = gp;
       else {
@@ -366,24 +455,44 @@ export class XrSystem {
 
     // ---- buttons ----
     if (right && rightHand) {
-      const pressed = (i: number) => !!right!.buttons[i]?.pressed;
-      const edge = (i: number) => pressed(i) && !rightHand!.prev[i];
-      if (edge(4)) this.host.playToggle();
-      if (edge(5)) this.resetToSpawn();
-      const hoverId = this.pointAtPanel(rightHand);
-      if (edge(0) && hoverId) this.clickPanel(hoverId);
-      rightHand.prev = right.buttons.map((b) => b.pressed);
+      if (this.edge(rightHand, right, 4)) this.host.playToggle();
+      if (this.edge(rightHand, right, 5)) this.resetToSpawn();
     }
-    for (const h of this.hands) if (h.handedness === 'left' && left) h.prev = left.buttons.map((b) => b.pressed);
+    const menuButton = !!left && !!leftHand && this.edge(leftHand, left, MENU_BUTTON);
+    for (const h of this.hands) {
+      const gp = h.source?.gamepad;
+      if (!gp) continue;
+      for (let i = 0; i < gp.buttons.length; i++) h.prev[i] = gp.buttons[i].pressed;
+    }
 
-    // ---- panel ----
-    const v = this.host.video();
-    this.panel.setState({ title: this.host.sceneName(), playing: v.playing, hasVideo: v.has, time: v.time });
-    this.panelShown = this.panelWanted(this.panelShown);
-    this.panelFade += ((this.panelShown ? 1 : 0) - this.panelFade) * damp(14, dt);
-    this.panel.setOpacity(this.panelFade);
-    this.panel.mesh.visible = this.panelFade > 0.02;
-    this.panel.redraw();
+    // ---- headset interface ----
+    this.updateHead();
+    const { camera } = this.host;
+    this.gaze.set(0, 0, -1).applyQuaternion(camera.quaternion).applyQuaternion(rig.quaternion);
+    const trigger = (!!right && !!right.buttons[0]?.pressed) || this.select.right;
+    const o = this.overlayIn;
+    o.yaw = this.lastPose.yaw;
+    o.ray = pointing?.ray ?? null;
+    o.raySource = pointing?.source ?? null;
+    o.trigger = trigger;
+    o.leftGrip = leftHand?.grip ?? null;
+    o.menuButton = menuButton;
+    o.busy = this.aiming || !!this.fade;
+    this.overlay.update(dt, o);
+    if (pointing) {
+      pointing.pointer.setLength(this.aiming ? 0.001 : this.overlay.pointerLength, this.overlay.onItem);
+      pointing.pointer.setPressed(trigger && this.overlay.onItem);
+    }
+
+    // ---- leaving from a panel: fade to dark, then end the session ----
+    if (this.leaving > 0) {
+      this.leaving += dt;
+      this.fadeLevel = Math.max(this.fadeLevel, Math.min(1, this.leaving / 0.35));
+      if (this.leaving > 0.42) {
+        this.leaving = -1;
+        this.exit();
+      }
+    }
 
     // ---- teleport fade ----
     if (this.fade) {
@@ -443,54 +552,8 @@ export class XrSystem {
     this.teleport.show(arc.points, arc.end, arc.valid, dt);
   }
 
-  /**
-   * Wrist panel: shown while you look at your left controller and the panel faces you, with
-   * hysteresis so it does not flicker at the edge.
-   */
-  private panelWanted(shown: boolean): boolean {
-    if (!this.panel.mesh.parent || !this.panel.mesh.parent.visible) return false;
-    const p = this.panel.mesh;
-    p.updateMatrixWorld();
-    const pos = new THREE.Vector3().setFromMatrixPosition(p.matrixWorld);
-    const n = new THREE.Vector3(0, 0, 1).transformDirection(p.matrixWorld);
-    const toPanel = pos.clone().sub(this.headWorld);
-    const dist = toPanel.length();
-    toPanel.divideScalar(dist || 1);
-    const facing = -n.dot(toPanel);
-    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.host.camera.quaternion).applyQuaternion(this.host.rig.quaternion);
-    const gaze = fwd.dot(toPanel);
-    const cosOn = Math.cos(THREE.MathUtils.degToRad(24)), cosOff = Math.cos(THREE.MathUtils.degToRad(36));
-    if (dist > 0.9 || facing < 0.25) return false;
-    return shown ? gaze > cosOff : gaze > cosOn;
-  }
-
-  private pointAtPanel(hand: Hand): string | null {
-    let id: string | null = null;
-    let len = 1.2;
-    if (this.panel.mesh.visible) {
-      hand.ray.updateMatrixWorld();
-      const o = new THREE.Vector3().setFromMatrixPosition(hand.ray.matrixWorld);
-      const d = new THREE.Vector3(0, 0, -1).transformDirection(hand.ray.matrixWorld);
-      this.raycaster.set(o, d);
-      const hit = this.raycaster.intersectObject(this.panel.mesh, false)[0];
-      if (hit) {
-        const local = this.panel.mesh.worldToLocal(hit.point.clone());
-        id = this.panel.hit(local);
-        len = hit.distance;
-      }
-    }
-    if (id !== this.hoverId) {
-      this.hoverId = id;
-      this.panel.setHover(id);
-    }
-    hand.pointer.setLength(this.aiming ? 0.001 : len, id !== null);
-    return id;
-  }
-
-  private clickPanel(id: string): void {
-    if (id === 'play') this.host.playToggle();
-    else if (id === 'restart') this.host.restartVideo();
-    else if (id === 'spawn') this.resetToSpawn();
-    else if (id === 'exit') this.exit();
+  /** The button went down this frame (each hand keeps last frame's buttons in `prev`). */
+  private edge(hand: Hand, gp: Gamepad, i: number): boolean {
+    return !!gp.buttons[i]?.pressed && !hand.prev[i];
   }
 }

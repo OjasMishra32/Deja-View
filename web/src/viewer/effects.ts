@@ -175,6 +175,8 @@ export interface ViewCone {
  */
 export class SplatFx {
   readonly reveal = dyno.dynoFloat(1e5);
+  /** Width of the reveal front (metres): splats fade in over this distance behind it. */
+  readonly revealBand = dyno.dynoFloat(0.8);
   readonly origin = dyno.dynoVec3(new THREE.Vector3());
   readonly boxMin = dyno.dynoVec3(new THREE.Vector3(-1e4, -1e4, -1e4));
   readonly boxMax = dyno.dynoVec3(new THREE.Vector3(1e4, 1e4, 1e4));
@@ -195,12 +197,12 @@ export class SplatFx {
     mesh.worldModifier = dyno.dynoBlock({ gsplat: dyno.Gsplat }, { gsplat: dyno.Gsplat }, ({ gsplat }) => {
       const fx = new dyno.Dyno({
         inTypes: {
-          gsplat: dyno.Gsplat, reveal: 'float', origin: 'vec3', bmin: 'vec3', bmax: 'vec3', edge: 'float', glow: 'float',
+          gsplat: dyno.Gsplat, reveal: 'float', rband: 'float', origin: 'vec3', bmin: 'vec3', bmax: 'vec3', edge: 'float', glow: 'float',
           cpos: 'vec3', cright: 'vec3', cup: 'vec3', cfwd: 'vec3', ctans: 'vec4', csoft: 'vec4',
         },
         outTypes: { gsplat: dyno.Gsplat },
         inputs: {
-          gsplat, reveal: self.reveal, origin: self.origin, bmin: self.boxMin, bmax: self.boxMax, edge: self.edge, glow: self.glow,
+          gsplat, reveal: self.reveal, rband: self.revealBand, origin: self.origin, bmin: self.boxMin, bmax: self.boxMax, edge: self.edge, glow: self.glow,
           cpos: self.conePos, cright: self.coneRight, cup: self.coneUp, cfwd: self.coneFwd, ctans: self.coneTans, csoft: self.coneSoft,
         },
         statements: ({ inputs, outputs }) => [
@@ -211,8 +213,9 @@ export class SplatFx {
           `  float keep = 1.0 - smoothstep(0.0, ${inputs.edge}, length(q));`,
           `  float r = distance(c, ${inputs.origin});`,
           `  float front = ${inputs.reveal};`,
-          `  float shown = 1.0 - smoothstep(front - 0.8, front, r);`,
-          `  float band = smoothstep(front - 0.8, front - 0.35, r) * shown;`,
+          `  float bw = max(${inputs.rband}, 1e-3);`,
+          `  float shown = 1.0 - smoothstep(front - bw, front, r);`,
+          `  float band = smoothstep(front - bw, front - 0.4375 * bw, r) * shown;`,
           // outside the camera's view: fade by how far past the frame edge the splat lies
           `  if (${inputs.csoft}.y > 0.5) {`,
           `    vec3 dc = c - ${inputs.cpos};`,
@@ -258,8 +261,10 @@ export class SplatFx {
     this.touch();
   }
 
-  setReveal(radius: number, origin?: THREE.Vector3): void {
+  /** Places the reveal front; `band` is its width in metres (0.8 when left out). */
+  setReveal(radius: number, origin?: THREE.Vector3, band = 0.8): void {
     this.reveal.value = radius;
+    this.revealBand.value = band;
     if (origin) this.origin.value.copy(origin);
     this.touch();
   }

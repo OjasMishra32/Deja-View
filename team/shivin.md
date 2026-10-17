@@ -8,6 +8,129 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Order of work:** the Devpost video below first (hard deadline 8 AM Sunday), then the headset QA, then Seb's
+> reconstruction loop (`team/shivin-reconstruction-loop.md`) as Seb directs it.
+
+> **Update 17 (Sat ~1:30 PM): your new jobs, in this order.** All three need you, not Studio. The live link (BASE) is
+> `https://highlighted-filter-surf-other.trycloudflare.com` (Ojasva posts a new one if the tunnel restarts).
+>
+> **1. The Devpost video (you own it). Hard limit: under 2:00, due before 8 AM Sunday.** Lead with our own captures,
+> never Fortnite footage (Vobile, the overall sponsor, protects content). A beat sheet that fits in about 1:50:
+> - 0:00 the landing page on a laptop: the Quest 3S turns, look through the lens (BASE `/`).
+> - 0:12 "It starts with your phone": the Game Lawn photos, then walking into the rebuilt place
+>   (`/view?scene=the-courts`).
+> - 0:35 One phone video becomes people in 3D: `/view?scene=courts-foosball`. Pause mid-game (Space), walk all the way
+>   round both players, then play.
+> - 0:55 `/view?scene=kitchen-cooking`: Seb cooking at the counters, live in 3D, synced with the sound.
+> - 1:10 The headset: the same worlds on the Quest 3S (record on the Quest: Meta button > Camera > Record video).
+> - 1:25 Roblox: Seb's experience on the real table, when it's up (until then the landing's Roblox tile).
+> - 1:35 Why it matters: revisit a home you've moved out of, from its old listing photos. Or a clip of someone you've
+>   lost, standing in the room again. End on the name and the link.
+> Capture with macOS (Cmd+Shift+5, 1080p or higher), cut in anything you like. No copyrighted music (none, or a free
+> track you credit). Burn in short captions, since judges often watch muted. Give Ojasva the MP4 and he uploads it.
+> An agent can do the assembly: give it the clips, this beat sheet and ffmpeg, and ask for a 1920x1080 H.264 MP4
+> under 2:00 with captions.
+>
+> **2. Headset QA on the Quest 3S, every world and memory.** Open BASE in the Quest browser, then for each of
+> `the-courts`, `chess-room`, `kitchen`, `brick-apartment`, `tilted-towers`, `courts-foosball` and `kitchen-cooking`
+> (and `chess-match` plus the old-house kitchen once Ojasva says they're live) check:
+> - It loads.
+> - The spawn faces something good.
+> - You can walk the area; the kitchen was just opened up to its whole strip.
+> - Nothing broken right at the spawn.
+> - The wrist menu works.
+> - Video memories play in sync with sound, and the 3D people line up with the room.
+> Write one line per problem with a headset screenshot in `team/qa-quest.md` on a branch `shivin/qa` and push it.
+> Ojasva fixes from that list.
+>
+> **3. The second pair of eyes on Seb's censor pass.** Every Roblox upload needs a person to approve the exact file
+> (seb.md Update 8, Task C/D). When Seb sends contact sheets, look at every texture for readable text, faces, logos and
+> QR codes, then record the decision with `python pipeline/objects/review.py --glb <file> --approve --note "..."` (or
+> `--deny`). You don't upload anything.
+
+> **Update 16 (Sat ~1 PM): Seb takes Roblox over.** Your account can't use Studio, so Seb now owns the experience,
+> the uploads, the asset maker and the censor pass (seb.md Update 8). He starts a new experience on his account,
+> because LoadAssetAsync only loads the creator's own assets. Your handover, today:
+> 1. Push everything Roblox to `shivin/roblox` (the Rojo sources under `roblox/src` and the latest place file), even
+>    half-done work, and tell Seb what is unfinished.
+> 2. Write down in the team chat everything that lives only in Studio or Creator Hub and not in the repo: Experience
+>    Config keys and values, badges, game passes, DataStore names, and any settings you changed by hand.
+> 3. Don't upload, publish or make new Roblox accounts. Don't run the old upload paths with your key.
+> Your next jobs are in Update 17 above.
+
+> **Update 15 (Sat ~1 PM): commit rule.** No `Co-Authored-By` lines (or any tool attribution) in commit messages
+> from now on, and no timestamps in messages. If your git tool adds a trailer, delete it before you commit. Ojasva will
+> decide what happens to the earlier commits that have one; please don't rewrite or force-push anything yourself. Run
+> `git config core.hooksPath .githooks` once in your clone: its commit-msg hook strips those lines for you.
+
+> **Update 14 (Sat ~11:50 AM): the public link changed.** Cloudflare dropped the quick tunnel; the new BASE is
+> `https://highlighted-filter-surf-other.trycloudflare.com`. Set the Experience Config `dejaview_base` to it in Creator
+> Hub (live at once, no publish). Config.luau BASE_FALLBACK on `main` is updated too.
+
+> **Update 13 (Sat ~9:15 AM): URGENT, your Roblox account is moderated.** Since about 9 AM every Open Cloud upload
+> with your key answers `User is moderated` (chess room sky faces, the Tilted Towers room). Server-side uploads are now
+> OFF (the live server no longer sends anything to Roblox). What to do now:
+> 1. Open roblox.com and Creator Hub on your account and read the moderation notice: what was flagged (asset id or
+>    name), the reason and how long it lasts. Tell Ojasva exactly what it says. Appeal it there if it is a mistake.
+> 2. Our uploads so far: the-courts v2 room 91874647541773 plus 6 sky faces, brick-apartment room 96179943812932,
+>    chess-room v1 room 122387814565130 and v2 room 70649141763810, plus earlier test rooms. The likeliest trigger is
+>    Fortnite-derived content (the old fortnite-* rooms, the Brick House apartment, Tilted Towers): Epic's IP.
+> 3. Until it is cleared, do not upload anything from your account (Studio or Open Cloud). Rooms already uploaded may
+>    or may not keep loading; if LoadAssetAsync fails, the game falls back to the block map (that path still works).
+> 3b. Seb traced a flag to a QR code inside a texture (docs/object-layer.md section 14). Our room textures come from
+>    real photos (posters, bins, labels), so before any upload run `pipeline/objects/preflight.py --glb <file>` and
+>    look at its contact sheet; the server's uploads stay off until every room passes it.
+> 4. Proposal (Ojasva decides): keep Fortnite-derived worlds (tilted-towers, brick-apartment) out of the Roblox
+>    picker for good; the Roblox story is our own captures (the Game Lawn, chess, kitchen).
+
+> **Update 12 (Sat ~7 AM): the real tables come from the server, two real rooms are uploaded. Fix chess and foosball.**
+> **New server field** (`contracts.md` 6.6), live once Ojasva restarts the server (he posts it): `features` in `/model`
+> and in `/map` (after `walkBounds`, every chunk too). Studs, the map's frame (metres × 3.57, floor y = 0, no flips).
+> `Rooms.modelInfo` caches `/model` once per Roblox server, so stop and start a test after the restart.
+> `the-courts`, in `/model` and `/map`:
+>
+> ```json
+> "pingPongTable": { "corners": [[0.01, 2.713, -22.161], [7.349, 2.713, -15.694], [3.75, 2.713, -11.609],
+>                                [-3.589, 2.713, -18.076]],
+>                    "height": 2.713, "centre": [1.88, 2.713, -16.885], "length": 9.782, "width": 5.444,
+>                    "yaw": -2.2931, "net": [[3.68, 2.713, -18.927], [0.08, 2.713, -14.843]] },
+> "foosballTable": { "corners": [[0.21, 2.642, -9.202], [1.151, 2.642, -5.077], [-1.296, 2.642, -4.519],
+>                                [-2.237, 2.642, -8.644]],
+>                    "height": 2.642, "centre": [-0.543, 2.642, -6.86], "length": 4.231, "width": 2.51,
+>                    "yaw": -2.9173, "rods": [-0.975, 0, 0.2224], "fieldHeight": 2.642, "rimHeight": 3.131,
+>                    "rodHeight": 2.97, "rodOffsets": [-1.839, -1.321, -0.793, -0.261, 0.261, 0.796, 1.296, 1.831] }
+> ```
+>
+> `chess-room`, in `/map` only (its `/model` is 404, no textured model yet):
+>
+> ```json
+> "chessBoard": { "corners": [[-2.789, 0, -17.965], [6.019, 0, -11.837], [-0.109, 0, -3.03], [-8.917, 0, -9.158]],
+>                 "a1": 4, "cornerSquares": ["a8", "h8", "h1", "a1"], "centre": [-1.449, 0, -10.497], "size": 10.73,
+>                 "square": 1.341, "files": [0.8209, 0, 0.5711], "whiteForward": [0.5711, 0, -0.8209] }
+> ```
+>
+> All three were measured from the splats and checked on the real photos. What reads them, and what to fix:
+> - **Ping pong** (`Pong.luau` `placeFromFeature`, and Seb's `PingPong.luau`): reads `corners`, no change needed.
+>   `Config.PINGPONG_TABLES["the-courts"]` is now only the fallback when `features` is missing.
+> - **Chess never gets the board:** `Main` passes only `Rooms.modelInfo(...).features`, and `chess-room`'s `/model` is
+>   404, so `Chess.placeForRoom` falls back to the empty `Config.CHESS_BOARDS`. Pass the map's `features` when the
+>   model has none.
+> - **Chess is turned 90°:** `Chess.luau:359` `CFrame.Angles(0, -math.pi / 4, 0)` should be `+math.pi / 4` (the
+>   comment on 358 has the direction backwards), or use `fb.whiteForward` directly. Today the game's a1 (dark) lands
+>   on the real a8 square.
+> - **Foosball stops on the real table** (4.23 × 2.51 studs, not 16 × 9): the rod range on `Foosball.luau:288` is
+>   2.51 / 2 − 2.9 − 0.55 = −2.2, so `math.clamp` on line 148 errors every frame (min above max, per the Luau docs; not
+>   run in Studio) and the ball never moves. The men at ±2.4 / ±2.6 stand outside the walls (±1.255), `GOAL_HALF` 1.8
+>   is wider than the table, the rods float 1.6 studs up (real: 0.33), and the real table has 8 rods. Scale the layout
+>   to `LEN` / `WID`, or use `rodOffsets` (local z = −offset), `rodHeight` and `rods`. `corners` and `height` are the
+>   field, so the table frame's y = 0 is the pitch, as you play it; `rimHeight` is the cabinet top. Players stand on
+>   the long sides (corners 1-2 and 3-4), not at the ends.
+>
+> **Rooms, uploaded and served by `/model` now:** the Game Lawn's photo-textured v2 room (`the-courts`, asset
+> `91874647541773`, which replaced `140213715469147` at ~7:20 with the ceiling closed; six sky faces in `sky`) and the
+> Brick House apartment (`brick-apartment`, asset `96179943812932`). Delete `ServerStorage.Rooms.the-courts` and
+> `ServerStorage.Rooms.brick-apartment` (a Studio import always wins), play-test both, then File → Publish to Roblox.
+
 > **Update 11 (Sat ~5:30 AM): a real floor, and the model lines itself up. Pull, sync, test the court, publish.**
 > **Changed in the game code on `main`** (MapBuilder, Rooms, Presence, Config, one line in Main; no new files). It has
 > not been compiled or run in Studio yet (no Luau toolchain on Ojasva's Mac), so you are the first: post any Output
@@ -143,7 +266,7 @@ they win: say so in the team chat.
 
 > **Update 4 (Sat ~3:10 AM): the server is public. Your work list, in order.**
 >
-> **The link (live now):** `https://prozac-covered-burke-oklahoma.trycloudflare.com` (it changes if the tunnel
+> **The link (live now):** `https://highlighted-filter-surf-other.trycloudflare.com` (it changes if the tunnel
 > restarts; Ojasva posts the new one; Seb's fixed domain replaces it later). Checked from outside: `/api/scenes`,
 > `/api/roblox/<id>/map`, `/presence` and `/event` all answer. No `dejaview_key` is required yet.
 >

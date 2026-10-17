@@ -82,7 +82,7 @@ describe('cross-site protection', () => {
     expect((await s.store.list()).map((x) => x.id).sort()).toEqual(['clip-aaaaa', 'many-aaaaa', 'photo-aaaaa']);
   });
 
-  test("the app's own pages (same origin) may create, retry and delete; answers carry no CORS headers", async () => {
+  test("the app's own pages (same origin) may create and retry; deleting is off unless allowed; no CORS headers", async () => {
     const res = await fetch(`${s.base}/api/scenes`, {
       method: 'POST',
       headers: { Origin: s.base, 'Content-Type': 'application/json', 'Sec-Fetch-Site': 'same-origin' },
@@ -97,8 +97,16 @@ describe('cross-site protection', () => {
     expect(scene.error).toBeNull();
     expect((await s.store.get(scene.id))?.mode).toBe('rentfree'); // stored under the internal id
     await s.runner.idle();
-    const del = await fetch(`${s.base}/api/scenes/${scene.id}`, { method: 'DELETE', headers: { Origin: s.base } });
-    expect(del.status).toBe(200);
+    const refused = await fetch(`${s.base}/api/scenes/${scene.id}`, { method: 'DELETE', headers: { Origin: s.base } });
+    expect(refused.status).toBe(403);
+    expect(await s.store.get(scene.id)).not.toBeNull();
+    process.env.THIRDWHEEL_ALLOW_DELETE = '1';
+    try {
+      const del = await fetch(`${s.base}/api/scenes/${scene.id}`, { method: 'DELETE', headers: { Origin: s.base } });
+      expect(del.status).toBe(200);
+    } finally {
+      delete process.env.THIRDWHEEL_ALLOW_DELETE;
+    }
   });
 });
 

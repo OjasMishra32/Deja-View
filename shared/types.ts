@@ -60,6 +60,21 @@ export interface WorldAsset {
   collider?: string;
   source: 'flashworld' | 'anysplat' | 'marble-sample' | 'plate-depth' | 'other';
   splatCount?: number;
+  /**
+   * Drawn behind the splats where they leave holes (pipeline/backdrop.py, web/src/viewer/backdrop.ts). Without it the
+   * viewer looks for backdrop.json next to the world, which holds the same fields.
+   */
+  backdrop?: BackdropAsset;
+}
+
+/** A world's backdrop: its photo-textured room as a mesh and its sky. Files are relative to the scene directory. */
+export interface BackdropAsset {
+  /** GLB in the room frame: the viewer frame's axes, metres, floor at y = 0. */
+  file: string;
+  /** Equirect sky image (three.js convention, the viewer frame's axes), when there is one. */
+  sky?: string | null;
+  /** Height of the room frame's y = 0 in the viewer frame (the floor the room frame subtracted). Default 0. */
+  floorY?: number;
 }
 
 /**
@@ -85,6 +100,43 @@ export interface VideoLayer {
   cameraPose: { position: Vec3; quaternion: Quat };
   /** Optional people-free background plate (jpg) relative to the scene directory. */
   plate?: string;
+  /**
+   * Optional full-3D people from this clip (pipeline/avatar), drawn in place of the relief away from the recording
+   * camera. The list form is what avatar.json's `sceneAddition` writes: GLBs (and avatar.json) in this scene's folder.
+   */
+  avatars?: VideoAvatars | AvatarFile[];
+}
+
+/** One person's GLB from pipeline/avatar. */
+export interface AvatarFile {
+  /** Relative to the folder that holds the people (see VideoAvatars.scene). */
+  file: string;
+  /** The person's id in avatar.json ('person-0', ...), which carries their time range. */
+  id?: string;
+}
+
+/**
+ * Where a Video memory's people are. Each is a skinned, textured GLB at identity in the viewer frame (y up, metres,
+ * floor y = 0) under the video layer's parent, with one animation 'video' keyed in seconds of the played media element
+ * minus `start`. avatar.json next to the GLBs lists the people, their time ranges, `start` and the credits.
+ */
+export interface VideoAvatars {
+  /**
+   * The scene whose folder holds the files. Omitted: this scene's own folder. A memory filmed in a place names that
+   * place's scene, whose folder already has the people built from the clip.
+   */
+  scene?: string;
+  /** avatar.json in that folder (default 'avatar.json'). */
+  json?: string;
+  /** Only these people. Omitted: everyone avatar.json lists. */
+  people?: AvatarFile[];
+  /** Media time at which the animation's t = 0 plays, when it differs from avatar.json's `start`. */
+  start?: number;
+  /**
+   * The recording camera per frame (<clip>-poses.json from pipeline/recon: `track` of {time, position, quaternion} in
+   * the viewer frame, time = seconds of the played media) in that folder, for a handheld clip's crossfade.
+   */
+  poses?: string;
 }
 
 export interface Scene {

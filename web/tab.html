@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Déjà View · The tab</title>
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#f2f2f7" />
+    <meta name="color-scheme" content="light" />
+    <link rel="icon" href="./public/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./src/tab.css" />
+  </head>
+  <body>
+    <header class="t-top">
+      <div class="t-wrap t-top-row">
+        <a class="t-brand" href="/" aria-label="Déjà View home">
+          <svg class="t-mark" viewBox="0 0 32 32" aria-hidden="true">
+            <defs>
+              <linearGradient id="dv-mark" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#5ac8fa" />
+                <stop offset="1" stop-color="#007aff" />
+              </linearGradient>
+            </defs>
+            <rect width="32" height="32" rx="7.2" fill="url(#dv-mark)" />
+            <path d="M16 7.6c-5.2 0-9.4 3.4-9.4 7.7 0 2.5 1.4 4.7 3.7 6.1-.2 1.3-.9 2.5-1.9 3.4 2-.1 3.8-.8 5.1-1.9.8.1 1.6.2 2.5.2 5.2 0 9.4-3.4 9.4-7.8S21.2 7.6 16 7.6z" fill="#fff" />
+            <path d="M13.7 19.4v-4.2a2.3 2.3 0 0 1 4.6 0v4.2z" fill="#007aff" />
+          </svg>
+          <span>Déjà View</span>
+        </a>
+        <span class="t-chip">The tab</span>
+        <span class="t-spacer"></span>
+        <a class="t-link" id="open-world" href="/" hidden>Open memory</a>
+      </div>
+    </header>
+
+    <main class="t-wrap t-main" id="main">
+      <div class="t-banner" id="banner" role="alert" hidden></div>
+
+      <section class="t-hero" aria-labelledby="title">
+        <div class="t-thumb" id="thumb"><img id="thumb-img" alt="" hidden /></div>
+        <div class="t-hero-text">
+          <p class="t-kicker">The tab</p>
+          <h1 class="t-title" id="title"><span class="t-skel-line"></span></h1>
+          <p class="t-sub" id="sub"></p>
+        </div>
+        <div class="t-total" aria-live="polite">
+          <span class="t-total-label">The night</span>
+          <span class="t-total-amt" id="total">$0.00</span>
+        </div>
+      </section>
+
+      <section aria-labelledby="receipt-title">
+        <div class="t-head">
+          <h2 class="t-eyebrow" id="receipt-title">Receipt</h2>
+          <button class="t-text-btn" id="add-open" type="button">Add</button>
+        </div>
+        <form class="t-card t-form" id="add-form" novalidate hidden>
+          <div class="t-fields">
+            <label class="t-field">
+              <span class="t-field-name">What</span>
+              <input id="f-desc" maxlength="80" autocomplete="off" placeholder="Pool table" />
+            </label>
+            <label class="t-field">
+              <span class="t-field-name">Where</span>
+              <input id="f-merchant" maxlength="48" autocomplete="off" list="merchants" placeholder="The place" />
+            </label>
+            <label class="t-field">
+              <span class="t-field-name">Amount</span>
+              <span class="t-money"><span aria-hidden="true">$</span><input id="f-amount" inputmode="decimal" autocomplete="off" placeholder="0.00" /></span>
+            </label>
+            <label class="t-field">
+              <span class="t-field-name">Paid by</span>
+              <input id="f-payer" maxlength="24" autocomplete="off" list="friends" placeholder="Name" />
+            </label>
+          </div>
+          <datalist id="merchants"></datalist>
+          <datalist id="friends"></datalist>
+          <div class="t-split" id="f-split-wrap" hidden>
+            <span class="t-split-name" id="f-split-name">Split between</span>
+            <div class="t-chips" id="f-split" role="group" aria-labelledby="f-split-name"></div>
+          </div>
+          <label class="t-check"><input type="checkbox" id="f-table" /> <span>This is the table fee</span></label>
+          <p class="t-form-error" id="add-error" role="alert" hidden></p>
+          <div class="t-form-actions">
+            <button class="t-btn" id="add-cancel" type="button">Cancel</button>
+            <button class="t-btn t-btn-primary" id="add-submit" type="submit">Add to the tab</button>
+          </div>
+        </form>
+        <div class="t-card t-receipt" id="receipt">
+          <div class="t-skel"></div>
+          <div class="t-skel"></div>
+        </div>
+      </section>
+
+      <section aria-labelledby="owe-title">
+        <div class="t-head">
+          <h2 class="t-eyebrow" id="owe-title">Who owes whom</h2>
+          <span class="t-summary" id="owe-summary"></span>
+        </div>
+        <div class="t-thread" id="thread" aria-live="polite"></div>
+      </section>
+
+      <section aria-labelledby="games-title" id="games-section" hidden>
+        <div class="t-head"><h2 class="t-eyebrow" id="games-title">Game results</h2></div>
+        <div class="t-card t-list" id="games"></div>
+      </section>
+
+      <section aria-labelledby="rules-title">
+        <div class="t-head"><h2 class="t-eyebrow" id="rules-title">House rules</h2></div>
+        <div class="t-card t-rules">
+          <div class="t-rule">
+            <div class="t-rule-text">
+              <span class="t-rule-name" id="rule-name">Loser covers the table</span>
+              <span class="t-rule-sub" id="rule-sub">When a match in the Roblox room ends, whoever lost pays for the table.</span>
+            </div>
+            <button class="t-switch" id="rule-switch" type="button" role="switch" aria-checked="false" aria-labelledby="rule-name"><span class="t-knob"></span></button>
+          </div>
+          <label class="t-rule t-rule-fee" id="fee-row" hidden>
+            <span class="t-rule-text">
+              <span class="t-rule-name">Per match</span>
+              <span class="t-rule-sub">Leave empty and the loser covers the whole table.</span>
+            </span>
+            <span class="t-money t-money-sm"><span aria-hidden="true">$</span><input id="fee" inputmode="decimal" autocomplete="off" placeholder="All" aria-label="Table fee per match" /></span>
+          </label>
+        </div>
+      </section>
+
+      <footer class="t-foot">
+        <span class="t-nessie">Powered by Capital One Nessie (mock money)</span>
+        <span class="t-mode" id="mode-note"></span>
+      </footer>
+    </main>
+
+    <div class="t-dock">
+      <div class="t-wrap">
+        <button class="t-settle" id="settle" type="button" disabled>Settle up</button>
+      </div>
+    </div>
+
+    <div class="t-sheet-backdrop" id="sheet" hidden>
+      <div class="t-sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+        <div class="t-sheet-mark" aria-hidden="true">
+          <svg viewBox="0 0 56 56" width="56" height="56"><circle cx="28" cy="28" r="28" fill="#34c759" /><path d="M16.5 28.8l7.4 7.4 15.6-16.4" fill="none" stroke="#fff" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        </div>
+        <h2 class="t-sheet-title" id="sheet-title">Settled up</h2>
+        <p class="t-sheet-sub" id="sheet-sub"></p>
+        <ol class="t-confirms" id="confirms"></ol>
+        <button class="t-btn t-btn-primary t-btn-wide" id="sheet-done" type="button">Done</button>
+      </div>
+    </div>
+
+    <div class="t-toast" id="toast" role="status"></div>
+    <script type="module" src="./src/tab.ts"></script>
+  </body>
+</html>

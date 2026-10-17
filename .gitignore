@@ -9,6 +9,8 @@ __pycache__/
 *.log
 .DS_Store
 .context/
+graphify-out/
+.pi/
 
-# borrowed model weights are downloaded, never committed
+# model weights are downloaded at setup, never committed
 pipeline/models/

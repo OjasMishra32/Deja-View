@@ -1,0 +1,259 @@
+/* The chapters after the intro: Drop in a photo or a video, and Walk it anywhere (story.ts). These rules
+   build on the chapter blocks in styles.css and win over them (this sheet loads after it).
+
+   The words come in once, as a short fade up when they reach the screen (story.ts adds .is-in), so no
+   heading is ever left half faded when the scrolling stops. Nothing fades out on the way off: what you
+   just saw scrolls away like the rest of the page. During the Drop in pin, story.ts sets --drop, --fan,
+   --upload and --ready on its stage. Without story.ts (no .is-live) everything simply shows. */
+
+.chapter-copy,
+.upload-card,
+.anywhere-tile,
+.anywhere-cta {
+  transition: opacity 0.7s var(--ease), transform 0.7s var(--ease);
+}
+.is-live:not(.is-in) .chapter-copy {
+  opacity: 0;
+  transform: translateY(28px);
+}
+/* the card comes up with the words, a beat behind */
+.upload-card {
+  transition-delay: 0.08s;
+}
+.is-live:not(.is-in) .upload-card {
+  opacity: 0;
+  transform: translate(-50%, -50%) translateY(40px);
+}
+/* arriving by a link (#how, #anywhere): all at once */
+.no-anim .chapter-copy,
+.no-anim .upload-card,
+.no-anim .anywhere-tile,
+.no-anim .anywhere-cta {
+  transition: none;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Drop in: a short pin (styles.css .chapter: 1.6 screens, so a little over half a screen of scroll),
+   then it lets go on Ready */
+
+.chapter[data-chapter='upload'] .chapter-stage {
+  --drop: 0;
+  --fan: 0;
+  --upload: 0;
+  --ready: 0;
+}
+.upload-drop {
+  border-color: rgba(60, 60, 67, calc(0.22 * (1 - var(--ready))));
+}
+
+/* the 25 photos, five of them showing, dragged in as one stack with a count badge, then fanned out */
+.upload-stack {
+  position: absolute;
+  inset: 0;
+  opacity: calc(min(1, var(--drop) * 4) * (1 - var(--ready)));
+  transform: translate(calc((1 - var(--drop)) * 52%), calc((1 - var(--drop)) * -78%)) rotate(calc((1 - var(--drop)) * 7deg))
+    scale(calc(1 - var(--ready) * 0.06));
+  pointer-events: none;
+}
+.upload-stack .upload-photo {
+  --x: 0%;
+  --y: 0%;
+  --r0: 0deg;
+  --r: 0deg;
+  position: absolute;
+  inset: auto;
+  left: 50%;
+  top: 50%;
+  width: 54%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  border: 3px solid #fff;
+  border-radius: 10px;
+  background: #e5e5ea;
+  object-fit: cover;
+  opacity: 1;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.1);
+  transform: translate(-50%, -50%) translate(calc(var(--x) * var(--fan)), calc(var(--y) * var(--fan)))
+    rotate(calc(var(--r0) * (1 - var(--fan)) + var(--r) * var(--fan)));
+}
+.upload-stack .upload-photo:nth-child(1) {
+  --x: -29%;
+  --y: 9%;
+  --r0: -5deg;
+  --r: -12deg;
+}
+.upload-stack .upload-photo:nth-child(2) {
+  --x: 29%;
+  --y: 7%;
+  --r0: 4deg;
+  --r: 11deg;
+}
+.upload-stack .upload-photo:nth-child(3) {
+  --x: -15%;
+  --y: -9%;
+  --r0: -2deg;
+  --r: -6deg;
+}
+.upload-stack .upload-photo:nth-child(4) {
+  --x: 15%;
+  --y: -8%;
+  --r0: 2deg;
+  --r: 5deg;
+}
+.upload-stack .upload-photo:nth-child(5) {
+  --y: 4%;
+  --r: -1deg;
+}
+/* the drag badge on the top photo: how many are coming */
+.upload-count {
+  position: absolute;
+  left: 77%;
+  top: 22%;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 14px;
+  background: var(--imessage);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 28px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  opacity: calc(1 - var(--fan));
+  transform: translate(-50%, -50%) scale(calc(1 - var(--fan) * 0.4));
+}
+
+/* what the photos made: the Infinity Hall Game Lawn */
+.upload-world {
+  position: absolute;
+  inset: 6px;
+  width: calc(100% - 12px);
+  height: calc(100% - 12px);
+  border-radius: 13px;
+  object-fit: cover;
+  opacity: var(--ready);
+  transform: scale(calc(0.94 + var(--ready) * 0.06));
+}
+.upload-card.no-world .upload-stack {
+  opacity: min(1, calc(var(--drop) * 4));
+  transform: none;
+}
+
+.upload-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  z-index: 1;
+}
+.upload-card.is-building .upload-status::before,
+.upload-card.is-ready .upload-status::before {
+  content: '';
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.upload-card.is-building .upload-status::before {
+  border: 1.5px solid rgba(0, 122, 255, 0.25);
+  border-top-color: var(--imessage);
+  animation: upload-spin 0.8s linear infinite;
+}
+.upload-card.is-ready .upload-status::before {
+  background: #34c759;
+}
+@keyframes upload-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+.upload-bar span {
+  transition: background-color 0.3s var(--ease);
+}
+.upload-card.is-ready .upload-bar span {
+  background: #34c759;
+}
+
+/* under the drop: the files while they go up, then the world and its way in */
+.upload-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: stretch;
+  align-items: center;
+  min-height: 30px;
+}
+.upload-meta > div {
+  display: flex;
+  grid-area: 1 / 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+/* one line at a time: the files go before the world's name comes, so the two never sit on top of each other */
+.upload-meta-files {
+  opacity: calc(var(--fan) * clamp(0, 1 - var(--ready) * 2.5, 1));
+}
+.upload-meta-ready {
+  opacity: clamp(0, (var(--ready) - 0.5) * 2.5, 1);
+  pointer-events: none;
+}
+.upload-card.is-ready .upload-meta-ready {
+  pointer-events: auto;
+}
+.upload-name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.upload-walk {
+  flex: none;
+  min-height: 30px;
+  padding: 5px 14px;
+  font-size: 13px;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Walk it anywhere: an ordinary section (no pin); the heading and tiles never leave one another */
+
+.chapter-gray {
+  height: auto;
+}
+.chapter-gray .chapter-stage {
+  position: relative;
+  top: 0;
+  height: auto;
+  min-height: 0;
+  padding: clamp(72px, 11vh, 112px) 0 clamp(64px, 9vh, 96px);
+  overflow: visible;
+}
+.chapter-gray .chapter-copy {
+  padding-top: 0;
+}
+/* each tile rises in once as it comes up the screen (story.ts adds .is-in to it); side by side, in turn */
+.is-live .anywhere-tile:not(.is-in),
+.is-live .anywhere-cta:not(.is-in) {
+  opacity: 0;
+  transform: translateY(28px);
+}
+.anywhere-tile:nth-child(2) {
+  transition-delay: 0.08s;
+}
+.anywhere-tile:nth-child(3) {
+  transition-delay: 0.16s;
+}
+.chapter-gray .anywhere-cta {
+  margin-top: clamp(28px, 4vh, 40px);
+}
+
+@media (max-width: 734px) {
+  .chapter-gray .chapter-stage {
+    padding: 64px 0 56px;
+  }
+}
+
+/* reduced motion: no pin (styles.css), and each chapter shown at once in its finished state (story.ts) */

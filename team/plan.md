@@ -33,8 +33,9 @@ No stickers. Each sponsor makes the next moment possible.
 Chain: **"Add a memory" → Gemini caption → GPU world → Gemini labels + voice → reality check → Roblox friends →
 DeepSpace presence + notes → the judge does it live.**
 
-**Capital One (Nessie) is Seb's optional side quest.** His design, nothing depends on it, the demo works without it.
-It gets 15 seconds only if it is ready and good.
+**Capital One (Nessie): built by Ojasva** (Seb's original design): the tab at `/tab?scene=the-courts`. Nothing
+depends on it and the demo works without it; it needs `NESSIE_API_KEY` (without it the page runs on a demo bank). It
+gets 15 seconds only if it is ready and good.
 
 ### What we enter on the Devpost (checked against the Devpost prize list)
 
@@ -49,18 +50,18 @@ It gets 15 seconds only if it is ready and good.
   | Roblox Studio | $400 + Robux | Shivin | friends without a headset join the same room and play tag with the judge |
   | MLH Gemini | swag | Brianna | writes the caption the world model imagines from; labels; the room answers out loud |
   | MLH Vultr | M5Stack Tab5 | Seb + Ojasva | the A40 backup GPU that keeps the live finale live |
-  | Capital One Nessie | $1,000 | Seb (optional) | his design; worth a real try now that the Photon time is free |
+  | Capital One Nessie | $1,000 | Ojasva (built) | the tab (`/tab?scene=the-courts`): purchases booked in Nessie, "Settle up" as Nessie transfers, the Roblox loser covers the table; needs `NESSIE_API_KEY` |
 
 - **Smaller sponsors we can also win**, each with a real reason to exist:
 
   | Challenge | Owner | What it causes | Needs |
   | --- | --- | --- | --- |
   | MLH GoDaddy Registry (best domain) | Seb | one link that never changes, on the table card, the QR codes and the Devpost | the free MLH domain + a free Cloudflare account |
-  | MLH Auth0 | Ojasva | once the link is public, signing in is what lets someone add a memory or drive the headset from the `/host` remote; strangers can still walk in | a free Auth0 tenant (no card) |
-  | MLH Tiger Data | Ojasva | every position from the headset, Roblox and the web is stored as a time series, so a memory can be **replayed**: scrub back and watch everyone walk where they walked, plus a heatmap of where people stood | a free Tiger Cloud service |
+  | MLH Auth0 | Ojasva (wired) | once the link is public, signing in is what lets someone add, rebuild or delete a memory, drive the headset from the `/host` remote or change a tab; strangers can still walk in | only the free Auth0 tenant (no card): set `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_AUDIENCE` |
+  | MLH Tiger Data | Ojasva (wired) | every position from the headset, Roblox and the web is stored as a time series, so a memory can be **replayed** (`/api/replay/<id>`: everyone's paths and the Roblox moments) with a heatmap of where people stood (`/api/replay/<id>/heat`); no replay page yet | only the free Tiger Cloud service: set `TIGER_DATA_URL` |
   | Easy On the Eyes (UI/UX) | Ojasva | the Apple-style redesign of the site and the headset UI | nothing |
   | MLH DEV Writing Challenge ($100) | Ojasva | the build story, posted on DEV after submission | a DEV account |
-  | MLH Solana (stretch, only if everything else is done) | Ojasva | each tag-round result written on Solana devnet as a public scoreboard | nothing (devnet only, no real money) |
+  | MLH Solana | Ojasva (built) | a devnet scoreboard of Roblox game results: each match the game reports (`game.result`) is one signed memo, listed with explorer links on `/scores` | `SOLANA_SCOREBOARD=1` and devnet SOL from the faucet (devnet only, no real money); the games must send `game.result` |
 
 - **Not entered:** Photon (not on the Devpost; dropped), Sperry Tech PlanIT (unrelated), Least Vibe Coded (we used
   AI tools and say so).
@@ -111,7 +112,7 @@ Our own footage leads; Fortnite comes second.
 | 2:00 | **"Now do it."** The judge lifts the headset and snaps a photo on the table iPhone into Seb's "Add a memory" page | live path, Gemini `/describe` |
 | 2:10 | While it builds, the host drops the judge into the Fortnite world (skip if the build is already done) | pre-built Photo world |
 | 2:25 | Their world is ready: the card in Seb's app turns to "Walk in", the headset swaps into it, the room greets them, labels pop in. The same room appears in the Roblox picker and the DeepSpace gallery; Shivin hops in | warm GPU, Gemini `/narrate` + `/hotspots`, Roblox, DeepSpace |
-| 2:45 | (Optional, 15 s) Seb's Capital One side quest, only if ready and good | Nessie |
+| 2:45 | (Optional, 15 s) The night's tab: `/tab?scene=the-courts`, the Roblox loser covers the table, "Settle up", only if ready and good | Capital One Nessie |
 | 3:00 | Close: "Every memory: shared, walkable, from one photo or one video." | |
 
 Photo is guaranteed live (P0). Live Video is a stretch: only if a 15 s clip builds in under a minute.
@@ -124,10 +125,10 @@ fallback clip. Phone hotspot is the network fallback. Full test plan: `contracts
 
 | Person | Builds | Brief |
 | --- | --- | --- |
-| Ojasva | Server and viewer: Photo/Video worlds, presence relay, Roblox endpoints and map voxelizer, DeepSpace forwarder, notes relay, guide proxy, viewer pieces (Roblox ghosts, sticky notes, labels, voice button, narration, reality check, tag moments), public link, filming, the `/host` remote, the Apple-style redesign, Auth0 sign-in, Tiger Data replay, the DEV post, Solana (stretch) | `contracts.md` |
+| Ojasva | Server and viewer: Photo/Video worlds, presence relay, Roblox endpoints and map voxelizer, DeepSpace forwarder, notes relay, guide proxy, viewer pieces (Roblox ghosts, sticky notes, labels, voice button, narration, reality check, tag moments), public link, filming, the `/host` remote, the Apple-style redesign, Auth0 sign-in, Tiger Data replay, the DEV post, the Solana scoreboard, the Nessie tab | `contracts.md` |
 | Shivin | The Roblox experience: room loader, room picker (shows finale rooms too), presence, VR ghost, tag rounds, events | `shivin.md` |
 | Brianna | Gemini only: `/describe`, `/hotspots`, `/narrate`, `/ask` | `brianna.md` |
-| Seb | Vultr GPU (tonight), DeepSpace app (presence map, trails, notes, gallery, invites, "Add a memory"), the domain (MLH GoDaddy Registry) + Cloudflare tunnel; Capital One side quest (optional) | `seb.md` |
+| Seb | Vultr GPU (tonight), DeepSpace app (presence map, trails, notes, gallery, invites, "Add a memory"), the domain (MLH GoDaddy Registry) + Cloudflare tunnel | `seb.md` |
 
 ## Timeline
 

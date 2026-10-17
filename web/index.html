@@ -4,25 +4,28 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Déjà View</title>
-    <meta name="description" content="You've seen this before. Now walk around in it. One photo becomes a world you walk into; one video becomes a room with the real footage in 3D." />
+    <meta name="description" content="You’ve seen this before. Now walk around in it. Déjà View turns your photos and videos of a real place into a 3D world you can walk through in a headset or your browser." />
     <meta name="application-name" content="Déjà View" />
     <meta name="theme-color" content="#ffffff" />
     <meta name="color-scheme" content="light" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Déjà View" />
     <meta property="og:title" content="Déjà View" />
-    <meta property="og:description" content="You've seen this before. Now walk around in it." />
+    <meta property="og:description" content="You’ve seen this before. Now walk around in it." />
     <meta property="og:image" content="/public/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Déjà View: You've seen this before. Now walk around in it." />
+    <meta property="og:image:alt" content="Déjà View: You’ve seen this before. Now walk around in it." />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Déjà View" />
-    <meta name="twitter:description" content="You've seen this before. Now walk around in it." />
+    <meta name="twitter:description" content="You’ve seen this before. Now walk around in it." />
     <meta name="twitter:image" content="/public/og.png" />
     <link rel="icon" href="./public/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./public/apple-touch-icon.png" />
     <link rel="stylesheet" href="./src/styles.css" />
+    <link rel="stylesheet" href="./src/worlds-row.css" />
+    <link rel="stylesheet" href="./src/worlds-list.css" />
+    <link rel="stylesheet" href="./src/chapters.css" />
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
@@ -43,9 +46,9 @@
           <span class="wordmark">Déjà View</span>
         </a>
         <nav class="topnav" aria-label="Sections">
-          <a href="#how">How it works</a>
-          <a href="#gallery">Gallery</a>
-          <a href="#headset">Headset</a>
+          <a href="#how-it-works" id="nav-how">How it works</a>
+          <a href="#worlds">Worlds</a>
+          <a href="#anywhere">Headset</a>
         </nav>
         <div class="spacer"></div>
         <a class="btn btn-primary btn-sm" href="/capture">Make one</a>
@@ -53,104 +56,178 @@
     </header>
 
     <main id="main">
-      <section class="hero">
-        <div class="wrap hero-grid">
-          <div class="hero-copy">
-            <h1>You've seen this before. <span class="soft">Now walk around in it.</span></h1>
-            <p class="lede">
-              Add one photo or one video. Déjà View builds the whole room around it, so you can step inside in a headset or
-              right here in your browser.
+      <section class="intro" id="intro">
+        <div class="intro-stage" id="intro-stage">
+          <div class="intro-canvas" id="intro-canvas" aria-hidden="true"></div>
+          <!-- without WebGL: a drawing of the Quest 3S from the front instead of the 3D one -->
+          <svg class="intro-fallback" viewBox="0 0 400 230" aria-hidden="true">
+            <rect x="185" y="8" width="30" height="30" rx="5" fill="#dcdcd8" />
+            <rect x="14" y="80" width="22" height="76" rx="9" fill="#d6d6d2" />
+            <rect x="364" y="80" width="22" height="76" rx="9" fill="#d6d6d2" />
+            <path d="M372.4 118.0 L372.1 100.3 L371.5 91.4 L370.4 84.3 L368.9 78.2 L366.9 72.8 L364.5 67.9 L361.7 63.4 L358.4 59.3 L354.6 55.6 L350.4 52.1 L345.7 49.0 L340.6 46.1 L334.9 43.4 L328.7 41.0 L322.0 38.9 L314.6 37.0 L306.7 35.3 L298.0 33.8 L288.4 32.6 L277.8 31.6 L265.9 30.8 L252.0 30.2 L234.7 29.9 L200.0 29.8 L165.3 29.9 L148.0 30.2 L134.1 30.8 L122.2 31.6 L111.6 32.6 L102.0 33.8 L93.3 35.3 L85.4 37.0 L78.0 38.9 L71.3 41.0 L65.1 43.4 L59.4 46.1 L54.3 49.0 L49.6 52.1 L45.4 55.6 L41.6 59.3 L38.3 63.4 L35.5 67.9 L33.1 72.8 L31.1 78.2 L29.6 84.3 L28.5 91.4 L27.9 100.3 L27.7 118.0 L27.9 135.7 L28.5 144.6 L29.6 151.7 L31.1 157.8 L33.1 163.2 L35.5 168.1 L38.3 172.6 L41.6 176.7 L45.4 180.4 L49.6 183.9 L54.3 187.0 L59.4 189.9 L65.1 192.6 L71.3 195.0 L78.0 197.1 L85.4 199.0 L93.3 200.7 L102.0 202.2 L111.6 203.4 L122.2 204.4 L134.1 205.2 L148.0 205.8 L165.3 206.1 L200.0 206.2 L234.7 206.1 L252.0 205.8 L265.9 205.2 L277.8 204.4 L288.4 203.4 L298.0 202.2 L306.7 200.7 L314.6 199.0 L322.0 197.1 L328.7 195.0 L334.9 192.6 L340.6 189.9 L345.7 187.0 L350.4 183.9 L354.6 180.4 L358.4 176.7 L361.7 172.6 L364.5 168.1 L366.9 163.2 L368.9 157.8 L370.4 151.7 L371.5 144.6 L372.1 135.7Z" fill="#f2f2f0" stroke="#c7c7cc" stroke-width="1.2" />
+            <g fill="#0b0b0c"><circle cx="105.7" cy="159.8" r="11.9" /><circle cx="130.5" cy="148.2" r="11.9" /><circle cx="130.5" cy="148.2" r="7.6" fill="#55585e" /><circle cx="130.5" cy="148.2" r="5.2" fill="#1a2230" /><circle cx="130.5" cy="174.2" r="11.9" /><circle cx="130.5" cy="174.2" r="3.3" fill="#55585e" /><circle cx="130.5" cy="174.2" r="2" fill="#1a2230" /><circle cx="294.3" cy="159.8" r="11.9" /><circle cx="269.5" cy="148.2" r="11.9" /><circle cx="269.5" cy="148.2" r="7.6" fill="#55585e" /><circle cx="269.5" cy="148.2" r="5.2" fill="#1a2230" /><circle cx="269.5" cy="174.2" r="11.9" /><circle cx="269.5" cy="174.2" r="3.3" fill="#55585e" /><circle cx="269.5" cy="174.2" r="2" fill="#1a2230" /><circle cx="108.6" cy="139.2" r="1.8" /></g>
+          </svg>
+          <!-- inside the lens: a short film of how the Game Lawn was made, from the real material (lens-film.ts) -->
+          <div class="intro-journey" id="intro-journey" inert>
+            <div class="film" id="film" aria-hidden="true">
+              <!-- the phone's photos as a fanned stack of prints, IMG_7350 on top; later that one print alone, which the flight grows out of -->
+              <div class="shot shot-photo" data-shot="photo">
+                <img class="film-print film-stack" style="--i: 4" data-src="/landing/photos/IMG_7366.jpg" alt="" />
+                <img class="film-print film-stack" style="--i: 3" data-src="/landing/photos/IMG_7359.jpg" alt="" />
+                <img class="film-print film-stack" style="--i: 2" data-src="/landing/photos/IMG_7352.jpg" alt="" />
+                <img class="film-print film-stack" style="--i: 1" data-src="/landing/photos/IMG_7347.jpg" alt="" />
+                <img class="film-print film-top" data-src="/landing/photos/IMG_7350.jpg" alt="" />
+              </div>
+              <div class="shot shot-rebuild" data-shot="rebuild"><video class="film-flight" muted playsinline data-src="/landing/rebuild-scrub.mp4" data-src-mobile="/landing/rebuild-scrub-m.mp4" data-poster="/landing/rebuild-first.jpg"></video></div>
+              <div class="shot shot-cover" data-shot="cameras"><video muted playsinline loop data-src="/landing/cameras.mp4" data-src-mobile="/landing/cameras-m.mp4" data-src-portrait="/landing/cameras-portrait.mp4" data-poster="/landing/cameras.jpg" data-poster-portrait="/landing/cameras-portrait.jpg"></video></div>
+              <div class="shot shot-cover shot-world" data-shot="world"><video class="world-fallback" muted playsinline loop data-src="/landing/rebuild.mp4" data-src-mobile="/landing/rebuild-m.mp4" data-poster="/landing/rebuild-mid.jpg"></video></div>
+              <div class="shot shot-cover shot-people" data-shot="people">
+                <video class="people-3d" muted playsinline loop data-src="/landing/people-3d.mp4" data-src-mobile="/landing/people-3d-m.mp4" data-src-portrait="/landing/people-3d-square.mp4" data-poster="/landing/people-3d.jpg" data-poster-portrait="/landing/people-3d-square.jpg"></video>
+                <figure class="people-clip">
+                  <video muted playsinline loop data-src="/landing/people-clip-sdr.mp4" data-src-mobile="/landing/people-clip-sdr-m.mp4" data-poster="/landing/people-clip-sdr.jpg"></video>
+                  <figcaption>The phone video</figcaption>
+                </figure>
+              </div>
+            </div>
+            <div class="journey-copy" id="journey-copy">
+              <div class="beat" data-beat="photos" data-still="/landing/photos/IMG_7350.jpg">
+                <p class="beat-kicker">Photos</p>
+                <h2>It starts with your phone.</h2>
+                <p>25 photos and two short clips, taken at the Infinity Hall Game Lawn.</p>
+              </div>
+              <div class="beat" data-beat="cameras" data-still="/landing/cameras.jpg">
+                <p class="beat-kicker">Cameras</p>
+                <h2>Every photo, placed where it was taken.</h2>
+                <p>Déjà View works out where each photo was taken, and each frame of the two clips: 305 views in all.</p>
+              </div>
+              <div class="beat" data-beat="rebuild" data-still="/landing/rebuild-mid.jpg">
+                <p class="beat-kicker">Rebuild</p>
+                <h2>Now it&rsquo;s a place.</h2>
+                <p data-still-words="Inside the room Déjà View rebuilt from them, a few steps from where one photo was taken.">This flight starts exactly where one of those photos was taken, then moves through the room Déjà View rebuilt.</p>
+              </div>
+              <div class="beat" data-beat="splats" data-still="/landing/splats-discs.jpg" data-sub-at="0.53">
+                <p class="beat-kicker">Splats</p>
+                <h2>Made of soft 3D brushstrokes.</h2>
+                <p><span data-splat-count>844,875</span> of them make up the Game Lawn, each a small, soft, coloured blob.</p>
+              </div>
+              <div class="beat" data-beat="video" data-still="/landing/people-clip-sdr.jpg">
+                <p class="beat-kicker">Video</p>
+                <h2>One phone video.</h2>
+                <p>Two friends at the foosball table, filmed on a phone.</p>
+              </div>
+              <div class="beat" data-beat="people" data-still="/landing/people-3d.jpg">
+                <p class="beat-kicker">People</p>
+                <h2>Both players, back in 3D.</h2>
+                <p>Rebuilt from that one video, together at the real table.</p>
+              </div>
+              <div class="beat" data-beat="walk" data-still="/landing/worlds/the-courts.jpg">
+                <p class="beat-kicker">Walk in</p>
+                <h2>Now walk in.</h2>
+                <p>In a headset or your browser. Photo worlds also become Roblox places to play in with friends.</p>
+                <div class="beat-cta">
+                  <a class="btn btn-white btn-lg" href="/view?scene=the-courts">Walk in</a>
+                  <a class="link-more link-light" href="/capture?mode=photo">Make your own</a>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="wrap intro-copy" id="intro-copy">
+            <h1 class="slogan" aria-label="Anything you capture, you can walk into.">
+              <span class="line" aria-hidden="true">Anything you capture,</span>
+              <span class="line" aria-hidden="true">you can walk into.</span>
+            </h1>
+            <p class="intro-sub">
+              Upload a photo or a video. Déjà View rebuilds the place in 3D so you can walk through it in a headset or your
+              browser. Photo worlds also become Roblox places to play in with friends.
             </p>
             <div class="cta-row">
               <a class="btn btn-primary btn-lg" href="/capture?mode=photo">Start with a photo</a>
               <a class="link-more" href="/capture?mode=video">Start with a video</a>
             </div>
+            <!-- worlds-row.ts: small looping chips of real worlds, linking down to Step inside -->
+            <div class="hero-chips" id="hero-chips"></div>
           </div>
+          <!-- the words while the headset shows its face side, before the camera goes in -->
+          <p class="intro-look" id="intro-look" aria-hidden="true">Look inside.</p>
+        </div>
+        <!-- where "How it works" lands: the start of the film (hero.ts places it) -->
+        <div class="intro-anchor" id="how-it-works"></div>
+      </section>
 
-          <div class="phone" aria-label="Example: a friend shares a Déjà View link in the group chat" role="img">
-            <div class="phone-screen">
-              <div class="statusbar" aria-hidden="true">
-                <span>9:41</span>
-                <span class="island"></span>
-                <span class="sb-icons">
-                  <svg viewBox="0 0 18 12" width="17" height="11"><path d="M1 9h2v2H1zM5 7h2v4H5zM9 4.5h2V11H9zM13 2h2v9h-2z" fill="currentColor" /></svg>
-                  <svg viewBox="0 0 26 12" width="25" height="12"><rect x=".5" y=".5" width="22" height="11" rx="3.2" fill="none" stroke="currentColor" opacity=".4" /><rect x="2" y="2" width="16" height="8" rx="2" fill="currentColor" /><path d="M24 4v4c.8-.3 1.3-1.1 1.3-2S24.8 4.3 24 4z" fill="currentColor" opacity=".4" /></svg>
-                </span>
-              </div>
-              <div class="chat-head" aria-hidden="true">
-                <svg class="back" viewBox="0 0 12 20" width="11" height="19"><path d="M10 2 2 10l8 8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" /></svg>
-                <div class="group">
-                  <div class="avatars"><span>M</span><span>S</span><span>B</span></div>
-                  <div class="group-name">Game Night <span>&rsaquo;</span></div>
+      <!-- reduced motion or no WebGL: the same story as a plain list, each line with its picture (hero.ts moves it here) -->
+      <section class="journey-static" id="journey-static" hidden></section>
+
+      <section class="worlds" id="worlds" aria-labelledby="worlds-title">
+        <div class="wrap worlds-head">
+          <h2 class="worlds-title" id="worlds-title">Step inside.</h2>
+          <p class="worlds-sub">Rebuilt from photos, phone clips, even a game tour. Pick one and walk in.</p>
+        </div>
+        <!-- worlds-row.ts fills this with the best worlds, each a looping flight through it -->
+        <div class="worlds-row" id="worlds-row"></div>
+      </section>
+
+      <section class="chapter" id="how" data-chapter="upload">
+        <div class="chapter-stage">
+          <div class="wrap chapter-copy">
+            <p class="chapter-kicker">Capture</p>
+            <h2>Drop in a photo or a video.</h2>
+            <p>One photo is enough: AI fills in what the camera never saw. More photos make it exact. A video brings the people too.</p>
+          </div>
+          <div class="chapter-visual">
+            <!-- story.ts: the 25 Game Lawn photos are dragged in as a stack, upload, and the card turns into the world they made -->
+            <div class="upload-card" data-upload-card>
+              <div class="upload-modes" aria-hidden="true"><span class="is-on">Photo</span><span>Video</span></div>
+              <div class="upload-drop" aria-hidden="true">
+                <div class="upload-stack">
+                  <img class="upload-photo" data-src="/landing/photos/IMG_7366.jpg" alt="" />
+                  <img class="upload-photo" data-src="/landing/photos/IMG_7359.jpg" alt="" />
+                  <img class="upload-photo" data-src="/landing/photos/IMG_7352.jpg" alt="" />
+                  <img class="upload-photo" data-src="/landing/photos/IMG_7347.jpg" alt="" />
+                  <img class="upload-photo" data-src="/landing/photos/IMG_7350.jpg" alt="" />
+                  <span class="upload-count">25</span>
                 </div>
-                <svg class="video-call" viewBox="0 0 26 18" width="25" height="17"><rect x="1" y="2" width="16" height="14" rx="3.5" fill="currentColor" /><path d="m18 7 6-3.5v11L18 11z" fill="currentColor" /></svg>
+                <img class="upload-world" data-src="/landing/worlds/the-courts.jpg" alt="" />
+                <span class="upload-status" data-upload-status>Drop photos here</span>
               </div>
-              <div class="chat" id="chat" aria-hidden="true">
-                <div class="msg in"><span class="who">Seb</span><p class="bubble">sorry I missed it. what happened</p></div>
-                <div class="msg out"><p class="bubble">don't look at pics. walk into it</p></div>
-                <div class="msg out">
-                  <a class="bubble preview" id="chat-link" href="#gallery" tabindex="-1">
-                    <span class="preview-img"><img id="chat-link-img" alt="" /></span>
-                    <span class="preview-text"><b id="chat-link-title">Game night</b><span>Déjà View</span></span>
-                  </a>
-                  <span class="receipt">Delivered</span>
+              <div class="upload-bar" aria-hidden="true"><span></span></div>
+              <div class="upload-meta">
+                <div class="upload-meta-files" aria-hidden="true"><span>25 photos</span><span>Photo</span></div>
+                <div class="upload-meta-ready" aria-hidden="true" data-upload-ready>
+                  <span class="upload-name">Infinity Hall Game Lawn</span>
+                  <a class="btn btn-primary btn-sm upload-walk" href="/view?scene=the-courts" aria-label="Walk into the Infinity Hall Game Lawn" tabindex="-1">Walk in</a>
                 </div>
-                <div class="msg in"><span class="who">Maya</span><p class="bubble">wait I can actually stand in it??</p></div>
-                <div class="msg in"><span class="who">Seb</span><p class="bubble">ok I'm never missing game night again</p></div>
-              </div>
-              <div class="composer" aria-hidden="true">
-                <span class="plus">+</span>
-                <span class="field">iMessage</span>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section class="section tint" id="how">
-        <div class="wrap">
-          <h2 class="section-title">Three steps. <span class="soft">No 3D skills.</span></h2>
-          <ol class="steps">
-            <li>
-              <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M8 11.5A3.5 3.5 0 0 1 11.5 8h17A3.5 3.5 0 0 1 32 11.5v11a3.5 3.5 0 0 1-3.5 3.5H18l-6.5 5.5V26h0A3.5 3.5 0 0 1 8 22.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" /></svg>
-              <h3>Send a photo or a video.</h3>
-              <p>Upload it here from your phone or laptop. A room, a game, a night you want back.</p>
-            </li>
-            <li>
-              <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 6 33 13.5v13L20 34 7 26.5v-13z M7 13.5 20 21l13-7.5M20 21v13" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" /></svg>
-              <h3>We build the room.</h3>
-              <p>The parts the camera never saw get filled in, behind you included. Seconds on a warm GPU.</p>
-            </li>
-            <li>
-              <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M11 33V12a9 9 0 0 1 18 0v21M6 33h28M24 21.5v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
-              <h3>Walk in.</h3>
-              <p>In a VR headset or the browser. Friends can join the same room from Roblox and leave notes.</p>
-            </li>
-          </ol>
-
-          <div class="modes" id="modes">
-            <article class="mode">
-              <h3>Photo</h3>
-              <p class="mode-lede">One shot. The whole room.</p>
-              <p>A world model fills in everything the camera missed, so you can turn around. No photo? Describe a room and it gets built anyway.</p>
-              <ol class="tips">
-                <li><b>Back into a corner and shoot wide.</b> Get the floor and the ceiling in the frame.</li>
-                <li><b>Lights on, no zoom, landscape.</b> Hold still for a beat before you tap.</li>
-                <li><b>Using a clip?</b> Keep it calm. The sharpest frame is the one that gets used.</li>
-              </ol>
-              <a class="link-more" href="/capture?mode=photo">Start with a photo</a>
-            </article>
-            <article class="mode">
-              <h3>Video</h3>
-              <p class="mode-lede">The real footage, in the room.</p>
-              <p>Prop up your phone and hit record. You get the room, and the people in it are the real footage standing there in 3D, sound and all.</p>
-              <ol class="tips">
-                <li><b>Prop the phone. Don't hold it.</b> The room is built from whatever stays still.</li>
-                <li><b>Whole person in frame, 1 to 3 m away.</b> Feet included, please.</li>
-                <li><b>10 to 30 seconds, good light.</b> Nobody walking through the shot.</li>
-              </ol>
-              <a class="link-more" href="/capture?mode=video">Start with a video</a>
-            </article>
+      <section class="chapter chapter-gray" id="anywhere" data-chapter="anywhere">
+        <div class="chapter-stage">
+          <div class="wrap chapter-copy">
+            <p class="chapter-kicker">Walk in</p>
+            <h2>Walk it anywhere.</h2>
+            <p>The same place, wherever you are.</p>
+          </div>
+          <div class="wrap anywhere">
+            <div class="anywhere-tile">
+              <div class="anywhere-shot"><img data-src="/landing/headset.jpg" alt="The Infinity Hall Game Lawn as seen in a headset, one view per eye" /></div>
+              <h3>Headset</h3>
+              <p>Any WebXR headset, like a Quest 3S. Put it on and you are standing in it.</p>
+            </div>
+            <div class="anywhere-tile">
+              <div class="anywhere-shot"><img data-src="/landing/browser.jpg" alt="The Infinity Hall Game Lawn in a web browser" /></div>
+              <h3>Browser</h3>
+              <p>Phone or laptop. Nothing to install, just a link.</p>
+            </div>
+            <div class="anywhere-tile">
+              <div class="anywhere-shot"><img data-src="/landing/roblox-lawn.jpg" alt="Two Roblox players in a ping-pong rally on the real table in the Game Lawn's Roblox room" /></div>
+              <h3>Roblox</h3>
+              <p>The same Game Lawn as a Roblox room, textured from the photos. Rally on the real ping-pong table.</p>
+            </div>
+          </div>
+          <div class="wrap anywhere-cta">
+            <a class="link-more" href="/capture?mode=photo">Make your own</a>
           </div>
         </div>
       </section>
@@ -158,11 +235,17 @@
       <section class="section" id="gallery">
         <div class="wrap">
           <div class="section-head">
-            <h2 class="section-title">Your worlds.</h2>
+            <h2 class="section-title">All worlds.</h2>
             <div class="segmented" id="filters" role="toolbar" aria-label="Filter worlds"></div>
           </div>
           <div class="banner" id="gallery-error" role="alert"></div>
-          <div class="grid" id="grid" aria-live="polite">
+          <!-- gallery.ts: the worlds this visitor just made (from the capture page), with how far along they are -->
+          <div class="wl-mine" id="mine" hidden>
+            <h3 class="wl-mine-title">Yours</h3>
+            <div class="wl-list" id="mine-list" role="list"></div>
+          </div>
+          <!-- gallery.ts: our worlds, a fixed list; each shows once the server says it is ready -->
+          <div class="grid" id="grid">
             <div class="skeleton"></div>
             <div class="skeleton"></div>
             <div class="skeleton"></div>
@@ -175,23 +258,26 @@
           <h2 class="section-title">On your phone or headset.</h2>
           <div class="duo">
             <div class="panel">
-              <h3>Same Wi-Fi? Open this.</h3>
+              <!-- gallery.ts: the Wi-Fi words and address only on a local or private address, else this page's own link -->
+              <h3 id="lan-title">Open this link.</h3>
               <div class="lan-box">
                 <div class="qr" id="qr" aria-hidden="true"></div>
                 <div>
                   <a class="lan-url" id="lan-url" href="#">Finding this laptop&hellip;</a>
-                  <p class="lan-note" id="lan-note">Scan it with your phone camera, or type it into the headset browser.</p>
+                  <p class="lan-note" id="lan-note"></p>
                   <div class="lan-actions">
                     <button class="btn btn-gray btn-sm" id="lan-copy" type="button">Copy link</button>
-                    <a class="link-more" id="lan-capture" href="/capture">Capture page</a>
+                    <a class="link-more" id="lan-capture" href="/capture">Make your own</a>
                   </div>
+                  <p class="signin-note" id="lan-signin" hidden></p>
                 </div>
               </div>
             </div>
             <div class="panel">
               <h3>Getting around</h3>
-              <div class="controls">
-                <div>
+              <!-- gallery.ts: on a phone, Phone comes first and Laptop and VR headset fold into a details -->
+              <div class="controls" id="controls">
+                <div data-ctl="laptop">
                   <h4>Laptop</h4>
                   <dl>
                     <div><dt><kbd>Click</kbd></dt><dd>Look around</dd></div>
@@ -201,7 +287,7 @@
                     <div><dt><kbd>R</kbd></dt><dd>Back to the start</dd></div>
                   </dl>
                 </div>
-                <div>
+                <div data-ctl="phone">
                   <h4>Phone</h4>
                   <dl>
                     <div><dt>Left half</dt><dd>Drag to move</dd></div>
@@ -209,7 +295,7 @@
                     <div><dt>Tap</dt><dd>Play with sound</dd></div>
                   </dl>
                 </div>
-                <div>
+                <div data-ctl="vr">
                   <h4>VR headset</h4>
                   <dl>
                     <div><dt>Left stick</dt><dd>Walk</dd></div>
@@ -226,8 +312,23 @@
 
     <footer class="footer">
       <div class="wrap">
-        <span>Déjà View &middot; Made at SwampHacks XII</span>
-        <span>You've seen this before. Now walk around in it.</span>
+        <div class="footer-notes">
+          <p>
+            Built with three.js, Spark, FlashWorld, gsplat, COLMAP, Depth Anything V2, Qwen-Image-Edit and
+            Multi-HMR 2, among other open-source models and tools. <a class="footer-more" href="/credits.html">All credits</a>
+          </p>
+          <p class="model-credit">
+            Quest 3S model by
+            <a href="https://sketchfab.com/3d-models/quest-3s-with-controllers-448519e4ef0b40619592000db3729aaa" rel="noopener" target="_blank">OG_MATTER</a>,
+            licensed under <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener license" target="_blank">CC BY 4.0</a>.
+            The Tilted Towers and Brick House worlds are rebuilt from “Tilted Towers Tour | Fortnite OG S2” by woodinjake.
+          </p>
+          <p>Meta Quest, Roblox and Fortnite are trademarks of their owners; Déjà View is not affiliated with or endorsed by them.</p>
+        </div>
+        <div class="footer-base">
+          <span>Déjà View &middot; Made at SwampHacks XII</span>
+          <span class="footer-tagline">You’ve seen this before. Now walk around in it.</span>
+        </div>
       </div>
     </footer>
 

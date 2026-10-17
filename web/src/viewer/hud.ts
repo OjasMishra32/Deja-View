@@ -31,6 +31,11 @@ export const MODE_LABEL: Record<SceneMode | PublicMode, string> = {
   video: 'Video',
 };
 
+/** The headset names only the two modes: a world with a video layer is a Video memory, anything else a Photo world. */
+export function worldModeName(mode: string | undefined, hasVideo = false): 'Photo' | 'Video' {
+  return hasVideo || mode === 'video' || mode === 'thirdwheel' ? 'Video' : 'Photo';
+}
+
 export function formatTime(t: number): string {
   if (!Number.isFinite(t) || t < 0) t = 0;
   const m = Math.floor(t / 60);

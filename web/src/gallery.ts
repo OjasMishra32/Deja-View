@@ -1,22 +1,22 @@
-// Landing page: the group-chat hero, the live gallery, and the same-Wi-Fi panel.
+// Landing page: the headset intro and the how-it-works story (hero.ts, story.ts), the hero's chips and the Step
+// inside row (worlds-row.ts), the curated All worlds list, and the phone-or-headset panel.
 
 import {
   ApiError,
   LiveEvents,
   MODE_NAME,
-  deleteScene,
   errorText,
   getHealth,
   lanUrls,
   listScenes,
   modeKind,
-  retryScene,
   sceneAssetUrl,
-  sceneErrorDetails,
   viewUrl,
   type HealthInfo,
   type Scene,
 } from './api.ts';
+import { authConfig } from './auth.ts';
+import { Intro } from './hero.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string, root: ParentNode = document) => root.querySelector(sel) as T | null;
 
@@ -34,38 +34,6 @@ function toast(msg: string) {
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
-}
-
-// ---------------------------------------------------------------------------------------------
-// Cover for scenes without a thumbnail yet: a soft gradient with a photo or video glyph.
-
-function hashString(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
-  return h >>> 0;
-}
-
-const COVER_TINTS: [string, string][] = [
-  ['#e8eef7', '#d5deeb'],
-  ['#eef0f4', '#dcdfe6'],
-  ['#e9f1f0', '#d3e1df'],
-  ['#f2eef4', '#e0d9e6'],
-];
-
-const thumbCache = new Map<string, string>();
-function placeholderThumb(scene: { id: string; mode?: string }): string {
-  const key = `${scene.id}|${scene.mode ?? ''}`;
-  const hit = thumbCache.get(key);
-  if (hit) return hit;
-  const [a, b] = COVER_TINTS[hashString(scene.id) % COVER_TINTS.length];
-  const glyph =
-    modeKind(scene.mode) === 'video'
-      ? '<rect x="292" y="178" width="40" height="44" rx="8"/><path d="M332 193l20-12v38l-20-12z"/>'
-      : '<rect x="290" y="176" width="60" height="48" rx="8"/><circle cx="306" cy="192" r="5"/><path d="M290 214l18-16 14 12 10-8 18 14"/>';
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="640" height="400" fill="url(#g)"/><g fill="none" stroke="#8e8e93" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" opacity=".7">${glyph}</g></svg>`;
-  const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-  thumbCache.set(key, url);
-  return url;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -311,9 +279,25 @@ export function qrSvg(text: string): string {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Same-Wi-Fi panel (the server's health says which addresses phones and the headset can reach)
+// On your phone or headset. Opened at a local or private address (this laptop, or a Wi-Fi address), the panel
+// gives the address phones and the headset can reach (from the server's health) with the Wi-Fi and certificate
+// words. Opened anywhere else, at a public link, it gives that link and nothing about Wi-Fi.
 
 let health: HealthInfo | undefined;
+
+/** A local or private address: this laptop, 10.x, 172.16-31.x or 192.168.x. */
+export function isLanHost(hostname: string): boolean {
+  const h = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (h === 'localhost' || h.endsWith('.localhost') || h === '::1') return true;
+  const m = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(h);
+  if (!m) return false;
+  const a = Number(m[1]), b = Number(m[2]);
+  return a === 10 || a === 127 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
+}
+
+const onLan = typeof location !== 'undefined' && isLanHost(location.hostname);
+/** The phone layout: no QR code (this is the phone), and the phone's own controls first. */
+const phoneScreen = typeof matchMedia === 'function' ? matchMedia('(max-width: 734px)') : null;
 
 function setHealth(h: HealthInfo | undefined) {
   health = h;
@@ -321,6 +305,7 @@ function setHealth(h: HealthInfo | undefined) {
 }
 
 function currentLanUrl(): string | null {
+  if (!onLan) return location.origin;
   const urls = health ? lanUrls(health) : [];
   if (urls.length) return urls[0];
   if (!/^(localhost|127\.|\[::1\])/.test(location.hostname)) return location.origin;
@@ -330,16 +315,20 @@ function currentLanUrl(): string | null {
 let lastQr = '';
 function renderLan() {
   const url = currentLanUrl();
+  const title = $('#lan-title');
   const link = $<HTMLAnchorElement>('#lan-url');
   const note = $('#lan-note');
   const qr = $('#qr');
   const cap = $<HTMLAnchorElement>('#lan-capture');
   if (!link || !note || !qr) return;
+  const phone = !!phoneScreen?.matches;
+  if (title) title.textContent = onLan ? 'Same Wi-Fi? Open this.' : 'Open this link.';
   if (!url) {
     link.textContent = health ? 'No Wi-Fi address found' : 'Finding this laptop…';
     link.removeAttribute('href');
     note.textContent = health ? 'Connect the laptop to Wi-Fi, then reload. Phones and the headset must be on the same network.' : '';
     qr.innerHTML = '';
+    lastQr = '';
     return;
   }
   link.textContent = url.replace(/^https?:\/\//, '');
@@ -353,9 +342,36 @@ function renderLan() {
       qr.innerHTML = '';
     }
   }
-  note.textContent = health?.https || url.startsWith('https:')
-    ? 'Scan it with your phone camera or type it into the headset browser. Accept the certificate warning once per device.'
-    : 'Scan it with your phone camera or type it into the headset browser. VR in the headset needs HTTPS: start the server with bun run https.';
+  const where = phone ? 'Type it into the headset browser.' : 'Scan it with your phone camera or type it into the headset browser.';
+  if (!onLan) note.textContent = phone ? 'Type it into the headset browser to walk in with VR.' : where;
+  else
+    note.textContent = `${where} ${
+      health?.https || url.startsWith('https:') ? 'Accept the certificate warning once per device.' : 'VR in the headset needs HTTPS: start the server with bun run https.'
+    }`;
+}
+
+/** On a phone its own controls come first; the laptop's and the headset's fold away under one line. */
+function layoutControls() {
+  const box = $('#controls');
+  if (!box) return;
+  const part = (k: string) => box.querySelector<HTMLElement>(`[data-ctl="${k}"]`);
+  const laptop = part('laptop'), phone = part('phone'), vr = part('vr');
+  if (!laptop || !phone || !vr) return;
+  let more = box.querySelector<HTMLDetailsElement>('.ctl-more');
+  if (phoneScreen?.matches) {
+    if (!more) {
+      more = document.createElement('details');
+      more.className = 'ctl-more';
+      const summary = document.createElement('summary');
+      summary.textContent = 'Laptop and VR headset';
+      more.appendChild(summary);
+    }
+    more.append(laptop, vr);
+    box.append(phone, more);
+  } else {
+    box.append(laptop, phone, vr);
+    more?.remove();
+  }
 }
 
 async function copyText(text: string): Promise<boolean> {
@@ -380,288 +396,406 @@ async function copyText(text: string): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Gallery
+// Sign-in: when the server has it on, the page says so beside the ways in to making one.
+
+const SIGN_IN_NOTE = 'Sign in to make your own. Anyone can walk in.';
+let signInOn = false;
+
+function showSignInNotes() {
+  signInOn = true;
+  const chips = $('#hero-chips');
+  if (chips && !chips.querySelector('.hero-signin')) {
+    const p = document.createElement('p');
+    p.className = 'hero-signin';
+    p.textContent = SIGN_IN_NOTE;
+    chips.prepend(p);
+  }
+  const lan = $('#lan-signin');
+  if (lan) {
+    lan.textContent = SIGN_IN_NOTE;
+    lan.hidden = false;
+  }
+  if ($('#grid .wl-empty')) renderGrid();
+}
+
+// ---------------------------------------------------------------------------------------------
+// All worlds: a fixed list of our worlds, each with one true line on how it was made (styles in worlds-list.css).
+// The server only says which of them are ready: a world shows once it is, and leaves if it stops being. No status,
+// no times, nothing to delete. Above it, the worlds this visitor just made (?new=<id> from the capture page, kept for
+// the tab) show how far along they are.
+
+type Kind = 'photo' | 'video';
+
+interface Curated {
+  id: string;
+  name: string;
+  kind: Kind;
+  /** How it was made, in one line that fits a laptop row. */
+  line: string;
+}
+
+const TILTED_CREDIT = 'Tilted Towers Tour | Fortnite OG S2 by woodinjake';
+
+/** The worlds the landing lists, in this order. */
+const CURATED: readonly Curated[] = [
+  { id: 'the-courts', name: 'Infinity Hall Game Lawn', kind: 'photo', line: 'From 25 photos and two phone clips: table tennis, foosball and the lawn.' },
+  { id: 'chess-room', name: 'Giant chess', kind: 'photo', line: 'From stills of four phone clips, frozen just after a knight move.' },
+  { id: 'kitchen', name: 'Kitchen', kind: 'photo', line: 'From 36 photos and a cooking clip: the stoves, the sink and the bar tables.' },
+  { id: 'old-house-kitchen', name: 'The old house kitchen', kind: 'photo', line: 'From four photos of its old real-estate listing, a home in Pennsylvania.' },
+  { id: 'tilted-towers', name: 'Tilted Towers', kind: 'photo', line: `From stills of ${TILTED_CREDIT}.` },
+  { id: 'brick-apartment', name: 'Brick House apartment', kind: 'photo', line: `From 71 frames of ${TILTED_CREDIT}.` },
+  { id: 'courts-foosball', name: 'Foosball at the Game Lawn', kind: 'video', line: 'From one phone video: two friends at the foosball table.' },
+  { id: 'kitchen-cooking', name: 'Sebastian cooking', kind: 'video', line: 'From one phone video: Seb at the counters, the stove and the sink.' },
+];
+const curatedIds = new Set(CURATED.map((c) => c.id));
 
 const STATUS_LABEL: Record<string, string> = {
-  queued: 'Queued',
+  queued: 'Waiting its turn',
   uploading: 'Uploading',
-  running: 'Running',
-  downloading: 'Downloading',
+  running: 'Being made',
+  downloading: 'Almost there',
   ready: 'Ready',
   failed: 'Failed',
-};
-const BACKEND_LABEL: Record<string, string> = {
-  'hpg-worker': 'warm GPU',
-  'hpg-batch': 'GPU cluster',
-  'hf-space': 'cloud GPU',
-  local: 'this laptop',
-  bundled: 'built in',
 };
 const ACTIVE = new Set(['queued', 'uploading', 'running', 'downloading']);
 
 const scenes = new Map<string, Scene>();
-let filter = 'all';
+let filter: 'all' | Kind = 'all';
 let loaded = false;
-let highlightId: string | null = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('new') : null;
-const confirming = new Map<string, ReturnType<typeof setTimeout>>();
+/** The last list request failed; with no worlds known the list keeps its loading rows. */
+let loadFailed = false;
+const SKELETONS = '<div class="skeleton"></div>'.repeat(3);
+/** Thumbnails that did not load: those rows keep a plain tile rather than a broken picture. */
+const brokenThumbs = new Set<string>();
 
-const rtf = typeof Intl !== 'undefined' && 'RelativeTimeFormat' in Intl ? new Intl.RelativeTimeFormat('en', { numeric: 'auto' }) : null;
-function ago(iso: string | undefined): string {
-  if (!iso) return '';
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return '';
-  const s = (t - Date.now()) / 1000;
-  const abs = Math.abs(s);
-  if (!rtf) return new Date(t).toLocaleString();
-  if (abs < 45) return 'just now';
-  if (abs < 3600) return rtf.format(Math.round(s / 60), 'minute');
-  if (abs < 86400) return rtf.format(Math.round(s / 3600), 'hour');
-  return rtf.format(Math.round(s / 86400), 'day');
+/** The Step inside row, once mounted. */
+let rowRefresh: (() => void) | null = null;
+let rowTimer: ReturnType<typeof setTimeout> | undefined;
+/** A world arrived, became ready or left: the row looks again about a second later, once per burst. */
+function rowChanged() {
+  if (!rowRefresh) return;
+  clearTimeout(rowTimer);
+  rowTimer = setTimeout(() => {
+    try {
+      rowRefresh?.();
+    } catch {}
+  }, 1000);
+}
+/** Which worlds exist, which are ready and what they are called, to tell when a fresh list changed anything the row shows. */
+function rowKey(): string {
+  return [...scenes.values()]
+    .map((s) => `${s.id}:${s.status === 'ready' ? 1 : 0}:${s.name ?? ''}:${s.thumb ?? ''}`)
+    .sort()
+    .join(',');
 }
 
-function ordered(): Scene[] {
-  return [...scenes.values()].sort((a, b) => {
-    const sa = a.mode === 'sample' ? 1 : 0, sb = b.mode === 'sample' ? 1 : 0;
-    if (sa !== sb) return sa - sb;
-    return (b.createdAt ?? '').localeCompare(a.createdAt ?? '');
+// ---- the visitor's own worlds, for this tab
+
+const MINE_KEY = 'dv.mine';
+let mine: string[] = [];
+let highlightId: string | null = null;
+
+function readMine(): string[] {
+  try {
+    const v: unknown = JSON.parse(sessionStorage.getItem(MINE_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').slice(0, 6) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeMine() {
+  try {
+    sessionStorage.setItem(MINE_KEY, JSON.stringify(mine));
+  } catch {}
+}
+
+/** ?new=<id> from the capture page: kept for this tab, then taken out of the address. */
+function takeNew() {
+  mine = readMine();
+  const url = new URL(location.href);
+  const id = url.searchParams.get('new');
+  if (!id) return;
+  highlightId = id;
+  if (!curatedIds.has(id)) {
+    mine = [id, ...mine.filter((x) => x !== id)].slice(0, 6);
+    writeMine();
+  }
+  url.searchParams.delete('new');
+  history.replaceState(null, '', url.pathname + url.search + url.hash);
+}
+
+// ---- rows
+
+/** The Game Lawn's old working name never reaches the page. */
+function lawnName(text: string): string {
+  return text.replace(/\bthe courts\b/gi, (m) => `${m[0] === 'T' ? 'The' : 'the'} Infinity Hall Game Lawn`);
+}
+
+function displayName(s: Scene): string {
+  const name = (s.name ?? '').trim();
+  if (/^the courts\.?$/i.test(name)) return 'Infinity Hall Game Lawn';
+  return lawnName(name) || 'Untitled';
+}
+
+/** The scene's thumbnail, else its first uploaded photo; null when there is neither. */
+function thumbUrl(s: Scene | undefined): string | null {
+  if (!s) return null;
+  let url: string | null = null;
+  if (s.thumb) url = sceneAssetUrl(s.id, s.thumb);
+  else {
+    const first = s.input?.files?.find((f) => /\.(jpe?g|png|webp)$/i.test(f));
+    if (first) url = sceneAssetUrl(s.id, first.includes('/') ? first : `input/${first}`);
+  }
+  return url && !brokenThumbs.has(url) ? url : null;
+}
+
+/** 0 to 100 when the server knows; null while it cannot tell, or while queued with nothing done. */
+function percent(s: Scene): number | null {
+  if (typeof s.progress !== 'number' || !Number.isFinite(s.progress)) return null;
+  if (s.status === 'queued' && s.progress <= 0) return null;
+  return Math.max(0, Math.min(100, Math.round(s.progress * 100)));
+}
+
+const ICON_GO =
+  '<svg class="wl-go" viewBox="0 0 8 14" width="8" height="14" aria-hidden="true"><path d="M1.5 1.5 6.5 7l-5 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+interface RowData {
+  id: string;
+  name: string;
+  kind: Kind;
+  line: string;
+  state: 'ready' | 'active' | 'failed';
+  /** 0..100 while being made, when known. */
+  pct?: number | null;
+}
+
+function setText(root: ParentNode, sel: string, text: string) {
+  const el = root.querySelector<HTMLElement>(sel);
+  if (el && el.textContent !== text) el.textContent = text;
+}
+
+/** innerHTML, skipped when unchanged so focus and hover survive live updates. */
+const htmlCache = new WeakMap<Element, string>();
+function setHtml(el: Element | null, html: string) {
+  if (!el || htmlCache.get(el) === html) return;
+  htmlCache.set(el, html);
+  el.innerHTML = html;
+}
+
+/** No picture keeps the slot as a plain tile, so names and hairlines line up with the rest. */
+function setThumb(el: HTMLElement, url: string | null) {
+  const box = el.querySelector<HTMLElement>('.wl-thumb')!;
+  const img = box.querySelector('img')!;
+  el.classList.toggle('no-thumb', !url);
+  img.hidden = !url;
+  if (!url) {
+    delete box.dataset.src;
+    img.removeAttribute('src');
+  } else if (box.dataset.src !== url) {
+    box.dataset.src = url;
+    img.src = url;
+  }
+}
+
+function makeRow(id: string): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'world-row';
+  el.setAttribute('role', 'listitem');
+  el.dataset.id = id;
+  el.innerHTML = `<div class="wl-thumb" aria-hidden="true"><img alt="" decoding="async" loading="lazy" width="44" height="44" hidden /></div>
+    <div class="wl-main"><p class="wl-head"><span class="wl-name"></span><span class="wl-chip"></span></p><p class="wl-line"></p><span class="wl-bar" aria-hidden="true" hidden><i></i></span></div>
+    <div class="wl-actions"></div>`;
+  el.querySelector('img')!.addEventListener('error', () => {
+    // Missing or not written yet: no picture rather than a broken one.
+    const src = el.querySelector<HTMLElement>('.wl-thumb')?.dataset.src;
+    if (src) brokenThumbs.add(src);
+    setThumb(el, null);
   });
-}
-
-function matches(s: Scene): boolean {
-  if (filter === 'all') return true;
-  return modeKind(s.mode) === filter;
-}
-
-/** The scene's thumbnail, else its first uploaded photo, else a generated cover. */
-function thumbUrl(s: Scene): string {
-  if (s.thumb) return sceneAssetUrl(s.id, s.thumb);
-  const first = s.input?.files?.find((f) => /\.(jpe?g|png|webp)$/i.test(f));
-  if (first) return sceneAssetUrl(s.id, first.includes('/') ? first : `input/${first}`);
-  return placeholderThumb(s);
-}
-
-const ICON_TRASH = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
-
-function metaLine(s: Scene): string {
-  const clip = s.video && Number.isFinite(s.video.duration) ? `${Math.round(s.video.duration)} s${s.video.hasAudio ? ' with sound' : ''}` : '';
-  return [ago(s.createdAt), clip, s.backend ? BACKEND_LABEL[s.backend] ?? s.backend : ''].filter(Boolean).join(' · ');
-}
-
-/** The server's stage line, else the status. */
-function stageText(s: Scene): string {
-  return s.stage?.trim() || STATUS_LABEL[s.status] || s.status;
-}
-
-/** What the scene was made from, for cards whose job has not finished. */
-function sourceLine(s: Scene): string {
-  const files = s.input?.files ?? [];
-  if (modeKind(s.mode) === 'video') return 'From one video';
-  if (files.length > 1) return `From ${files.length} photos`;
-  if (files.some((f) => /\.(mp4|mov|m4v|webm|mkv|avi)$/i.test(f))) return 'From one clip';
-  if (files.length) return 'From one photo';
-  return s.input?.prompt ? 'From a description' : 'From one photo';
-}
-
-function subline(s: Scene): string {
-  // Prompts are the person's own words and captions come from the server; both are shown as written.
-  const kind = modeKind(s.mode);
-  const caption = s.caption?.trim() ?? '';
-  const prompt = s.input?.prompt?.trim();
-  if (s.status === 'failed') return s.stage && s.stage !== 'Failed' ? `Stopped at: ${stageText(s)}` : 'This one did not make it.';
-  // The stage line under it already says what is happening; this says what it is being made from.
-  if (ACTIVE.has(s.status)) return prompt ? `“${prompt}”` : caption && caption !== stageText(s) ? caption : sourceLine(s);
-  if (caption) return caption;
-  if (prompt) return `“${prompt}”`;
-  return kind === 'video' ? 'The room, with the real footage in 3D' : kind === 'sample' ? 'A world to try first' : 'A world you can walk into';
-}
-
-/** The failure reason, with technical details folded into a collapsed block. */
-function errorBox(s: Scene): string {
-  const { headline, detail } = errorText(s.error || 'This one stopped without a reason. Retry it, or make it again.', sceneErrorDetails(s));
-  return `<div class="error-box"><span>${esc(headline)}</span>${detail ? `<details><summary>Details</summary><pre>${esc(detail)}</pre></details>` : ''}</div>`;
-}
-
-function cardBody(s: Scene): string {
-  const active = ACTIVE.has(s.status);
-  const pct = typeof s.progress === 'number' ? Math.round(s.progress * 100) : null;
-  const meta = metaLine(s);
-  const isConfirm = confirming.has(s.id);
-  return `
-    <h3 class="card-title">${esc(s.name || 'Untitled')}</h3>
-    <p class="card-sub">${esc(subline(s))}</p>
-    ${
-      active
-        ? `<div class="stage-line"><b class="stage">${esc(stageText(s))}</b><span class="pct">${pct !== null ? pct + '%' : ''}</span></div>
-           <div class="progress${pct === null ? ' indeterminate' : ''}"><div class="progress-fill" style="transform:scaleX(${pct !== null ? Math.max(0.02, pct / 100) : 0.3})"></div></div>`
-        : ''
-    }
-    ${s.status === 'failed' ? errorBox(s) : ''}
-    <div class="card-foot">
-      <span class="meta" title="${esc(s.createdAt)}">${esc(meta)}</span>
-      ${s.status === 'failed' ? `<button class="btn btn-xs" data-act="retry" type="button">Retry</button>` : ''}
-      ${
-        s.mode === 'sample'
-          ? ''
-          : `<button class="icon-btn del${isConfirm ? ' confirm' : ''}" data-act="delete" type="button" aria-label="Delete ${esc(s.name)}">${isConfirm ? 'Delete?' : ICON_TRASH}</button>`
-      }
-      <a class="btn ${s.status === 'ready' ? 'btn-primary' : ''} btn-xs" data-act="enter" href="${esc(viewUrl(s.id))}"${
-        s.status === 'ready' ? '' : ' aria-disabled="true" tabindex="-1"'
-      }>Walk in</a>
-    </div>`;
-}
-
-function badges(s: Scene): string {
-  const active = ACTIVE.has(s.status);
-  const kind = modeKind(s.mode);
-  return `<span class="badge mode-${kind}">${MODE_NAME[kind]}</span>
-    <span class="badge status-${esc(s.status)}">${esc(active ? 'Building' : STATUS_LABEL[s.status] ?? s.status)}</span>`;
-}
-
-function makeCard(s: Scene): HTMLElement {
-  const el = document.createElement('article');
-  el.className = 'scene-card';
-  el.innerHTML = `<div class="thumb"><img alt="" decoding="async" /><div class="thumb-badges"></div></div><div class="card-body"></div>`;
-  const img = el.querySelector('img')!;
-  img.addEventListener('error', () => {
-    // Missing or not yet written: fall back to the generated cover.
-    const s2 = scenes.get(el.dataset.id ?? '') ?? s;
-    const fallback = placeholderThumb(s2);
-    if (img.src !== fallback) img.src = fallback;
-  });
-  fillCard(el, s, true);
   return el;
 }
 
-function fillCard(el: HTMLElement, s: Scene, fresh = false) {
-  const prevStatus = el.dataset.status;
-  el.dataset.id = s.id;
-  el.dataset.status = s.status;
-  el.dataset.mode = s.mode;
-  const thumb = $('.thumb', el)!;
-  const url = thumbUrl(s);
-  if (thumb.dataset.src !== url) {
-    thumb.dataset.src = url;
-    thumb.querySelector('img')!.src = url;
-  }
-  $('.thumb-badges', el)!.innerHTML = badges(s);
-  const body = $('.card-body', el)!;
-  // Progress-only changes update in place so the bar animates instead of jumping.
-  if (!fresh && prevStatus === s.status && ACTIVE.has(s.status) && $('.progress', body) && !confirming.has(s.id)) {
-    const pct = typeof s.progress === 'number' ? Math.round(s.progress * 100) : null;
-    const fill = $('.progress-fill', body)!;
-    $('.progress', body)!.classList.toggle('indeterminate', pct === null);
-    fill.style.transform = `scaleX(${pct !== null ? Math.max(0.02, pct / 100) : 0.3})`;
-    $('.stage', body)!.textContent = stageText(s);
-    $('.pct', body)!.textContent = pct !== null ? `${pct}%` : '';
-    $('.card-sub', body)!.textContent = subline(s);
-    $('.card-title', body)!.textContent = s.name || 'Untitled';
-    return;
-  }
-  body.innerHTML = cardBody(s);
+function fillRow(el: HTMLElement, d: RowData, thumb: string | null) {
+  el.dataset.mode = d.kind;
+  el.dataset.state = d.state;
+  el.classList.toggle('is-ready', d.state === 'ready');
+  setThumb(el, thumb);
+  setText(el, '.wl-name', d.name);
+  setText(el, '.wl-chip', MODE_NAME[d.kind]);
+  setText(el, '.wl-line', d.line);
+  const bar = el.querySelector<HTMLElement>('.wl-bar')!;
+  bar.hidden = d.state !== 'active';
+  bar.classList.toggle('indeterminate', d.state === 'active' && d.pct == null);
+  bar.querySelector('i')!.style.transform = `scaleX(${d.pct == null ? 0 : Math.max(0.02, d.pct / 100)})`;
+  const name = esc(d.name);
+  setHtml(
+    el.querySelector('.wl-actions'),
+    d.state === 'ready'
+      ? `<a class="wl-walk" href="${esc(viewUrl(d.id))}"><span class="wl-walk-text">Walk in</span>${ICON_GO}<span class="wl-sr">: ${name}</span></a>`
+      : d.state === 'failed'
+        ? `<a class="wl-again" href="/capture">Try again<span class="wl-sr">: make ${name} again</span></a>`
+        : '',
+  );
 }
 
-function renderFilters() {
+/** Puts `rows` into `box` in order, reusing the rows already there. */
+function placeRows(box: HTMLElement, rows: { id: string; data: RowData; thumb: string | null }[]) {
+  const existing = new Map<string, HTMLElement>();
+  for (const el of box.querySelectorAll<HTMLElement>('.world-row')) if (el.dataset.id) existing.set(el.dataset.id, el);
+  for (const el of box.querySelectorAll('.skeleton, .wl-empty')) el.remove();
+  let prev: Element | null = null;
+  for (const r of rows) {
+    let el = existing.get(r.id);
+    if (el) existing.delete(r.id);
+    else el = makeRow(r.id);
+    fillRow(el, r.data, r.thumb);
+    const anchor: ChildNode | null = prev ? prev.nextSibling : box.firstChild;
+    if (el !== anchor) box.insertBefore(el, anchor);
+    prev = el;
+  }
+  for (const el of existing.values()) el.remove();
+}
+
+// ---- the list and its filter
+
+function shownWorlds(): Curated[] {
+  return CURATED.filter((c) => scenes.get(c.id)?.status === 'ready');
+}
+
+function renderFilters(list: Curated[]) {
   const bar = $('#filters');
   if (!bar) return;
-  const all = [...scenes.values()];
-  const count = (k: string) => all.filter((s) => modeKind(s.mode) === k).length;
-  const opts: [string, string, number][] = [
-    ['all', 'All', all.length],
-    ['photo', 'Photo', count('photo')],
-    ['video', 'Video', count('video')],
+  const photo = list.filter((c) => c.kind === 'photo').length;
+  const video = list.length - photo;
+  // A filter only earns its place once the list holds both Photo and Video worlds.
+  const show = photo > 0 && video > 0;
+  bar.hidden = !show;
+  if (!show) {
+    filter = 'all';
+    setHtml(bar, '');
+    return;
+  }
+  const opts: ['all' | Kind, string, number][] = [
+    ['all', 'All', list.length],
+    ['photo', 'Photo', photo],
+    ['video', 'Video', video],
   ];
-  if (count('sample')) opts.push(['sample', 'Samples', count('sample')]);
-  bar.innerHTML = opts
-    .map(([k, label, n]) => `<button class="filter" type="button" data-filter="${k}" aria-pressed="${filter === k}">${label}<span class="n">${n}</span></button>`)
-    .join('');
+  setHtml(
+    bar,
+    opts
+      .map(([k, label, n]) => `<button class="filter" type="button" data-filter="${k}" aria-pressed="${filter === k}">${label}<span class="n">${n}</span></button>`)
+      .join(''),
+  );
+}
+
+function emptyHtml(): string {
+  return `<div class="wl-empty"><p class="wl-empty-title">No worlds to show right now.</p><p>Try again in a moment, or make your own.</p><a class="btn btn-primary" href="/capture">Make your own</a>${
+    signInOn ? `<p class="signin-note">${SIGN_IN_NOTE}</p>` : ''
+  }</div>`;
 }
 
 function renderGrid() {
   const grid = $('#grid');
   if (!grid) return;
-  renderThread();
-  renderFilters();
-  const list = ordered().filter(matches);
-  if (!list.length) {
-    grid.innerHTML = loaded
-      ? `<div class="empty"><h3>${scenes.size ? 'Nothing here in this filter.' : 'Nothing here yet.'}</h3><p>${
-          scenes.size ? 'Try another filter, or make something new.' : 'Your first world is one photo away.'
-        }</p><a class="btn btn-primary" href="/capture">Make a world</a></div>`
-      : grid.innerHTML;
+  const list = shownWorlds();
+  renderFilters(list);
+  const visible = list.filter((c) => filter === 'all' || c.kind === filter);
+  if (!visible.length) {
+    if (!loaded || (loadFailed && !scenes.size)) {
+      // still loading, or the list could not load: the loading rows stay (under the banner)
+      if (!grid.querySelector('.skeleton')) {
+        grid.removeAttribute('role');
+        grid.innerHTML = SKELETONS;
+      }
+    } else {
+      grid.removeAttribute('role');
+      setHtml(grid, emptyHtml());
+    }
     return;
   }
-  const existing = new Map<string, HTMLElement>();
-  for (const el of grid.querySelectorAll<HTMLElement>('.scene-card')) if (el.dataset.id) existing.set(el.dataset.id, el);
-  for (const el of grid.querySelectorAll('.skeleton, .empty')) el.remove();
-  let prev: Element | null = null;
-  for (const s of list) {
-    let el = existing.get(s.id);
-    if (el) {
-      existing.delete(s.id);
-      fillCard(el, s);
-    } else el = makeCard(s);
-    const anchor: ChildNode | null = prev ? prev.nextSibling : grid.firstChild;
-    if (el !== anchor) grid.insertBefore(el, anchor);
-    prev = el;
-  }
-  for (const el of existing.values()) el.remove();
+  htmlCache.delete(grid);
+  grid.setAttribute('role', 'list');
+  placeRows(
+    grid,
+    visible.map((c) => ({ id: c.id, data: { id: c.id, name: c.name, kind: c.kind, line: c.line, state: 'ready' }, thumb: thumbUrl(scenes.get(c.id)) })),
+  );
+}
+
+function mineRow(s: Scene): RowData {
+  const kind: Kind = modeKind(s.mode) === 'video' ? 'video' : 'photo';
+  const base = { id: s.id, name: displayName(s), kind };
+  if (s.status === 'ready') return { ...base, line: 'Ready to walk in.', state: 'ready' };
+  if (s.status === 'failed') return { ...base, line: 'This one didn’t make it.', state: 'failed' };
+  const pct = percent(s);
+  const stage = (s.status === 'running' && s.stage?.trim()) || STATUS_LABEL[s.status] || STATUS_LABEL.running!;
+  return { ...base, line: pct !== null ? `${stage} · ${pct}%` : stage, state: 'active', pct };
+}
+
+function renderMine() {
+  const box = $('#mine');
+  const list = $('#mine-list');
+  if (!box || !list) return;
+  const items = mine.map((id) => scenes.get(id)).filter((s): s is Scene => !!s);
+  box.hidden = !items.length;
+  placeRows(list, items.map((s) => ({ id: s.id, data: mineRow(s), thumb: thumbUrl(s) })));
   applyHighlight();
-}
-
-function upsert(s: Scene) {
-  if (!s || typeof s.id !== 'string') return;
-  const had = scenes.has(s.id);
-  scenes.set(s.id, s);
-  if (!had) {
-    renderGrid();
-    return;
-  }
-  const el = $(`.scene-card[data-id="${CSS.escape(s.id)}"]`);
-  if (el && matches(s)) fillCard(el, s);
-  else renderGrid();
-  if (s.status === 'ready') renderThread();
-}
-
-function removeScene(id: string) {
-  scenes.delete(id);
-  const el = $(`.scene-card[data-id="${CSS.escape(id)}"]`);
-  if (el) {
-    el.classList.add('leaving');
-    setTimeout(() => {
-      el.remove();
-      if (!scenes.size || ![...scenes.values()].some(matches)) renderGrid();
-      else renderFilters();
-    }, 280);
-  } else renderGrid();
 }
 
 function applyHighlight() {
   if (!highlightId) return;
-  const el = $(`.scene-card[data-id="${CSS.escape(highlightId)}"]`);
+  const el = $(`#gallery .world-row[data-id="${CSS.escape(highlightId)}"]`);
   if (!el) return;
   el.classList.add('is-new');
   setTimeout(() => el.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' }), 120);
   highlightId = null;
-  const url = new URL(location.href);
-  url.searchParams.delete('new');
-  history.replaceState(null, '', url.pathname + url.search + url.hash);
+}
+
+function upsert(s: Scene) {
+  if (!s || typeof s.id !== 'string') return;
+  const prev = scenes.get(s.id);
+  scenes.set(s.id, s);
+  if (!prev || (s.status === 'ready') !== (prev.status === 'ready') || s.name !== prev.name || s.caption !== prev.caption || s.thumb !== prev.thumb) rowChanged();
+  if (curatedIds.has(s.id)) renderGrid();
+  if (mine.includes(s.id)) renderMine();
+}
+
+function removeScene(id: string) {
+  if (scenes.delete(id)) rowChanged();
+  if (mine.includes(id)) {
+    mine = mine.filter((x) => x !== id);
+    writeMine();
+    renderMine();
+  }
+  if (curatedIds.has(id)) renderGrid();
 }
 
 async function refreshScenes() {
   const banner = $('#gallery-error');
   try {
     const list = await listScenes();
+    // After the first load, a fresh list (reconnect, or polling while the socket is down) can carry
+    // changes no live event announced.
+    const before = loaded ? rowKey() : null;
     const seen = new Set(list.map((s) => s.id));
     for (const id of [...scenes.keys()]) if (!seen.has(id)) scenes.delete(id);
     for (const s of list) scenes.set(s.id, s);
+    if (before !== null && before !== rowKey()) rowChanged();
+    // worlds this tab made that the server no longer has are forgotten
+    if (mine.some((id) => !seen.has(id))) {
+      mine = mine.filter((id) => seen.has(id));
+      writeMine();
+    }
     loaded = true;
+    loadFailed = false;
     banner?.classList.remove('show');
     renderGrid();
+    renderMine();
   } catch (err) {
     loaded = true;
+    loadFailed = true;
     if (banner) {
       const why = err instanceof ApiError || err instanceof Error ? errorText(err.message).headline : '';
-      banner.textContent = `Can't load the gallery right now.${why ? ` ${why}` : ''} Trying again…`;
+      banner.textContent = `Can’t load the worlds right now.${why ? ` ${why}` : ''} Trying again…`;
       banner.classList.add('show');
     }
     if (!scenes.size) renderGrid();
@@ -676,89 +810,43 @@ async function refreshHealth() {
   }
 }
 
-function onGridClick(e: MouseEvent) {
-  const target = e.target as HTMLElement;
-  const card = target.closest<HTMLElement>('.scene-card');
-  if (!card) return;
-  const id = card.dataset.id!;
-  const scene = scenes.get(id);
-  const act = target.closest<HTMLElement>('[data-act]')?.dataset.act;
-  if (!act) {
-    if (target.closest('.thumb') && scene?.status === 'ready') location.href = viewUrl(id);
-    return;
-  }
-  if (act === 'retry') {
-    e.preventDefault();
-    const btn = target.closest<HTMLButtonElement>('button');
-    if (btn) btn.disabled = true;
-    retryScene(id)
-      .then((s) => {
-        if (s) upsert(s);
-        toast('Trying that one again.');
-      })
-      .catch((err) => {
-        toast(err instanceof ApiError ? errorText(err.message).headline : 'Could not retry. Try again in a moment.');
-        if (btn) btn.disabled = false;
-      });
-  } else if (act === 'delete') {
-    e.preventDefault();
-    if (!confirming.has(id)) {
-      confirming.set(
-        id,
-        setTimeout(() => {
-          confirming.delete(id);
-          const s = scenes.get(id);
-          const el = $(`.scene-card[data-id="${CSS.escape(id)}"]`);
-          if (s && el) fillCard(el, s, true);
-        }, 3500),
-      );
-      if (scene) fillCard(card, scene, true);
-      ($('.del', card) as HTMLButtonElement | null)?.focus();
-      return;
-    }
-    clearTimeout(confirming.get(id));
-    confirming.delete(id);
-    deleteScene(id)
-      .then(() => {
-        removeScene(id);
-        toast('Deleted. It never happened.');
-      })
-      .catch((err) => toast(err instanceof ApiError ? errorText(err.message).headline : 'Could not delete it. Try again in a moment.'));
-  } else if (act === 'enter' && scene?.status !== 'ready') {
-    e.preventDefault();
-  }
-}
-
-// ---------------------------------------------------------------------------------------------
-// Hero group chat: the link a friend pastes unfurls into the newest real world in the gallery.
-
-/** The newest ready world with a thumbnail, preferring one somebody made over the bundled samples. */
-function featured(): Scene | null {
-  const ready = ordered().filter((s) => s.status === 'ready' && s.thumb);
-  return ready.find((s) => s.mode !== 'sample') ?? ready[0] ?? null;
-}
-
-let threadId: string | null = null;
-function renderThread() {
-  const s = featured();
-  if (!s || s.id === threadId) return;
-  threadId = s.id;
-  const img = $<HTMLImageElement>('#chat-link-img');
-  if (img) img.src = sceneAssetUrl(s.id, s.thumb!);
-  const title = $('#chat-link-title');
-  if (title) title.textContent = s.name || 'Game night';
-  $<HTMLAnchorElement>('#chat-link')?.setAttribute('href', viewUrl(s.id));
-}
-
 function main() {
-  // The chat plays in once; without scripts it is simply there.
-  $('#chat')?.classList.add('play');
+  if ($('#intro-stage')) new Intro();
+  // the how-it-works chapters load their 3D only as they come near the screen
+  if ($('[data-chapter]')) void import('./story.ts').then((m) => m.startStory());
+  // the hero's chips and the best worlds, each playing a flight through it
+  const row = $('#worlds-row');
+  const chips = $('#hero-chips');
+  if (row || chips)
+    void import('./worlds-row.ts')
+      .then((m) => {
+        if (chips) {
+          try {
+            m.mountHeroChips(chips);
+          } catch {}
+        }
+        if (!row) return;
+        const api = m.mountWorldsRow(row);
+        rowRefresh = () => api.refresh();
+      })
+      .catch(() => row?.closest('section')?.setAttribute('hidden', ''));
 
-  $('#grid')?.addEventListener('click', onGridClick);
+  void authConfig().then((cfg) => {
+    if (cfg.enabled) showSignInNotes();
+  });
+
+  takeNew();
+  layoutControls();
+  renderLan();
+  phoneScreen?.addEventListener?.('change', () => {
+    layoutControls();
+    renderLan();
+  });
+
   $('#filters')?.addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-filter]');
     if (!b) return;
-    filter = b.dataset.filter!;
+    filter = b.dataset.filter as 'all' | Kind;
     renderGrid();
   });
   $('#lan-copy')?.addEventListener('click', async () => {
@@ -789,14 +877,6 @@ function main() {
     if (events.state !== 'open') void refreshScenes();
   }, 4000);
   setInterval(() => void refreshHealth(), 20000);
-  // Keep relative times fresh.
-  setInterval(() => {
-    for (const el of document.querySelectorAll<HTMLElement>('.scene-card')) {
-      const s = scenes.get(el.dataset.id ?? '');
-      const meta = el.querySelector('.meta');
-      if (s && meta) meta.textContent = metaLine(s);
-    }
-  }, 30000);
 }
 
 // The capture page imports qrSvg from here; only the landing page has a gallery grid.

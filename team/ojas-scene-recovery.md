@@ -1,7 +1,24 @@
 # Ojas: recover the missing `the-courts` scene
 
 Owner: Ojas.
-Status: urgent. The Roblox court is playable only from a baked place file. The real scene
+Status: **resolved (Sat ~2:20 PM), nothing was lost.** Scene data never goes into git (`data/` is ignored), so a
+checkout on any other machine has only the scenes copied there by hand. `the-courts` lives on Ojasva's Mac, which runs
+the live server, and it is complete there. Checked through the public link (BASE):
+
+| Request | Result |
+|---|---|
+| `GET BASE/api/scenes` | 200, lists `the-courts` |
+| `GET BASE/api/roblox/the-courts/model` | 200 |
+| `GET BASE/api/roblox/the-courts/model/roblox.glb` | 200, 18.7 MB |
+| `GET BASE/api/roblox/the-courts/map` | 200 |
+| `GET BASE/data/scenes/the-courts/world.spz` | 200, 16.1 MB |
+| `GET BASE/api/roblox/the-courts/objects` | 404: the object layer has only been built for the kitchen |
+
+The dead link in `Config.luau` is only on this branch, which was 83 commits behind `main`. `main` has had the live link
+since ~11:50 AM. The HPG root is `/blue/phz3152/sbernalorta/thirdwheel` (`sbernalorta`, as in the SSH config). The fix
+is in seb.md Update 9. The original brief follows.
+
+Original status: urgent. The Roblox court is playable only from a baked place file. The real scene
 data is missing from this machine and from the local server.
 
 ## What is broken

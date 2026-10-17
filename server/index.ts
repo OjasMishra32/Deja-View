@@ -9,6 +9,11 @@
 //
 // Everything live degrades on its own: without DS_URL there is no DeepSpace push and notes stay empty, without
 // GUIDE_URL the guide answers with its canned lines and uploads use the world model's own captioner.
+//
+// The sponsor pieces are off or harmless without their env: the Solana devnet scoreboard (server/scores, /scores,
+// SOLANA_SCOREBOARD=1), the tab in Capital One's Nessie sandbox (server/bank, /tab; an in-memory bank without
+// NESSIE_API_KEY), replays recorded into Tiger Data (server/replay, TIGER_DATA_URL) and Auth0 sign-in in front of
+// the routes that add, delete or drive things (server/auth, AUTH0_*).
 
 import { mkdir, access } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -17,8 +22,13 @@ import type { Scene, ServerEvent } from '../shared/types.ts';
 import indexPage from '../web/index.html';
 import capturePage from '../web/capture.html';
 import hostPage from '../web/host.html';
+import scoresPage from '../web/scores.html';
+import tabPage from '../web/tab.html';
 import viewPage from '../web/view.html';
 import { createApp } from './app.ts';
+import { auth0ConfigFromEnv, createAuth0Verifier, createAuthRoutes, signInRequired, type Auth0Verifier } from './auth/auth0.ts';
+import { nessieFromEnv } from './bank/nessie.ts';
+import { createTab, type TabService } from './bank/tab.ts';
 import { createCueRoute } from './cue.ts';
 import { hpgBatchDriver, hpgWorkerDriver } from './backends/hpg.ts';
 import { localDriver } from './backends/local.ts';
@@ -43,7 +53,7 @@ import {
 import { BodyTooLarge, MESSAGES } from './app.ts';
 import { isPipelineCaption, isVideoScene, publicScene } from './copy.ts';
 import { CORS_HEADERS } from './files.ts';
-import { guardOptionsFromEnv } from './guard.ts';
+import { guardOptionsFromEnv, hasApiToken } from './guard.ts';
 import { HealthMonitor, publicHealth } from './health.ts';
 import { createHostRoutes } from './host.ts';
 import { hpgConfig } from './hpg.ts';
@@ -53,6 +63,9 @@ import { createIntegrations, presenceFromGetter, type Integrations } from './int
 import { JobRunner, parseBackendOrder, type PrepareContext } from './jobs.ts';
 import { acquireDataLock, DataDirLocked, type DataLock } from './lock.ts';
 import { RealitySplitter } from './reality.ts';
+import { createReplay, type Replay } from './replay/routes.ts';
+import { createScoreboard, type Scoreboard } from './scores/scoreboard.ts';
+import { isLocalRequest, keyRejected, type RequestIpSource } from './social/http.ts';
 import { robloxWsMessage } from './social/presence.ts';
 import type { MapBake } from './social/roblox.ts';
 import { createRobloxModelRoutes, RobloxModelService, uploaderFromEnv } from './social/roblox-model.ts';
@@ -62,6 +75,13 @@ import { SceneStore } from './store.ts';
 const TOPIC = 'events';
 /** contracts 2.2: when set, /api/roblox/* and /api/host/* from other machines need x-dejaview-key. */
 const DV_KEY = process.env.DV_KEY?.trim() || null;
+const GUARD = guardOptionsFromEnv();
+/** The scene changes that need a signed-in person once sign-in is on: add, rebuild and delete a memory. */
+const SIGN_IN_SCENE_ROUTES: [string, RegExp][] = [
+  ['POST', /^\/api\/scenes\/?$/],
+  ['POST', /^\/api\/scenes\/[^/]+\/retry\/?$/],
+  ['DELETE', /^\/api\/scenes\/[^/]+\/?$/],
+];
 
 interface Core {
   store: SceneStore;
@@ -90,6 +110,14 @@ interface Core {
   /** Scene id -> updatedAt of the last ready scene handled, so each finished build is handled once. */
   readySeen?: Map<string, string>;
   liveStarted?: boolean;
+  /** The Solana devnet scoreboard: one signed memo per Roblox match, GET /api/scores. */
+  scores?: Scoreboard;
+  /** The tab of each memory in Capital One's Nessie sandbox (server/bank). */
+  tab?: TabService;
+  /** Presence and Roblox moments recorded into Tiger Data for /api/replay (off without TIGER_DATA_URL). */
+  replay?: Replay;
+  /** Auth0 access-token checks; null when sign-in is off (no AUTH0_* env). */
+  auth?: Auth0Verifier | null;
 }
 
 // State that must survive `bun --hot` re-evaluation lives on globalThis: one runner, one server.
@@ -217,6 +245,59 @@ function attachLive(core: Core): void {
   core.readySeen ??= new Map();
   core.describing ??= new Set();
   core.models ??= new RobloxModelService({ sceneDir: (id) => store.sceneDir(id), uploader: uploaderFromEnv() });
+  if (core.auth === undefined) {
+    let config = null;
+    try {
+      config = auth0ConfigFromEnv();
+    } catch (e) {
+      console.warn(`  Sign-in is off: ${(e as Error).message}`);
+    }
+    core.auth = config ? createAuth0Verifier({ config }) : null;
+  }
+  // each one starts where it is made (all three are no-ops without their env), so a hot reload into a server made
+  // before they existed starts them too; a read-only server signs, pays and records nothing
+  if (!core.scores) {
+    core.scores = createScoreboard({
+      onEvent: (fn) => social.presence.onEvent(fn),
+      getScene: (id) => store.get(id),
+      dataDir: DATA_DIR,
+      rpcUrl: process.env.SOLANA_RPC_URL,
+      enabled: process.env.SOLANA_SCOREBOARD === '1' && !core.readOnly,
+    });
+    core.scores.start();
+  }
+  if (!core.tab) {
+    core.tab = createTab({
+      getScene: (id) => store.get(id),
+      dataDir: DATA_DIR,
+      nessie: nessieFromEnv(),
+      onEvent: (fn) => social.presence.onEvent(fn),
+      guard: GUARD,
+      authorize: (req, server) => signInGate(core, req, server),
+      readOnly: core.readOnly,
+    });
+    core.tab.start();
+  }
+  if (!core.replay) {
+    core.replay = createReplay({
+      url: process.env.TIGER_DATA_URL,
+      // every Roblox moment (tag, round, game.result) is a dv_moments row next to the positions
+      presence: core.readOnly ? { onPresence: () => () => {}, onEvent: () => () => {} } : social.presence,
+      getScene: (id) => store.get(id),
+    });
+    core.replay.start();
+  }
+}
+
+/** Callers the sign-in check never asks: the API token or DV_KEY already lets them through. */
+function trustedCaller(req: Request): boolean {
+  return hasApiToken(req, GUARD) || (!!DV_KEY && keyRejected(req, DV_KEY, null) === null);
+}
+
+/** Sign-in (server/auth) in front of a route that adds, deletes or drives things: null to go ahead, else the 401. */
+function signInGate(core: Core, req: Request, server?: RequestIpSource): Promise<Response | null> {
+  if (!core.auth) return Promise.resolve(null);
+  return signInRequired(req, core.auth, { local: isLocalRequest(req, server), trusted: trustedCaller(req) });
 }
 
 /**
@@ -249,6 +330,11 @@ async function startLive(core: Core): Promise<void> {
   const ds = core.integrations!.config.deepspace.url;
   const guide = core.integrations!.config.guide.url;
   console.log(`  Live:   DeepSpace ${ds ? 'on' : 'off (DS_URL unset)'} · guide ${guide ? 'on' : 'off (GUIDE_URL unset)'} · Roblox key ${DV_KEY ? 'required off this machine' : 'not required'}`);
+  const bank = process.env.NESSIE_API_KEY?.trim() ? 'Nessie sandbox' : 'demo bank (NESSIE_API_KEY unset)';
+  console.log(
+    `  Extras: scoreboard ${core.scores?.enabled ? 'on (Solana devnet)' : 'off'} · tab ${bank} · replay ${core.replay?.enabled ? 'on' : 'off (TIGER_DATA_URL unset)'}` +
+      ` · sign-in ${core.auth ? `on (${core.auth.config.domain})` : 'off'}`,
+  );
   if (core.readOnly) return;
   for (const s of await core.store.list()) onSceneChanged(core, s, { boot: true });
 }
@@ -409,6 +495,13 @@ const hostRoutes = createHostRoutes({
 // GET /api/roblox/:id/model and model.glb (contracts 6.2b): the textured room, Photo worlds only.
 const modelRoutes = createRobloxModelRoutes({ getScene: (id) => core.store.get(id), models: core.models!, dvKey: DV_KEY });
 
+// GET /api/auth/config (what the pages need to sign in, {enabled:false} when off) and GET /api/auth/me.
+const authRoutes = createAuthRoutes(core.auth ?? null);
+
+/** A headset cue from the /host remote is driving the headset: sign-in first, then the cue's own key rules. */
+const signedCueRoute = async (req: Request, server?: RequestIpSource): Promise<Response> =>
+  (req.method === 'POST' && (await signInGate(core, req, server))) || cueRoute(req, server);
+
 /** An upload declared bigger than this is refused with JSON before its body is read (contracts 3.4, 4.1). */
 const DECLARED_BODY_MAX = MAX_UPLOAD_BYTES + 16 * 1024 * 1024;
 
@@ -434,11 +527,17 @@ const handlers = {
     ...core.social!.routes,
     ...modelRoutes,
     ...hostRoutes,
-    '/api/host/cue': cueRoute,
+    ...authRoutes,
+    ...core.scores!.routes,
+    ...core.tab!.routes,
+    ...core.replay!.routes,
+    '/api/host/cue': signedCueRoute,
     '/': indexPage,
     '/capture': capturePage,
     '/host': hostPage,
     '/view': viewPage,
+    '/scores': scoresPage,
+    '/tab': tabPage,
   },
   async fetch(req: Request, server: Server<undefined>): Promise<Response | undefined> {
     const url = new URL(req.url);
@@ -450,8 +549,14 @@ const handlers = {
       if (server.upgrade(req)) return undefined;
       return new Response('Expected a WebSocket upgrade', { status: 426 });
     }
-    if (/^\/(capture|view|host)\/+$/.test(url.pathname)) {
+    if (/^\/(capture|view|host|scores|tab)\/+$/.test(url.pathname)) {
       return new Response(null, { status: 301, headers: { Location: `${url.pathname.replace(/\/+$/, '')}${url.search}` } });
+    }
+    // adding, rebuilding or deleting a memory needs a signed-in person once sign-in is on (a read-only server
+    // refuses every change itself)
+    if (core.auth && !core.readOnly && SIGN_IN_SCENE_ROUTES.some(([m, re]) => m === req.method && re.test(url.pathname))) {
+      const denied = await signInGate(core, req, server);
+      if (denied) return denied;
     }
     // a body sent without a length (chunked) is cut off where a declared one would have been refused
     if (req.body && !req.headers.get('content-length')) {
@@ -558,14 +663,17 @@ if (firstBoot) {
 
   core.healthTimer = setInterval(() => void publishHealthIfChanged(core), 30_000);
 
-  const shutdown = () => {
+  const shutdown = async () => {
     try {
       core.integrations?.stop();
       core.social?.stop();
       core.reality?.stop();
+      core.scores?.stop();
     } catch (e) {
       console.warn('[shutdown]', e);
     }
+    // the game result the tab has in hand and the last second of positions, for at most 2 s
+    await Promise.race([Promise.allSettled([core.tab?.stop(), core.replay?.stop()]), Bun.sleep(2000)]);
     core.server?.stop(true);
     core.httpServer?.stop(true);
     core.lock?.release();

@@ -1,0 +1,590 @@
+<!doctype html>
+<!-- The credits page (/credits.html). The same list as THIRD_PARTY.md at the repo root: keep the two in step. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Credits · Déjà View</title>
+    <meta name="description" content="The open-source models, libraries, tools, services and media Déjà View is built with." />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="color-scheme" content="light" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #ffffff;
+        --bg-2: #f5f5f7;
+        --text: #1d1d1f;
+        --text-2: #6e6e73;
+        --text-3: #86868b;
+        --hairline: rgba(0, 0, 0, 0.1);
+        --hairline-2: rgba(0, 0, 0, 0.06);
+        --link: #0066cc;
+        --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', system-ui, sans-serif;
+        --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+        --gutter: 22px;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 17px;
+        line-height: 1.47;
+        letter-spacing: -0.022em;
+        -webkit-font-smoothing: antialiased;
+      }
+      a {
+        color: var(--link);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      a:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: 2px;
+        border-radius: 3px;
+      }
+      code {
+        font-family: var(--mono);
+        font-size: 0.88em;
+        letter-spacing: 0;
+      }
+      .wrap {
+        width: 100%;
+        max-width: calc(980px + var(--gutter) * 2);
+        margin: 0 auto;
+        padding: 0 var(--gutter);
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        height: 48px;
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: saturate(180%) blur(20px);
+        -webkit-backdrop-filter: saturate(180%) blur(20px);
+        border-bottom: 1px solid var(--hairline-2);
+      }
+      .topbar .wrap {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 100%;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        color: var(--text);
+        font-size: 17px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .brand:hover {
+        text-decoration: none;
+      }
+      .brand svg {
+        width: 26px;
+        height: 26px;
+      }
+      .back {
+        font-size: 14px;
+      }
+
+      .head {
+        padding: 72px 0 8px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 56px;
+        line-height: 1.07;
+        font-weight: 600;
+        letter-spacing: -0.005em;
+      }
+      .lede {
+        max-width: 720px;
+        margin: 16px 0 0;
+        color: var(--text-2);
+        font-size: 21px;
+        line-height: 1.38;
+        letter-spacing: 0.011em;
+      }
+      .note {
+        max-width: 720px;
+        margin: 14px 0 0;
+        color: var(--text-2);
+        font-size: 14px;
+        line-height: 1.43;
+        letter-spacing: -0.016em;
+      }
+
+      section {
+        padding-top: 56px;
+      }
+      h2 {
+        margin: 0 0 6px;
+        font-size: 28px;
+        line-height: 1.14;
+        font-weight: 600;
+        letter-spacing: 0.007em;
+      }
+      h3 {
+        margin: 28px 0 0;
+        color: var(--text-2);
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: -0.016em;
+      }
+      .rows {
+        margin: 10px 0 0;
+        padding: 0;
+        list-style: none;
+        border-top: 1px solid var(--hairline);
+      }
+      .rows li {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.5fr) minmax(0, 0.95fr);
+        gap: 4px 28px;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--hairline-2);
+        font-size: 15px;
+        line-height: 1.4;
+        letter-spacing: -0.016em;
+      }
+      .rows.two li {
+        grid-template-columns: minmax(0, 1.05fr) minmax(0, 2.45fr);
+      }
+      .name {
+        font-weight: 600;
+      }
+      .src {
+        display: block;
+        margin-top: 2px;
+        color: var(--text-3);
+        font-size: 12px;
+        font-weight: 400;
+        line-height: 1.33;
+        letter-spacing: -0.01em;
+        overflow-wrap: anywhere;
+      }
+      .src a {
+        color: inherit;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        text-decoration-color: rgba(0, 0, 0, 0.25);
+      }
+      .use {
+        color: var(--text);
+      }
+      .lic {
+        color: var(--text-2);
+      }
+      .lic strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .plain {
+        max-width: 720px;
+        margin: 14px 0 0;
+        font-size: 17px;
+      }
+
+      .footer {
+        margin-top: 80px;
+        padding: 20px 0 calc(28px + env(safe-area-inset-bottom));
+        border-top: 1px solid var(--hairline);
+        background: var(--bg-2);
+        color: var(--text-2);
+        font-size: 12px;
+        line-height: 1.33;
+        letter-spacing: -0.01em;
+      }
+      .footer p {
+        margin: 0;
+      }
+      .footer p + p {
+        margin-top: 8px;
+      }
+
+      @media (max-width: 734px) {
+        :root {
+          --gutter: 16px;
+        }
+        .head {
+          padding-top: 48px;
+        }
+        h1 {
+          font-size: 40px;
+          line-height: 1.1;
+        }
+        .lede {
+          font-size: 19px;
+          line-height: 1.42;
+        }
+        section {
+          padding-top: 44px;
+        }
+        h2 {
+          font-size: 24px;
+          line-height: 1.17;
+        }
+        .rows li,
+        .rows.two li {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 2px;
+          padding: 12px 0;
+        }
+        .lic {
+          font-size: 13px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="wrap">
+        <a class="brand" href="/" aria-label="Déjà View home">
+          <svg viewBox="0 0 32 32" aria-hidden="true">
+            <defs>
+              <linearGradient id="dv-mark" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#5ac8fa" />
+                <stop offset="1" stop-color="#007aff" />
+              </linearGradient>
+            </defs>
+            <rect width="32" height="32" rx="7.2" fill="url(#dv-mark)" />
+            <path d="M16 7.6c-5.2 0-9.4 3.4-9.4 7.7 0 2.5 1.4 4.7 3.7 6.1-.2 1.3-.9 2.5-1.9 3.4 2-.1 3.8-.8 5.1-1.9.8.1 1.6.2 2.5.2 5.2 0 9.4-3.4 9.4-7.8S21.2 7.6 16 7.6z" fill="#fff" />
+            <path d="M13.7 19.4v-4.2a2.3 2.3 0 0 1 4.6 0v4.2z" fill="#007aff" />
+          </svg>
+          <span>Déjà View</span>
+        </a>
+        <a class="back" href="/">Back to Déjà View</a>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <div class="head">
+        <h1>Credits</h1>
+        <p class="lede">
+          Déjà View was built at SwampHacks XII, and all of our own code was written during the event. It stands on the
+          open‑source models, libraries, tools, services and media below.
+        </p>
+        <p class="note">
+          A licence is listed where our project records it. “See upstream” means we haven’t recorded it, and the
+          project’s own licence applies.
+        </p>
+      </div>
+
+      <section aria-labelledby="models">
+        <h2 id="models">Models</h2>
+        <ul class="rows">
+          <li>
+            <div class="name">FlashWorld<span class="src"><a href="https://github.com/imlixinyang/FlashWorld">imlixinyang/FlashWorld</a>, rev <code>424db448</code></span></div>
+            <div class="use">Photo mode: one photo, screenshot or sentence becomes a whole world.</div>
+            <div class="lic">Apache-2.0 (code); weights: see upstream</div>
+          </li>
+          <li>
+            <div class="name">Wan2.2-TI2V-5B<span class="src"><a href="https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B-Diffusers">Wan-AI/Wan2.2-TI2V-5B-Diffusers</a></span></div>
+            <div class="use">The video model FlashWorld is built on (VAE, UMT5 text encoder, transformer config).</div>
+            <div class="lic">Apache-2.0</div>
+          </li>
+          <li>
+            <div class="name">Qwen2.5-VL-3B-Instruct<span class="src"><a href="https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct">Qwen/Qwen2.5-VL-3B-Instruct</a></span></div>
+            <div class="use">FlashWorld’s captioner.</div>
+            <div class="lic">See upstream</div>
+          </li>
+          <li>
+            <div class="name">AnySplat<span class="src"><a href="https://github.com/InternRobotics/AnySplat">InternRobotics/AnySplat</a>, rev <code>5f5e208a</code></span></div>
+            <div class="use">Many photos become a splat world in one pass.</div>
+            <div class="lic">MIT (code); weights: see upstream</div>
+          </li>
+          <li>
+            <div class="name">VGGT<span class="src"><a href="https://huggingface.co/facebook/VGGT-1B">facebook/VGGT-1B</a></span></div>
+            <div class="use">AnySplat’s geometry backbone.</div>
+            <div class="lic">See upstream</div>
+          </li>
+          <li>
+            <div class="name">Depth Anything V2<span class="src">Metric Indoor Small and Base, <a href="https://huggingface.co/depth-anything">depth-anything</a></span></div>
+            <div class="use">Per-frame depth for Video mode, the depth term when rebuilding a place, and lifting generated fill into 3D.</div>
+            <div class="lic">See upstream</div>
+          </li>
+          <li>
+            <div class="name">DeepLabV3<span class="src">torchvision, ResNet-50 and MobileNet</span></div>
+            <div class="use">Person masks, so people don’t get baked into the room.</div>
+            <div class="lic">See upstream</div>
+          </li>
+          <li>
+            <div class="name">Big LaMa<span class="src"><a href="https://github.com/advimman/lama">advimman/lama</a>, file from <a href="https://github.com/enesmsahin/simple-lama-inpainting">simple-lama-inpainting</a></span></div>
+            <div class="use">Inpainting the empty room behind people, and small fills.</div>
+            <div class="lic">Apache-2.0</div>
+          </li>
+          <li>
+            <div class="name">Qwen-Image-Edit-2511<span class="src"><a href="https://huggingface.co/Qwen/Qwen-Image-Edit-2511">Qwen/Qwen-Image-Edit-2511</a></span></div>
+            <div class="use">Paints what the photos never saw (the ceiling, tree tops, the sky) and the back of each 3D person.</div>
+            <div class="lic">Apache-2.0</div>
+          </li>
+          <li>
+            <div class="name">Qwen2.5-VL-7B<span class="src">Qwen-Image-Edit-2511’s text encoder</span></div>
+            <div class="use">Describes what belongs in each gap before it is painted.</div>
+            <div class="lic">See upstream</div>
+          </li>
+          <li>
+            <div class="name">Multi-HMR 2<span class="src">NAVER, <a href="https://github.com/naver/multi-hmr2">naver/multi-hmr2</a>, commit <code>f066532d</code></span></div>
+            <div class="use">Body pose and shape per frame for the 3D people.</div>
+            <div class="lic"><strong>Non-commercial licence</strong> (code and checkpoint), plus BEDLAM and AnnyOne terms</div>
+          </li>
+          <li>
+            <div class="name">Anny body model<span class="src">NAVER, <code>anny</code> 0.6.0</span></div>
+            <div class="use">The body the 3D people are built on.</div>
+            <div class="lic">Apache-2.0 code, CC0 assets</div>
+          </li>
+          <li>
+            <div class="name">DINOv3 backbone code<span class="src">Fetched by <code>torch.hub</code> at run time</span></div>
+            <div class="use">Multi-HMR 2’s image backbone.</div>
+            <div class="lic">DINOv3 License</div>
+          </li>
+          <li>
+            <div class="name">SAM 2.1<span class="src"><a href="https://huggingface.co/facebook/sam2.1-hiera-large">facebook/sam2.1-hiera-large</a> and <a href="https://huggingface.co/facebook/sam2.1-hiera-small">-small</a></span></div>
+            <div class="use">Object masks.</div>
+            <div class="lic">Apache-2.0</div>
+          </li>
+          <li>
+            <div class="name">Grounding DINO<span class="src"><a href="https://huggingface.co/IDEA-Research/grounding-dino-tiny">IDEA-Research/grounding-dino-tiny</a></span></div>
+            <div class="use">Text prompts to boxes for the object vocabulary.</div>
+            <div class="lic">Apache-2.0</div>
+          </li>
+          <li>
+            <div class="name">TRELLIS<span class="src"><a href="https://huggingface.co/microsoft/TRELLIS-image-large">microsoft/TRELLIS-image-large</a></span></div>
+            <div class="use">Optional image-to-3D props.</div>
+            <div class="lic">MIT</div>
+          </li>
+        </ul>
+        <p class="note">No SMPL-family file is installed or used. Model weights are never committed to the project; each one is downloaded at setup.</p>
+      </section>
+
+      <section aria-labelledby="libraries">
+        <h2 id="libraries">Libraries and tools</h2>
+
+        <h3>In the web page and viewer</h3>
+        <ul class="rows">
+          <li>
+            <div class="name">three.js<span class="src"><code>three</code> 0.186.1, with its GLTFLoader, meshopt decoder and RoomEnvironment add-ons</span></div>
+            <div class="use">3D rendering, and the headset on the landing page.</div>
+            <div class="lic">MIT</div>
+          </li>
+          <li>
+            <div class="name">Spark<span class="src"><code>@sparkjsdev/spark</code> 2.3.1</span></div>
+            <div class="use">Gaussian splat rendering in the browser and the headset.</div>
+            <div class="lic">MIT</div>
+          </li>
+          <li>
+            <div class="name">three-mesh-bvh<span class="src">0.9.15</span></div>
+            <div class="use">Fast collision and ray tests against the room.</div>
+            <div class="lic">MIT</div>
+          </li>
+          <li>
+            <div class="name">WebXR, Web Audio, MediaRecorder</div>
+            <div class="use">Headset mode, spatial sound, recording.</div>
+            <div class="lic">Web standards</div>
+          </li>
+        </ul>
+
+        <h3>Server</h3>
+        <ul class="rows">
+          <li>
+            <div class="name">Bun and TypeScript</div>
+            <div class="use">Runtime, server, bundler and tests.</div>
+            <div class="lic">See upstream</div>
+          </li>
+          <li>
+            <div class="name">@gradio/client<span class="src">2.7.1</span></div>
+            <div class="use">Fallback to the public FlashWorld Hugging Face Space.</div>
+            <div class="lic">ISC</div>
+          </li>
+          <li>
+            <div class="name">@google/genai</div>
+            <div class="use">The Gemini guide service.</div>
+            <div class="lic">See upstream</div>
+          </li>
+        </ul>
+
+        <h3>Pipeline</h3>
+        <ul class="rows">
+          <li>
+            <div class="name">gsplat<span class="src"><a href="https://github.com/nerfstudio-project/gsplat">nerfstudio-project/gsplat</a></span></div>
+            <div class="use">Splat training, rendering and gap finding.</div>
+            <div class="lic">Apache-2.0</div>
+          </li>
+          <li>
+            <div class="name">spz<span class="src">nianticlabs/spz</span></div>
+            <div class="use">The compressed splat file format.</div>
+            <div class="lic">MIT</div>
+          </li>
+          <li>
+            <div class="name">COLMAP<span class="src">3.11</span></div>
+            <div class="use">Camera poses for photos and clips.</div>
+            <div class="lic">See upstream</div>
+          </li>
+          <li>
+            <div class="name">PyTorch</div>
+            <div class="use">Runs every model above.</div>
+            <div class="lic">BSD-3-Clause</div>
+          </li>
+          <li>
+            <div class="name">OpenCV</div>
+            <div class="use">Image and video processing.</div>
+            <div class="lic">Apache-2.0</div>
+          </li>
+          <li>
+            <div class="name">Open3D and pygltflib</div>
+            <div class="use">Geometry, texture baking and glTF export for the 3D people.</div>
+            <div class="lic">MIT</div>
+          </li>
+          <li>
+            <div class="name">torchvision; Hugging Face transformers, diffusers, accelerate, hub and safetensors</div>
+            <div class="use">Model loading and inference.</div>
+            <div class="lic">See upstream</div>
+          </li>
+          <li>
+            <div class="name">NumPy, SciPy, Pillow, pillow-heif, plyfile, trimesh, warp-lang, einops</div>
+            <div class="use">Arrays, solvers, images (including HEIC), PLY files and meshes.</div>
+            <div class="lic">See upstream</div>
+          </li>
+          <li>
+            <div class="name">ffmpeg and uv</div>
+            <div class="use">Video decode and encode; Python environments.</div>
+            <div class="lic">See upstream</div>
+          </li>
+        </ul>
+
+        <h3>Roblox</h3>
+        <ul class="rows">
+          <li>
+            <div class="name">Roblox Studio and Luau</div>
+            <div class="use">The Roblox experience.</div>
+            <div class="lic">Roblox terms</div>
+          </li>
+          <li>
+            <div class="name">rojo<span class="src">rojo-rbx/rojo</span></div>
+            <div class="use">Roblox build.</div>
+            <div class="lic">MPL-2.0</div>
+          </li>
+          <li>
+            <div class="name">lune<span class="src">lune-org/lune</span></div>
+            <div class="use">Luau test runtime.</div>
+            <div class="lic">MPL-2.0</div>
+          </li>
+          <li>
+            <div class="name">selene</div>
+            <div class="use">Luau lint.</div>
+            <div class="lic">See upstream</div>
+          </li>
+        </ul>
+
+        <h3>Testing</h3>
+        <ul class="rows">
+          <li>
+            <div class="name">iwer<span class="src">2.5.0, Meta’s WebXR emulator</span></div>
+            <div class="use">Headset tests without a headset.</div>
+            <div class="lic">MIT</div>
+          </li>
+          <li>
+            <div class="name">playwright-core<span class="src">1.63.0</span></div>
+            <div class="use">Headless browser checks.</div>
+            <div class="lic">Apache-2.0</div>
+          </li>
+          <li>
+            <div class="name">pytest and bun test</div>
+            <div class="use">Test runners.</div>
+            <div class="lic">See upstream</div>
+          </li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="services">
+        <h2 id="services">Services and hardware</h2>
+        <ul class="rows two">
+          <li><div class="name">UF HiPerGator</div><div class="use">Runs the models (Slurm, RTX PRO 6000 Blackwell GPUs).</div></li>
+          <li><div class="name">Hugging Face</div><div class="use">Hosts the model weights and the public FlashWorld Space we fall back to.</div></li>
+          <li>
+            <div class="name">Google Gemini API<span class="src">gemini-3.5-flash-lite, gemini-3.8-flash, gemini-3.8-flash-lite-tts</span></div>
+            <div class="use">The caption a Photo world is imagined from, the floating labels, spoken answers, narration and clip notes.</div>
+          </li>
+          <li><div class="name">Cloudflare Tunnel</div><div class="use">The public link.</div></li>
+          <li><div class="name">DeepSpace</div><div class="use">The memory board, live map and notes.</div></li>
+          <li><div class="name">Roblox</div><div class="use">The multiplayer places.</div></li>
+          <li><div class="name">Auth0</div><div class="use">Sign-in in front of the routes that add, delete or drive things.</div></li>
+          <li><div class="name">Solana, Capital One Nessie, Tiger Data</div><div class="use">Sponsor pieces, off unless configured: a devnet scoreboard, a sandbox tab and recorded replays.</div></li>
+          <li><div class="name">Meta Quest 3S</div><div class="use">The headset we built for.</div></li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="media">
+        <h2 id="media">Media</h2>
+        <ul class="rows">
+          <li>
+            <div class="name">“Quest 3S with controllers”<span class="src">3D model by <a href="https://sketchfab.com/3d-models/quest-3s-with-controllers-448519e4ef0b40619592000db3729aaa">OG_MATTER</a></span></div>
+            <div class="use">The headset on the landing page. We kept only the headset and gave it new materials to match photos of the real one.</div>
+            <div class="lic"><a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></div>
+          </li>
+          <li>
+            <div class="name">“Tilted Towers Tour | Fortnite OG S2”<span class="src">Free-camera footage by woodinjake</span></div>
+            <div class="use">The Tilted Towers world and the Brick House apartment world (71 frames).</div>
+            <div class="lic">See upstream</div>
+          </li>
+          <li>
+            <div class="name">Greyscale room<span class="src">Public demo splat from storage.googleapis.com/forge-dev-public</span></div>
+            <div class="use">The sample world in the gallery.</div>
+            <div class="lic">See upstream</div>
+          </li>
+        </ul>
+        <p class="note">The Infinity Hall Game Lawn, the giant chess board and the kitchen are our own photos and clips.</p>
+      </section>
+
+      <section aria-labelledby="trademarks">
+        <h2 id="trademarks">Trademarks</h2>
+        <p class="plain">Meta Quest, Roblox and Fortnite are trademarks of their owners; Déjà View is not affiliated with or endorsed by them.</p>
+      </section>
+
+      <section aria-labelledby="ai">
+        <h2 id="ai">AI tools used</h2>
+        <ul class="rows two">
+          <li><div class="name">Google Gemini</div><div class="use">Inside the product, as listed under Services and hardware.</div></li>
+          <li><div class="name">The generative models above</div><div class="use">Make up the parts of each world the camera never saw. The Reality check toggle tints everything they imagined.</div></li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="not-used">
+        <h2 id="not-used">Looked at, not used</h2>
+        <ul class="rows two">
+          <li><div class="name">SuGaR<span class="src">Anttwo/SuGaR</span></div><div class="use">No clear licence; 3DGS lineage is non-commercial.</div></li>
+          <li><div class="name">2D Gaussian Splatting<span class="src">hbb1/2d-gaussian-splatting</span></div><div class="use">No clear licence; 3DGS lineage is non-commercial.</div></li>
+          <li><div class="name">Gaussian Opacity Fields<span class="src">autonomousvision/gaussian-opacity-fields</span></div><div class="use">No clear licence; 3DGS lineage is non-commercial.</div></li>
+          <li><div class="name">Gaussian Grouping<span class="src">lkeab/gaussian-grouping</span></div><div class="use">Apache code, but the 3DGS dependency is non-commercial and the build is heavy.</div></li>
+          <li><div class="name">SegAnyGAussians<span class="src">Jumpat/SegAnyGAussians</span></div><div class="use">Apache code, same 3DGS dependency and CUDA build.</div></li>
+          <li><div class="name">FlashSplat<span class="src">florinshen/FlashSplat</span></div><div class="use">No clear licence.</div></li>
+          <li><div class="name">HUGS<span class="src">apple-aiml-research/ml-hugs</span></div><div class="use">No clear licence; research use only.</div></li>
+          <li><div class="name">Gaussian splatting Blender add-on<span class="src">ReshotAI/gaussian-splatting-blender-addon</span></div><div class="use">No licence file.</div></li>
+        </ul>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <p>Déjà View · Made at SwampHacks XII</p>
+      </div>
+    </footer>
+  </body>
+</html>

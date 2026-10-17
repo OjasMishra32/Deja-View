@@ -10,6 +10,134 @@ up in the headset) and powers the finale (2:00 to 2:25, the judge's own photo be
 
 ---
 
+**Update 9 (Sat ~2:20 PM): the court isn't lost; your machine just never had it.** Answer to
+`team/ojas-scene-recovery.md`:
+- Scenes are never in git (`data/` is ignored). `the-courts` is complete on Ojasva's Mac, which runs the live server.
+  Your local server only has the kitchen you copied, so it answers 404 for the court. Don't recover or rebuild
+  anything; read the court from BASE.
+- BASE today is `https://highlighted-filter-surf-other.trycloudflare.com`. `GET BASE/api/roblox/the-courts/model` is 200,
+  and so is `.../model/roblox.glb` (18.7 MB), `.../map` and `BASE/data/scenes/the-courts/world.spz` (16.1 MB).
+  `.../objects` is 404 because the object layer only exists for the kitchen.
+- If you want a local copy for the asset maker, download those four files into `data/scenes/the-courts/`.
+- Pull `main`: your branch is 83 commits behind it, and that's the only place the dead `prozac-...` fallback still
+  lives. `main`'s `Config.luau` has the live link, and the Experience Config `dejaview_base` overrides it anyway.
+- DeepSpace gallery empty: set `/admin` → `baseUrl` to BASE above. The quick tunnel's address changed once, at the
+  11:19 AM network drop. The permanent fix is `https://deja-view.photo`, live as soon as the Cloudflare tunnel token
+  is saved (Ojasva has the steps). Then `baseUrl`, `dejaview_base` and `BASE_FALLBACK` all move to it, once.
+- The HPG root is `/blue/phz3152/sbernalorta/thirdwheel` (with an "r"). Don't use the `sbernalota` in the brief.
+- Keep the baked v19 place as the fallback, as you said.
+
+**Update 8 (Sat ~1 PM): Roblox is yours now. Shivin is banned from Studio.** You own the experience, every upload,
+the asset maker (the object layer) and the censor pass that every texture goes through before Roblox sees it. This
+update is written so you can hand each task below to a coding agent as is: paste the "Rules for every agent" block,
+then one task. Tasks A, B and C can run in parallel (separate agents, separate branches); D needs C; E needs A.
+
+Rules for every agent (paste this first):
+
+```text
+Repo: Déjà View (this checkout). Work on your own branch (seb/<task>), commit there, push the branch; Ojasva merges.
+Commit messages: plain sentences, no timestamps, no Co-Authored-By or any tool attribution. Run once per clone:
+  git config core.hooksPath .githooks      (its commit-msg hook strips those lines)
+Code: write it yourself. Libraries and models come in only as pinned dependencies, credited in THIRD_PARTY.md. Never
+copy another project's files in, and never name other repositories in code headers or commit messages.
+Secrets: Roblox keys live only in ~/.config/dejaview/roblox-assets.key (chmod 600). Never print, log or commit a key.
+Data: never delete anything under data/; move it to data/archive/ instead.
+Roblox: nothing is uploaded unless pipeline/objects/preflight.py passed AND a human approved that exact file with
+pipeline/objects/review.py (the approval is bound to the file's SHA1). One upload at a time, never in bulk.
+Fortnite-derived worlds (tilted-towers, brick-apartment and any fortnite-*) never go to Roblox: Epic's art.
+BASE (the live server) = the link Ojasva posts in the team chat; today https://highlighted-filter-surf-other.trycloudflare.com
+It changes whenever the tunnel restarts.
+```
+
+**Task A: take the experience over (Studio, your account).**
+- Why: `LoadAssetAsync` only loads assets owned by the experience's creator, so the experience and every room and
+  object asset must belong to the same owner: your account, or a group you own. Shivin's place `106038900865360` and
+  his asset ids (Game Lawn room `91874647541773`, its sky faces, the chess rooms) will not load in your experience.
+- Source of truth is the repo: the Rojo project `roblox/default.project.json` (`roblox/src/{server,client,shared}`)
+  and the latest place file `roblox/DejaView-pingpong-v4.rbxlx`. Create a new experience on your account, open the
+  place file in Studio, sync `roblox/src` with Rojo, publish. Turn on VR (Meta Quest) in the experience settings.
+- Set the Experience Config `dejaview_base` to BASE (Creator Hub; live at once, no publish). The fallback when it is
+  missing is `BASE_FALLBACK` in `roblox/src/server/DejaView/Config.luau`.
+- Done when: a Studio Play test on the Game Lawn shows the block map from `GET BASE/api/roblox/the-courts/map`, your
+  ping pong on the real table (from `features`), and the game's presence posts reaching the server (Ojasva confirms
+  from the log). Post the new place id in the team chat.
+
+**Task B: the asset maker, world by world (our own photo worlds only).**
+- The pipeline is yours already (`docs/object-layer.md` sections 6 to 15): `segment.py` -> `build.py` (objects.json)
+  -> `mesh.py` (one textured GLB per object) -> `preflight.py` -> `review.py` -> `scripts/roblox-upload-assets.sh`.
+- Worlds: `the-courts` (Game Lawn: ping-pong table, foosball table, chairs, benches), `chess-room` (the giant board
+  and pieces), `kitchen` (fridge, counters, stools; it is being rebuilt for the whole room now, so take it last).
+- Room files come from the live server, so no access to Ojasva's Mac is needed:
+  `GET BASE/api/roblox/<id>/model` (JSON: `parts[].url`, `skyFiles`, `features`) and `GET BASE<parts[].url>`.
+- Done when: each world has `objects.json` plus one GLB per object, every GLB under Roblox's limits (20,000 triangles
+  per MeshPart; textures above 1024 px get downscaled), and a contact sheet from `preflight.py` for each.
+
+**Task C: the censor pass (extend `pipeline/objects/preflight.py`).** It catches QR codes and barcodes today. Make it
+catch everything Roblox moderation flags in an image, and mark each hit as blocking or for review:
+1. Text: OCR every texture. Block URLs, emails, phone numbers, handles and promotional words; send any other readable
+   text to review. Pick a pinned, offline OCR (credit it in THIRD_PARTY.md).
+2. Faces: detect people's faces in textures (a real person in a photo is the likeliest one). Block until blurred.
+3. Logos and brand marks: send big high-contrast marks to review (the human decides).
+4. QR and barcodes: keep the current check; a decodable payload blocks.
+5. Fix-ups: `--fix` blurs faces and text regions (or runs the existing `mesh.py --ink` pass on signs and posters),
+   writes a new GLB, and re-runs the scan, so the approval is always for the fixed file.
+6. It must also take a room: `--glb roblox.glb --sky-dir <dir with the six sky faces>` scans every texture atlas of the room
+   and the sky faces (the Game Lawn's sky has real trees and a building; check it for signs).
+- Done when: `python pipeline/objects/preflight.py --glb <file>` prints one line per texture (OK / REVIEW / BLOCK
+  with the reason and a box), writes the contact sheet with hits outlined, and exits non-zero on any BLOCK; tests in
+  `tests/pipeline/` cover a synthetic QR, a URL, a face and a clean texture.
+
+**Task D: the gate for rooms too (needs C).** Today the gate covers objects only.
+- Extend `scripts/roblox-upload-assets.sh` (or a sibling script) to upload a world's room: every room part GLB and
+  the six sky faces, each only with a matching `approval.json`. Upload with your key, as you (or your group).
+- Send Ojasva the new ids per world (room parts and the six sky faces). He swaps them into the server's upload ledger,
+  so `GET BASE/api/roblox/<id>/model` hands your ids to the game. (The server's own uploader stays off.)
+- Done when: the Game Lawn room loads with `LoadAssetAsync` in your experience, with its sky, and a second upload of
+  an unchanged file is refused as already uploaded.
+
+**Task E: the games on the real furniture (needs A).** Your ping pong and foosball are on `main`; pool once the game-room
+pool table is filmed and rebuilt. Chess: `features.chessBoard` comes in `/model` and `/map` for `chess-room`.
+- Bug from Shivin's handover (`roblox/HANDOVER-NOTES.md`): `PingPong.luau` around line 528 calls
+  `launch(other(side), p0, flight, aim)`, but `flight` and `aim` only exist inside the branches above it. A hit that
+  is neither camera-aimed nor a VR swing errors there.
+- Shivin saw the chess-room textured model sit about 1 m off the board. That came from the server pairing an older
+  model's asset id with a newer model's bounds. `/model` now gives one file's id and bounds together, and your
+  re-upload makes them yours anyway. Check the board against the model once your chess-room upload lands.
+
+**Update 7 (Sat ~9:20 AM): your object layer is merged; one repo rule, and Roblox uploads are paused.**
+- Merged on `main` (b5d7939, a108ef1): objects found in the splats, described, and planned as Roblox parts. Tests pass.
+- Repo rule from Ojasva: models and libraries come in only as pinned dependencies, credited in `THIRD_PARTY.md` and on
+  the Devpost. Never copy another project's source files into the repo, and never name other repositories in commit
+  messages or code headers. `docs/object-layer.md` section 13 now says this.
+- Roblox: Shivin's account now answers `User is moderated` to uploads (likely the Fortnite-derived rooms), so the
+  server's uploads are off and nothing should be uploaded with his key until he clears it (shivin.md Update 13). Your
+  test place publishes with your own key, so check that account's notices too before publishing again.
+
+**Update 6 (Sat ~7 AM): the real table comes from the server.** Your ping pong is merged on `main` (67de0b3),
+great work.
+
+1. **`features` in `/model` and `/map`** (`contracts.md` 6.6), live once Ojasva restarts the server (he posts it).
+   Studs, the map's frame (metres × 3.57, floor y = 0, no flips). The Game Lawn (`the-courts`):
+
+   ```json
+   "pingPongTable": { "corners": [[0.01, 2.713, -22.161], [7.349, 2.713, -15.694], [3.75, 2.713, -11.609],
+                                  [-3.589, 2.713, -18.076]],
+                      "height": 2.713, "centre": [1.88, 2.713, -16.885], "length": 9.782, "width": 5.444,
+                      "yaw": -2.2931, "net": [[3.68, 2.713, -18.927], [0.08, 2.713, -14.843]] }
+   ```
+
+   Measured from the splats and checked on the real photos; the net's own splats sit 0.3 mm off the `net` line.
+2. **Nothing to change to read it:** `placeForScene` in `PingPong.luau` already takes `features.pingPongTable.corners`
+   through `Sim.fromCorners` before the Config table, and gets your `LEN` × `WID` (9.78 × 5.44). `centre`, `length`,
+   `width` and `yaw` are exactly what `fromCorners` returns, so use them or ignore them. No mismatch found.
+3. **Drop the hand-tuned table** once a Play test shows `features` arriving: the temporary visible table in
+   `maybePlace`, and any tuning on `Config.PINGPONG_TABLES["the-courts"]` (y 3.0, yaw 0.781). The real top is 0.29
+   studs lower and 3.9° turned from it, so check the bounce and the ball at rest on the real top once more. The Config
+   entry is Shivin's; it now only matters when `features` is missing (mock).
+4. **Test:** `Rooms.modelInfo` caches `/model` once per Roblox server, so stop and start the test after the restart.
+5. **The rooms are real now:** the Game Lawn's photo-textured v2 room (asset `91874647541773`, with six sky faces in
+   `sky`) and the Brick House apartment (asset `96179943812932`) are uploaded and served by `/model`.
+
 **Update 5 (Sat ~6 AM): Roblox games.** From now to the freeze you turn our worlds into real Roblox games, on top
 of Shivin's game in `roblox/` (Luau + Rojo): **real-physics ping pong** on the real table at the Infinity Hall Game
 Lawn now, then **pool** on the game-room table we film today. This block is your build guide (A to F). Read
@@ -313,7 +441,7 @@ and three video memories (`courts-foosball`, `chess-match`, `kitchen-cooking`). 
 
 **Update 3 (Sat ~3 AM): what is next for you (the update box below still stands):**
 
-**The public link is live:** `https://prozac-covered-burke-oklahoma.trycloudflare.com` (it changes if the tunnel restarts; Ojasva reposts). Set it as `dvBase` in your
+**The public link is live:** `https://highlighted-filter-surf-other.trycloudflare.com` (it changes if the tunnel restarts; Ojasva reposts). Set it as `dvBase` in your
 DeepSpace config now and point your gallery and "Add a memory" at it (uploads open once Ojasva switches the server
 from read-only, Saturday morning; reading `/api/scenes` works now). Send your DeepSpace URL and `DS_KEY` privately the
 moment `/api/ingest` and `/api/notes` are deployed, so the live map and notes go end to end.

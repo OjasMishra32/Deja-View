@@ -131,7 +131,7 @@ The environment needs the same treatment as the objects, minus ceilings.
 - No uploads and no approval changes.
 - The report states which configuration won, why, and where the metric still fails.
 
-## Claude prompt
+## Agent prompt
 
 ```
 You are working in the Deja-View repo on a parallel branch, `shivin/recon-loop`, based on

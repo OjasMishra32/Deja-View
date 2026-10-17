@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Déjà View · Scoreboard</title>
+    <meta name="description" content="Every match played in a Déjà View world, written to Solana the moment it ends." />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="color-scheme" content="light" />
+    <link rel="icon" href="./public/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./src/scores.css" />
+  </head>
+  <body>
+    <header class="s-top">
+      <div class="s-wrap">
+        <a class="s-brand" href="/" aria-label="Déjà View home">
+          <svg class="s-mark" viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="7.2" fill="#007aff" />
+            <path d="M16 7.6c-5.2 0-9.4 3.4-9.4 7.7 0 2.5 1.4 4.7 3.7 6.1-.2 1.3-.9 2.5-1.9 3.4 2-.1 3.8-.8 5.1-1.9.8.1 1.6.2 2.5.2 5.2 0 9.4-3.4 9.4-7.8S21.2 7.6 16 7.6z" fill="#fff" />
+            <path d="M13.7 19.4v-4.2a2.3 2.3 0 0 1 4.6 0v4.2z" fill="#007aff" />
+          </svg>
+          <span>Déjà View</span>
+        </a>
+        <span class="s-spacer"></span>
+        <span class="s-live" id="live" data-state="wait" role="status">Connecting</span>
+      </div>
+    </header>
+
+    <main class="s-wrap s-main">
+      <section class="s-hero" aria-labelledby="title">
+        <h1 class="s-title" id="title">Scoreboard</h1>
+        <p class="s-lede" id="lede">Every match played in a Déjà View world, written to Solana the moment it ends.</p>
+        <div class="s-meta-row">
+          <span class="s-pill" id="network">Solana devnet</span>
+          <a class="s-link" id="ledger" href="#" target="_blank" rel="noopener" hidden>All results on Solana Explorer</a>
+          <a class="s-link" id="all-worlds" href="/scores" hidden>All worlds</a>
+        </div>
+      </section>
+
+      <section class="s-section" id="leaders-section" aria-labelledby="leaders-title" hidden>
+        <h2 class="s-h2" id="leaders-title">Leaders</h2>
+        <ol class="s-leaders" id="leaders"></ol>
+      </section>
+
+      <section class="s-section" aria-labelledby="matches-title">
+        <div class="s-head">
+          <h2 class="s-h2" id="matches-title">Matches</h2>
+          <span class="s-count" id="count"></span>
+        </div>
+        <div class="s-notice" id="notice" hidden></div>
+        <ol class="s-list" id="list" aria-busy="true">
+          <li class="s-skel"></li>
+          <li class="s-skel"></li>
+          <li class="s-skel"></li>
+        </ol>
+      </section>
+
+      <p class="s-foot" id="foot" hidden></p>
+    </main>
+
+    <script type="module" src="./src/scores.ts"></script>
+  </body>
+</html>

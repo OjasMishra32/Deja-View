@@ -1,6 +1,7 @@
 // Typed client for the HTTP API and the /ws event stream (docs/ARCHITECTURE.md).
 
 import type { HealthInfo, Scene, SceneMode, ServerEvent } from '../../shared/types.ts';
+import { authHeaders } from './auth.ts';
 
 export type { HealthInfo, Scene, SceneMode, ServerEvent };
 
@@ -74,7 +75,9 @@ function parseBody(text: string): unknown {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(apiUrl(path), { ...init, headers: { Accept: 'application/json', ...(init?.headers ?? {}) } });
+    // a change carries the sign-in (server/auth); nothing is added when signed out or sign-in is off
+    const signed = init?.method && init.method !== 'GET' && init.method !== 'HEAD' ? authHeaders() : {};
+    res = await fetch(apiUrl(path), { ...init, headers: { Accept: 'application/json', ...signed, ...(init?.headers ?? {}) } });
   } catch {
     throw new ApiError("Can't reach the server. Check that it is still running, then try again.", 0);
   }
@@ -165,6 +168,7 @@ export function createScene(input: CreateSceneInput, onProgress?: (p: UploadProg
     for (const f of input.files) form.append('files', f.blob, f.name);
     req.open('POST', apiUrl('/api/scenes'));
     req.setRequestHeader('Accept', 'application/json');
+    for (const [k, v] of Object.entries(authHeaders())) req.setRequestHeader(k, v);
     req.upload.onprogress = (e) => {
       onProgress?.({ loaded: e.loaded, total: e.total, fraction: e.lengthComputable ? e.loaded / e.total : NaN });
     };

@@ -1,0 +1,10 @@
+#!/bin/sh
+# Keeps tool attribution out of commit messages: drops Co-Authored-By trailers and "Generated with" lines that
+# name an AI assistant, then the blank lines they leave at the end.
+# Turn it on once per clone:  git config core.hooksPath .githooks
+msg="$1"
+tmp="$msg.tmp.$$"
+grep -viE '^[[:space:]]*(co-authored-by:.*(claude|anthropic|copilot|openai|chatgpt|gemini|cursor)|.*generated with .*(claude|copilot|chatgpt|cursor))' "$msg" > "$tmp" || true
+# strip trailing blank lines
+awk 'NF { for (i = 0; i < blank; i++) print ""; blank = 0; print; next } { blank++ }' "$tmp" > "$msg"
+rm -f "$tmp"

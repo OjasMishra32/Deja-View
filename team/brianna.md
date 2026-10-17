@@ -9,6 +9,29 @@ Everything below was checked against the live Gemini docs and SDK on Fri Oct 16,
 checked, it says so and tells you how to check it. If something here turns out to be wrong on the night, tell Ojasva
 right away and use the fallback listed for it.
 
+> **Update 6 (Sat ~11 AM): five things only you can do, most important first.**
+> 1. **Make the guide live (biggest gap; the site says "The guide is off").** On the demo Mac: `git pull`, then in
+>    `integrations/guide/`: put `GEMINI_API_KEY` (and `MOCK_GEMINI=0`) in `.env`, `npm install`, `npm test`,
+>    `npm start` (port 8795). Tell Ojasva when it answers `GET http://127.0.0.1:8795/health`; he restarts the server
+>    with `GUIDE_URL=http://127.0.0.1:8795` and then labels, the greeting and "who won?" work in every world.
+> 2. **Your PACE ICE GPUs.** Seb added an opt-in profile for your allocation (`HPG_PROFILE=pace`, docs/HPG.md). Our two
+>    HiPerGator GPUs are the bottleneck. On the demo Mac, open one login that stays up (you type your password and
+>    Duo; never share them): `ssh -M -S ~/.ssh/cm-pace-ice -o ControlPersist=24h -o ServerAliveInterval=30
+>    bmorgan62@login-ice.pace.gatech.edu`, then tell Ojasva. The chess-match people and photo uploads can then run there.
+> 3. **Check the clip notes against what really happened** (`integrations/guide/notes/*.json`, read on every call):
+>    - chess-match: "White won by checkmate: the black-T-shirt player's queen took the f7 pawn beside the black king,
+>      guarded by a white knight on e5." Correct?
+>    - courts-foosball: the clip ends mid-game. If you know who won that night, put it in `outcome` (one short line).
+>    - kitchen-cooking: Seb puts milk on the stove and rinses his hands. If you know what he was making, add it.
+>    Keep `outcomeEvidence` honest (say "told by the team" if it is not visible in the clip).
+> 4. **Sponsor sign-ups (free, no card)**, values to Ojasva privately, never in chat or the repo: a Tiger Cloud service
+>    (`TIGER_DATA_URL`, turns on Replay) and an Auth0 tenant with a Single Page Application plus an API
+>    (`AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_AUDIENCE`, turns on sign-in for uploads). Seb is busy with Roblox.
+> 5. **Labels on the live worlds.** Open each world on the public link and check the labels read right once the guide
+>    is up: `the-courts` (Infinity Hall Game Lawn), `chess-room`, `kitchen`, `tilted-towers`, `brick-apartment`, and
+>    the memories `courts-foosball` and (soon) `kitchen-cooking`. Tweak `WORLD_HINTS` in `prompts.mjs` and push to your
+>    branch. Then the Devpost list of Gemini features and where judges see them.
+
 > **Update 5 (Sat ~5:30 AM): most of Updates 3 and 4 is now built into your service on `main`. The rest is yours.**
 > Added in `integrations/guide/`:
 > - `/describe` takes `frames` (up to 8, in order; a longer list keeps 8 evenly spaced) and returns the "who is playing,
@@ -62,7 +85,7 @@ right away and use the fallback listed for it.
 >
 > **Update 3 (Sat ~3 AM): what is next for you:**
 >
-> **The public link is live:** `https://prozac-covered-burke-oklahoma.trycloudflare.com`. You can open any world at `https://prozac-covered-burke-oklahoma.trycloudflare.com/view?scene=<id>` to see what the guide
+> **The public link is live:** `https://highlighted-filter-surf-other.trycloudflare.com`. You can open any world at `https://highlighted-filter-surf-other.trycloudflare.com/view?scene=<id>` to see what the guide
 > will be looking at. For the demo your service runs on Ojasva's Mac (`GUIDE_URL=http://127.0.0.1:8795`); bring it over
 > Saturday morning (the `GEMINI_API_KEY` goes in its `.env` privately).
 > 1. **The worlds are changing:** the four rebuilt worlds (real footage, every angle; walking limited to where the camera went): **`tilted-towers`**
