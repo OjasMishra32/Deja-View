@@ -190,6 +190,64 @@ function offsetWithin(el: HTMLElement, root: HTMLElement): number {
 }
 
 /** Starts every chapter on the page. */
+/**
+ * What it's for: each tile's picture loads as the section comes near; a tile's clip plays only while
+ * the tile is on screen (never with reduced motion). A picture that cannot load leaves a words-only tile.
+ */
+function startUses(): void {
+  const section = document.getElementById('uses');
+  if (!section) return;
+  const still = reducedMotion();
+  const drop = (el: Element) => {
+    const tile = el.closest('.use');
+    el.closest('.use-media')?.remove();
+    tile?.classList.remove('has-media');
+  };
+  const load = () => {
+    for (const img of section.querySelectorAll<HTMLImageElement>('.use-media img[data-src]')) {
+      img.addEventListener('error', () => drop(img), { once: true });
+      img.src = img.dataset.src!;
+    }
+    for (const v of section.querySelectorAll<HTMLVideoElement>('.use-media video[data-src]')) {
+      if (v.dataset.poster) v.poster = v.dataset.poster;
+    }
+  };
+  new IntersectionObserver(
+    (entries, obs) => {
+      if (!entries.some((e) => e.isIntersecting)) return;
+      obs.disconnect();
+      load();
+    },
+    { rootMargin: '100% 0px' },
+  ).observe(section);
+  if (still) return;
+  const inView = new Set<HTMLVideoElement>();
+  const sync = (v: HTMLVideoElement) => {
+    if (inView.has(v) && document.visibilityState === 'visible') {
+      if (!v.getAttribute('src')) {
+        v.addEventListener('error', () => v.removeAttribute('src'), { once: true });
+        // a square cut on phones, where the tile is tall and a wide clip would lose its edges
+        v.src = (innerWidth < 735 && v.dataset.srcNarrow) || v.dataset.src!;
+      }
+      void v.play().catch(() => {});
+    } else if (!v.paused) v.pause();
+  };
+  const play = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        const v = e.target as HTMLVideoElement;
+        if (e.isIntersecting) inView.add(v);
+        else inView.delete(v);
+        sync(v);
+      }
+    },
+    { threshold: 0.3 },
+  );
+  const clips = [...section.querySelectorAll<HTMLVideoElement>('.use-media video[data-src]')];
+  for (const v of clips) play.observe(v);
+  document.addEventListener('visibilitychange', () => clips.forEach(sync));
+}
+
 export function startStory(): void {
   const navH = document.querySelector<HTMLElement>('.topbar')?.offsetHeight ?? 48;
   const make: Record<string, (s: HTMLElement) => Chapter> = {
@@ -197,4 +255,5 @@ export function startStory(): void {
     anywhere: (s) => new AnywhereChapter(s, navH),
   };
   for (const s of document.querySelectorAll<HTMLElement>('[data-chapter]')) make[s.dataset.chapter ?? '']?.(s);
+  startUses();
 }

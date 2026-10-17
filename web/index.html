@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Déjà View</title>
-    <meta name="description" content="You’ve seen this before. Now walk around in it. Déjà View turns your photos and videos of a real place into a 3D world you can walk through in a headset or your browser." />
+    <meta name="description" content="You’ve seen this before. Now walk around in it. Déjà View turns photos and videos of a real place into a 3D world you can walk through: memories, old homes, listings, robot training grounds." />
     <meta name="application-name" content="Déjà View" />
     <meta name="theme-color" content="#ffffff" />
     <meta name="color-scheme" content="light" />
@@ -138,7 +138,7 @@
             </h1>
             <p class="intro-sub">
               Upload a photo or a video. Déjà View rebuilds the place in 3D so you can walk through it in a headset or your
-              browser. Photo worlds also become Roblox places to play in with friends.
+              browser: memories, old homes, listings, Roblox games, even robot training grounds.
             </p>
             <div class="cta-row">
               <a class="btn btn-primary btn-lg" href="/capture?mode=photo">Start with a photo</a>
@@ -164,6 +164,131 @@
         </div>
         <!-- worlds-row.ts fills this with the best worlds, each a looping flight through it -->
         <div class="worlds-row" id="worlds-row"></div>
+      </section>
+
+      <section class="uses" id="uses" aria-labelledby="uses-title">
+        <div class="wrap">
+          <h2 class="uses-title" id="uses-title">What it&rsquo;s for.</h2>
+          <p class="uses-sub">If you have photos or a video of a place, you can stand in it again. Here is what that&rsquo;s good for.</p>
+          <div class="uses-grid">
+            <article class="use use-memories has-media">
+              <div class="use-media"><video muted playsinline loop preload="none" data-src="/landing/people-3d.mp4" data-src-narrow="/landing/people-3d-square.mp4" data-poster="/landing/people-3d.jpg" aria-hidden="true"></video></div>
+              <div class="use-words">
+                <p class="use-kicker">Memories</p>
+                <h3>A night out you can walk back into.</h3>
+                <p>Your friends stand there in 3D, in time with the clip.</p>
+                <div class="use-links"><a href="/view?scene=courts-foosball">Foosball at the Game Lawn</a><a href="/view?scene=kitchen-cooking">Sebastian cooking</a></div>
+              </div>
+            </article>
+            <article class="use use-home has-media">
+              <div class="use-media"><img data-src="/data/scenes/old-house-kitchen/thumb.jpg" alt="The old house kitchen in Pennsylvania, from its real-estate listing" /></div>
+              <div class="use-words">
+                <p class="use-kicker">Old homes</p>
+                <h3>The home you can&rsquo;t go back to.</h3>
+                <p>Rebuilt from its old real-estate listing photos. This Pennsylvania kitchen came from four.</p>
+                <div class="use-links"><a href="/view?scene=old-house-kitchen">Walk in</a></div>
+              </div>
+            </article>
+            <article class="use use-listing">
+              <svg class="use-icon" viewBox="0 0 56 56" aria-hidden="true"><path d="M8 26 28 10l20 16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" /><path d="M14 22v24h28V22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round" /><rect x="23" y="32" width="10" height="14" rx="1.5" fill="currentColor" /></svg>
+              <div class="use-words">
+                <p class="use-kicker">Listings</p>
+                <h3>Walk a listing before you visit.</h3>
+                <p>Buying or renting: the photos already online become a place you can walk through.</p>
+              </div>
+            </article>
+            <article class="use use-anything has-media">
+              <div class="use-media"><video muted playsinline loop preload="none" data-src="/landing/worlds/tilted-towers.mp4" data-poster="/landing/worlds/tilted-towers.jpg" aria-hidden="true"></video></div>
+              <div class="use-words">
+                <p class="use-kicker">Anything</p>
+                <h3>Rebuild anything from photos.</h3>
+                <p>Your room, a spot on campus, even a game. This is Tilted Towers.</p>
+                <div class="use-links"><a href="/view?scene=tilted-towers">Walk in</a></div>
+              </div>
+            </article>
+            <article class="use use-lost">
+              <div class="use-words">
+                <p class="use-kicker">Remembering</p>
+                <h3>Someone you&rsquo;ve lost.</h3>
+                <p>A clip of them, standing back in the room where it was filmed.</p>
+              </div>
+            </article>
+            <article class="use use-robots">
+              <div class="use-words">
+                <p class="use-kicker">Robotics</p>
+                <h3>A real room can become a robot training ground.</h3>
+                <p>Every rebuild comes at real scale: the floor at zero, solid walls, the counters and stoves measured.</p>
+                <div class="use-links"><a href="/view?scene=kitchen">Walk the measured kitchen</a></div>
+              </div>
+              <svg class="uses-plan" viewBox="0 0 721 439" role="img" aria-label="The kitchen rebuilt to scale: the floor at 0 metres, the counters and stoves at 0.87 metres, the prep table at 0.86, the bar tables at 1.03 and 1.04, the fridge at 1.85.">
+              <g class="up-grid"><line x1="403.9" y1="55.0" x2="60.3" y2="253.4" /><line x1="454.2" y1="84.0" x2="110.5" y2="282.4" /><line x1="504.4" y1="113.0" x2="160.8" y2="311.4" /><line x1="554.6" y1="142.0" x2="211.0" y2="340.4" /><line x1="604.9" y1="171.0" x2="261.2" y2="369.4" /><line x1="655.1" y1="200.0" x2="311.5" y2="398.4" /><line x1="338.8" y1="50.6" x2="668.4" y2="241.0" /><line x1="288.6" y1="79.6" x2="618.2" y2="270.0" /><line x1="238.3" y1="108.6" x2="568.0" y2="299.0" /><line x1="188.1" y1="137.6" x2="517.7" y2="328.0" /><line x1="137.9" y1="166.6" x2="467.5" y2="357.0" /><line x1="87.6" y1="195.6" x2="417.3" y2="386.0" /><line x1="37.4" y1="224.6" x2="367.1" y2="415.0" /></g>
+              <polygon class="up-floor" points="367.6,34.0 697.3,224.3 353.7,422.7 24.0,232.4" />
+              <g class="up-box up-table"><polygon class="up-foot" points="233.0,146.5 271.2,124.5 303.3,143.0 265.2,165.1" />
+              <line x1="233.0" y1="146.5" x2="233.0" y2="86.1" />
+              <line x1="271.2" y1="124.5" x2="271.2" y2="64.1" />
+              <line x1="303.3" y1="143.0" x2="303.3" y2="82.7" />
+              <line x1="265.2" y1="165.1" x2="265.2" y2="104.7" />
+              <polygon class="up-top" points="233.0,86.1 271.2,64.1 303.3,82.7 265.2,104.7" /></g>
+              <g class="up-box up-table"><polygon class="up-foot" points="508.3,191.8 544.4,170.9 578.6,190.6 542.4,211.5" />
+              <line x1="508.3" y1="191.8" x2="508.3" y2="132.2" />
+              <line x1="544.4" y1="170.9" x2="544.4" y2="111.3" />
+              <line x1="578.6" y1="190.6" x2="578.6" y2="131.0" />
+              <line x1="542.4" y1="211.5" x2="542.4" y2="151.9" />
+              <polygon class="up-top" points="508.3,132.2 544.4,111.3 578.6,131.0 542.4,151.9" /></g>
+              <g class="up-box up-counter"><polygon class="up-foot" points="93.6,235.5 123.8,218.1 157.6,237.6 127.4,255.0" />
+              <line x1="93.6" y1="235.5" x2="93.6" y2="184.9" />
+              <line x1="123.8" y1="218.1" x2="123.8" y2="167.5" />
+              <line x1="157.6" y1="237.6" x2="157.6" y2="187.1" />
+              <line x1="127.4" y1="255.0" x2="127.4" y2="204.5" />
+              <polygon class="up-top" points="93.6,184.9 123.8,167.5 157.6,187.1 127.4,204.5" /></g>
+              <g class="up-box up-counter"><polygon class="up-foot" points="136.1,262.3 168.2,243.7 216.2,271.4 184.0,290.0" />
+              <line x1="136.1" y1="262.3" x2="136.1" y2="211.9" />
+              <line x1="168.2" y1="243.7" x2="168.2" y2="193.4" />
+              <line x1="216.2" y1="271.4" x2="216.2" y2="221.1" />
+              <line x1="184.0" y1="290.0" x2="184.0" y2="239.6" />
+              <polygon class="up-top" points="136.1,211.9 168.2,193.4 216.2,221.1 184.0,239.6" /></g>
+              <g class="up-box up-table"><polygon class="up-foot" points="358.2,284.6 387.0,267.9 429.1,292.3 400.4,308.9" />
+              <line x1="358.2" y1="284.6" x2="358.2" y2="234.9" />
+              <line x1="387.0" y1="267.9" x2="387.0" y2="218.2" />
+              <line x1="429.1" y1="292.3" x2="429.1" y2="242.6" />
+              <line x1="400.4" y1="308.9" x2="400.4" y2="259.2" />
+              <polygon class="up-top" points="358.2,234.9 387.0,218.2 429.1,242.6 400.4,259.2" /></g>
+              <g class="up-box up-stove"><polygon class="up-foot" points="220.4,308.2 251.5,290.3 289.7,312.3 258.6,330.3" />
+              <line x1="220.4" y1="308.2" x2="220.4" y2="257.6" />
+              <line x1="251.5" y1="290.3" x2="251.5" y2="239.6" />
+              <line x1="289.7" y1="312.3" x2="289.7" y2="261.6" />
+              <line x1="258.6" y1="330.3" x2="258.6" y2="279.6" />
+              <polygon class="up-top" points="220.4,257.6 251.5,239.6 289.7,261.6 258.6,279.6" /></g>
+              <g class="up-box up-stove"><polygon class="up-foot" points="258.6,330.3 289.7,312.3 327.9,334.4 296.7,352.3" />
+              <line x1="258.6" y1="330.3" x2="258.6" y2="280.1" />
+              <line x1="289.7" y1="312.3" x2="289.7" y2="262.1" />
+              <line x1="327.9" y1="334.4" x2="327.9" y2="284.1" />
+              <line x1="296.7" y1="352.3" x2="296.7" y2="302.1" />
+              <polygon class="up-top" points="258.6,280.1 289.7,262.1 327.9,284.1 296.7,302.1" /></g>
+              <g class="up-box up-fridge"><polygon class="up-foot" points="315.8,363.4 354.0,341.3 394.2,364.5 356.0,386.6" />
+              <line x1="315.8" y1="363.4" x2="315.8" y2="256.1" />
+              <line x1="354.0" y1="341.3" x2="354.0" y2="234.0" />
+              <line x1="394.2" y1="364.5" x2="394.2" y2="257.2" />
+              <line x1="356.0" y1="386.6" x2="356.0" y2="279.3" />
+              <polygon class="up-top" points="315.8,256.1 354.0,234.0 394.2,257.2 356.0,279.3" /></g>
+              <text x="206.5" y="212.0" text-anchor="middle">counters and stoves 0.87 m</text>
+              <text x="409.7" y="224.7" text-anchor="start">prep table 0.86 m</text>
+              <text x="268.2" y="72.4" text-anchor="middle">bar table 1.04 m</text>
+              <text x="543.4" y="119.6" text-anchor="middle">bar table 1.03 m</text>
+              <text x="341.0" y="242.6" text-anchor="end">fridge 1.85 m</text>
+              <text class="up-zero" x="367.7" y="420.7">floor 0.00 m</text>
+              </svg>
+            </article>
+            <article class="use use-games has-media">
+              <div class="use-media"><img data-src="/landing/roblox-lawn.jpg" alt="Two Roblox players at the real ping pong table in the Infinity Hall Game Lawn" /></div>
+              <div class="use-words">
+                <p class="use-kicker">Games</p>
+                <h3>Play on the real furniture.</h3>
+                <p>The same place as a Roblox room, with ping pong on the real table.</p>
+              </div>
+            </article>
+          </div>
+        </div>
       </section>
 
       <section class="chapter" id="how" data-chapter="upload">
