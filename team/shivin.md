@@ -18,6 +18,9 @@ they win: say so in the team chat.
 >    Fortnite-derived content (the old fortnite-* rooms, the Brick House apartment, Tilted Towers): Epic's IP.
 > 3. Until it is cleared, do not upload anything from your account (Studio or Open Cloud). Rooms already uploaded may
 >    or may not keep loading; if LoadAssetAsync fails, the game falls back to the block map (that path still works).
+> 3b. Seb traced a flag to a QR code inside a texture (docs/object-layer.md section 14). Our room textures come from
+>    real photos (posters, bins, labels), so before any upload run `pipeline/objects/preflight.py --glb <file>` and
+>    look at its contact sheet; the server's uploads stay off until every room passes it.
 > 4. Proposal (Ojasva decides): keep Fortnite-derived worlds (tilted-towers, brick-apartment) out of the Roblox
 >    picker for good; the Roblox story is our own captures (the Game Lawn, chess, kitchen).
 
