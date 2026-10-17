@@ -84,6 +84,20 @@ function Api.model(sceneId: string)
 	return request("GET", "/api/roblox/" .. enc(sceneId) .. "/model")
 end
 
+-- Gemini labels (Update 4): {hotspots:[{label, blurb, x, y, z}]} in room metres.
+function Api.hotspots(sceneId: string)
+	return request("GET", "/api/scenes/" .. enc(sceneId) .. "/hotspots")
+end
+
+-- Notes (Update 4): {notes:[{id, author, text, x, y, z}]} in metres; POST {author, text, x, y, z}.
+function Api.notes(sceneId: string)
+	return request("GET", "/api/notes/" .. enc(sceneId))
+end
+
+function Api.addNote(sceneId: string, body: any)
+	return request("POST", "/api/notes/" .. enc(sceneId), body)
+end
+
 function Api.presence(sceneId: string, body: any)
 	return request("POST", "/api/roblox/" .. enc(sceneId) .. "/presence", body)
 end

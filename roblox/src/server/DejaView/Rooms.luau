@@ -17,6 +17,7 @@ local list: { any } = {} -- last /api/scenes answer
 local cache: { [string]: Entry } = {}
 local firstSeen: { [string]: number } = {}
 local listLoaded = false
+local playableSeen: { [string]: boolean } = {}
 local votes: { [Player]: string } = {}
 local switching = 0
 local judgeScene: string? = nil
@@ -87,10 +88,27 @@ local function storedRoom(sceneId: string): Instance?
 	return rooms and rooms:FindFirstChild(sceneId)
 end
 
+-- GET /api/roblox/<id>/model (contract 6.2b): assetId, walkBounds, chunks. Cached once it answers 200.
+local modelInfos: { [string]: any } = {}
+local function modelInfo(sceneId: string): any?
+	if modelInfos[sceneId] == nil then
+		local ok, info, status = Backend.model(sceneId)
+		if ok and type(info) == "table" then
+			modelInfos[sceneId] = info
+		elseif status == 404 then
+			modelInfos[sceneId] = false -- not built for this scene (yet); try again next switch
+			task.delay(30, function()
+				modelInfos[sceneId] = nil
+			end)
+		end
+	end
+	return modelInfos[sceneId] or nil
+end
+
 -- The textured room the server uploaded with Open Cloud (contract 6.2b), loaded by asset id; nil without one.
 local function uploadedRoom(sceneId: string): Instance?
-	local ok, info = Backend.model(sceneId)
-	local assetId = ok and type(info) == "table" and tonumber(info.assetId)
+	local info = modelInfo(sceneId)
+	local assetId = info and tonumber(info.assetId)
 	if not assetId then
 		return nil
 	end
@@ -226,6 +244,15 @@ local function refreshList()
 	table.sort(fresh, function(a, b)
 		return (a.createdAt or "") > (b.createdAt or "")
 	end)
+	-- "New room unlocked": a Photo world that turns ready after we started (the finale) gets a JOIN prompt.
+	for _, s in fresh do
+		if playable(s) and not playableSeen[s.id] then
+			playableSeen[s.id] = true
+			if listLoaded then
+				World.Moment:FireAllClients({ type = "unlocked", id = s.id, name = s.name or s.id })
+			end
+		end
+	end
 	list = fresh
 	listLoaded = true
 end
@@ -291,6 +318,11 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 		return
 	end
 	local visual = if stored then stored:Clone() else if map then uploadedRoom(sceneId) else nil
+	-- Walk limits come with the room model's details (Update 4).
+	local mi = modelInfo(sceneId)
+	if map and mi and mi.walkBounds and not map.walkBounds then
+		map.walkBounds = mi.walkBounds
+	end
 	if mySwitch ~= switching then
 		return
 	end

@@ -10,6 +10,8 @@ export type RoomInfo = {
 	name: string,
 	spawn: Vector3,
 	spawnYaw: number?,
+	walkMin: Vector3?, -- the walkable box (invisible walls go here); defaults to the bounds
+	walkMax: Vector3?,
 	boundsMin: Vector3,
 	boundsMax: Vector3,
 	ceilingY: number,
@@ -63,6 +65,48 @@ local function boundsOf(map: any): (Vector3, Vector3, number)
 	return minV, maxV, ceilingY
 end
 
+local function parseBox(b: any): (Vector3?, Vector3?)
+	if type(b) ~= "table" then
+		return nil, nil
+	end
+	local bmin, bmax = b.min or b[1], b.max or b[2]
+	if type(bmin) ~= "table" or type(bmax) ~= "table" then
+		return nil, nil
+	end
+	return Vector3.new(bmin[1] or bmin.x, bmin[2] or bmin.y, bmin[3] or bmin.z),
+		Vector3.new(bmax[1] or bmax.x, bmax[2] or bmax.y, bmax[3] or bmax.z)
+end
+
+-- The walkable box: the server's walkBounds when it sends them (Update 4); otherwise the area the camera actually
+-- captured (parts flagged 0 = captured, not imagined), widened to take in the spawn and the headset's start at the
+-- origin, plus a small margin; otherwise the whole bounds.
+local WALK_MARGIN = 4
+
+local function walkBoxOf(map: any, mn: Vector3, mx: Vector3): (Vector3, Vector3)
+	local wmin, wmax = parseBox(map.walkBounds)
+	if wmin and wmax then
+		return Vector3.new(wmin.X, mn.Y, wmin.Z), Vector3.new(wmax.X, mx.Y, wmax.Z)
+	end
+	local x0, z0, x1, z1 = math.huge, math.huge, -math.huge, -math.huge
+	for _, p in map.parts do
+		if p[10] == 0 then
+			x0, x1 = math.min(x0, p[1] - p[4] / 2), math.max(x1, p[1] + p[4] / 2)
+			z0, z1 = math.min(z0, p[3] - p[6] / 2), math.max(z1, p[3] + p[6] / 2)
+		end
+	end
+	if not (x0 < x1 and z0 < z1) then
+		return mn, mx
+	end
+	local sp = map.spawn or { 0, 0, 0 }
+	for _, pt in { { sp[1] or 0, sp[3] or 0 }, { 0, 0 } } do
+		x0, x1 = math.min(x0, pt[1]), math.max(x1, pt[1])
+		z0, z1 = math.min(z0, pt[2]), math.max(z1, pt[2])
+	end
+	x0, z0 = math.max(x0 - WALK_MARGIN, mn.X), math.max(z0 - WALK_MARGIN, mn.Z)
+	x1, z1 = math.min(x1 + WALK_MARGIN, mx.X), math.min(z1 + WALK_MARGIN, mx.Z)
+	return Vector3.new(x0, mn.Y, z0), Vector3.new(x1, mx.Y, z1)
+end
+
 local function newFolder(info: RoomInfo): Folder
 	local old = workspace:FindFirstChild("Room")
 	if old then
@@ -76,6 +120,8 @@ local function newFolder(info: RoomInfo): Folder
 	folder:SetAttribute("BoundsMin", info.boundsMin)
 	folder:SetAttribute("BoundsMax", info.boundsMax)
 	folder:SetAttribute("CeilingY", info.ceilingY)
+	folder:SetAttribute("WalkMin", info.walkMin)
+	folder:SetAttribute("WalkMax", info.walkMax)
 	folder:SetAttribute("StudsPerMeter", info.studsPerMeter)
 	folder:SetAttribute("Count", info.count)
 	folder.Parent = workspace
@@ -92,22 +138,28 @@ local function addBounds(folder: Folder, info: RoomInfo)
 	local midY = mn.Y + h / 2
 	-- safety floor under everything
 	invisible(bounds, "SafetyFloor", Vector3.new(size.X + 8, 2, size.Z + 8), Vector3.new(c.X, math.min(mn.Y, 0) - 1.5, c.Z))
-	invisible(bounds, "WallN", Vector3.new(size.X + 8, h, 2), Vector3.new(c.X, midY, mn.Z - 2))
-	invisible(bounds, "WallS", Vector3.new(size.X + 8, h, 2), Vector3.new(c.X, midY, mx.Z + 2))
-	invisible(bounds, "WallW", Vector3.new(2, h, size.Z + 8), Vector3.new(mn.X - 2, midY, c.Z))
-	invisible(bounds, "WallE", Vector3.new(2, h, size.Z + 8), Vector3.new(mx.X + 2, midY, c.Z))
+	-- Invisible walls around the walkable box (Update 4), tight to its edge.
+	local wmn, wmx = info.walkMin or mn, info.walkMax or mx
+	local wsize, wc = wmx - wmn, (wmn + wmx) / 2
+	invisible(bounds, "WallN", Vector3.new(wsize.X + 2, h, 1), Vector3.new(wc.X, midY, wmn.Z - 0.5))
+	invisible(bounds, "WallS", Vector3.new(wsize.X + 2, h, 1), Vector3.new(wc.X, midY, wmx.Z + 0.5))
+	invisible(bounds, "WallW", Vector3.new(1, h, wsize.Z + 2), Vector3.new(wmn.X - 0.5, midY, wc.Z))
+	invisible(bounds, "WallE", Vector3.new(1, h, wsize.Z + 2), Vector3.new(wmx.X + 0.5, midY, wc.Z))
 	invisible(bounds, "Lid", Vector3.new(size.X + 8, 1, size.Z + 8), Vector3.new(c.X, info.ceilingY + 0.5, c.Z))
 	bounds.Parent = folder
 end
 
 function MapBuilder.infoFromMap(map: any): RoomInfo
 	local mn, mx, ceilingY = boundsOf(map)
+	local wmin, wmax = walkBoxOf(map, mn, mx)
 	local s = map.spawn or { 0, 0, 0 }
 	return {
 		sceneId = map.sceneId or "?",
 		name = map.name or map.sceneId or "Room",
 		spawn = Vector3.new(s[1] or s.x or 0, s[2] or s.y or 0, s[3] or s.z or 0),
 		spawnYaw = tonumber(map.spawnYaw),
+		walkMin = wmin,
+		walkMax = wmax,
 		boundsMin = mn,
 		boundsMax = mx,
 		ceilingY = ceilingY,

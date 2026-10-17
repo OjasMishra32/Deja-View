@@ -21,6 +21,18 @@ function Backend.model(sceneId: string)
 	return impl().model(sceneId)
 end
 
+function Backend.hotspots(sceneId: string)
+	return impl().hotspots(sceneId)
+end
+
+function Backend.notes(sceneId: string)
+	return impl().notes(sceneId)
+end
+
+function Backend.addNote(sceneId: string, body: any)
+	return impl().addNote(sceneId, body)
+end
+
 function Backend.presence(sceneId: string, body: any)
 	return impl().presence(sceneId, body)
 end

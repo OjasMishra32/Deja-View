@@ -187,6 +187,45 @@ function MockServer.model(sceneId: string)
 	return true, { sceneId = sceneId, units = "studs", studsPerMeter = SPM, chunks = {}, assetId = nil }, 200
 end
 
+-- Fake Gemini labels around the procedural room (metres; the fixture room gets them too).
+local MOCK_HOTSPOTS = {
+	{ label = "Couch", blurb = "Where the losers sat", x = -1.7, y = 0.6, z = -2.2 },
+	{ label = "TV", blurb = "Mario Kart, 4 players", x = -1.7, y = 1.4, z = 3.4 },
+	{ label = "Snack table", blurb = "Mostly chips", x = 1.7, y = 0.9, z = 1.1 },
+	{ label = "Window", blurb = "Rain all night", x = 4.1, y = 1.5, z = 0 },
+}
+local mockNotes: { [string]: { any } } = {}
+
+function MockServer.hotspots(sceneId: string)
+	if not jitter() then
+		return false, "mock failure", 0
+	end
+	return true, { hotspots = MOCK_HOTSPOTS }, 200
+end
+
+function MockServer.notes(sceneId: string)
+	if not jitter() then
+		return false, "mock failure", 0
+	end
+	local list = mockNotes[sceneId]
+	if not list then
+		list = { { id = "n-maya", author = "Maya", text = "best night ever", x = 0.8, y = 1.6, z = -2.5 } }
+		mockNotes[sceneId] = list
+	end
+	return true, { notes = list }, 200
+end
+
+function MockServer.addNote(sceneId: string, body: any)
+	if not jitter() then
+		return false, "mock failure", 0
+	end
+	MockServer.notes(sceneId)
+	local note = table.clone(body)
+	note.id = HttpService:GenerateGUID(false)
+	table.insert(mockNotes[sceneId], note)
+	return true, note, 200
+end
+
 function MockServer.presence(sceneId: string, body: any)
 	lastScene = lastScene or sceneId
 	if elapsed() < JUDGE_MOVES_AT then
