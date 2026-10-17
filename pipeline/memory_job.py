@@ -1,36 +1,39 @@
 #!/usr/bin/env python3
 """One command for a video memory (team/shivin.md Update 19, job 3).
 
-    python pipeline/memory_job.py --clip IMG_7398.mov --start 41.5 --end 56 --world data/scenes/chess-room \
-        --id chess-match --name "Giant chess" --people 2 --dry-run          # prints the plan, writes nothing
+    python pipeline/memory_job.py --clip IMG_9291.mov --start 168.5 --end 189.5 --world data/scenes/chess-room \
+        --id chess-match --name "Giant chess match" --people 2 --dry-run      # prints the plan, writes nothing
     python pipeline/memory_job.py ... --root $HPG_ROOT/jobs/memory-chess-match --submit    # on HiPerGator
 
 Given a clip, a time window and the world it was filmed in, it plans the chain, writes one job folder with a
 snapshot of the code, and submits the steps to Slurm with the right dependencies:
 
-  cut       the window, exactly: frames first..last re-encoded with the clip's own colour tags (HDR stays HDR), the
-            audio trimmed to match, and the clip's camera poses shifted to the window (CPU)
+  cut       the window, exactly: frames first..last at the size the clip's camera was solved at, re-encoded with the
+            clip's own colour tags (HDR stays HDR), the audio trimmed to match, the camera poses shifted to it (CPU)
   frames    people.py frames: output frames, analysis copies, initial poses (CPU)
-  register  people.py register: segmentation, depth, each pose refined against the world, room renders (GPU)
+  register  people.py register: segmentation, depth, poses refined against the world, room renders (GPU)
   pack      people.py pack: masks, depth, colour, tw-pack-v1 video, camera-track.json, the scene folder (CPU)
   poses     avatar run.py --steps hmr: per-frame body pose and shape (GPU)
   body      avatar run.py ground ... fill: tracks, the body, clothing volume, texture (CPU; split when long)
   photofit  avatar run.py photofit, glb: the fitted, animated people (GPU)
-  install   the memory's folder: people from the clip next to its video, poses for the crossfade, checked (CPU)
+  install   the memory's folder: the people from the clip next to its video, checked (CPU)
 
 The GPU steps run one at a time (register, then poses, then photofit); pack runs on a CPU beside poses. Every step
 ends by checking its own outputs (`memory_job.py check`), so a step that "succeeds" without writing what the next one
 reads fails there, and Slurm's afterok cancels the rest.
 
-What it fixes from the chess memory, which took many separate steps and four fixes by hand:
-  SDR clips          the HDR exposure gain is passed only when the clip is HDR (HLG or PQ); standard clips use plain
-                     exposure
+What it fixes from the chess and kitchen memories, which took many separate steps and several fixes by hand:
+  camera size        the cut is scaled to the size the clip's camera was solved at (the 4K chess clip against its
+                     2560x1440 poses stopped people.py frames)
+  SDR clips          the cut keeps the clip's colour tags, so people.py reads HDR (HLG or PQ) or standard colour from
+                     the file; no exposure gain is forced on a standard clip
   pose-only runs     the pose step is its own GPU job (run.py --steps hmr) and is checked for hmr.npz alone
   missing helpers    the job runs from a snapshot of the whole pipeline/ folder, and the plan checks that every
                      local module each step imports (recursively) is in the snapshot before anything is submitted
-  the 29-minute cap  each step is estimated from the window length and the number of people; a step that would run
-                     past the GPU (29 min) or CPU (50 min) cap is split at its cached step boundaries, or uses its
-                     own long-clip option (register --refine-every; photofit with one pass), and the plan says so
+  tools on PATH      every step runs inside a pipeline env, which has python, ffmpeg and ffprobe
+  the 29-minute cap  each step is estimated from the window, the camera size and the number of people (timings
+                     measured on HiPerGator); register refines every n-th pose (--refine-every) with n picked to fit,
+                     photofit drops to one pass, and the avatar CPU steps are split at their cached step boundaries
 
 Ojasva runs the real one. `--dry-run` prints the plan and changes nothing.
 """
@@ -39,7 +42,6 @@ from __future__ import annotations
 import argparse
 import ast
 import json
-import math
 import shlex
 import shutil
 import subprocess
@@ -55,47 +57,76 @@ GPU_LIMIT_MIN = 29.0  # hpg/avatar.sbatch: the group's shared GPUs, every job un
 CPU_LIMIT_MIN = 50.0  # hpg/avatar-cpu.sbatch
 HEADROOM = 0.85  # plan to use at most this share of a cap
 
-# Minutes, from the timings the scripts document (12 s, two people: pose network ~1 min, CPU steps ~15 min,
-# photofit ~15 min; people.py register ~24 min for the 12.4 s foosball clip). Per second of window, per person where
-# noted. Photofit has its own model below: it caps its fitting time itself.
+# Minutes, measured on HiPerGator: the chess memory (21 s window, camera 2560x1440, two people; jobs 46426931 frames,
+# 46441943 register, 46441944 pack, 46426934 poses, 46445750 body, 46453770 photofit) and the kitchen memory (49.7 s,
+# 1920x1080; 46412351 frames, 46423560 register, 46428669 pack). GPU steps on an RTX PRO 6000, CPU steps on 16 cores.
 RATES = {
-    "cut": (1.0, 0.05),  # (fixed, per second)
-    "frames": (2.0, 0.1),
-    "register": (2.0, 1.8),
-    "pack": (4.0, 0.2),
-    "poses": (1.0, 1.0 / 12.0),
-    "body": (2.0, 0.625),  # per person-second
-    "photofit": (2.0, 0.0),  # setup; the rest is photofit_minutes()
+    "cut": (1.0, 0.05),  # (fixed, per second of window)
+    "frames": (0.3, 0.15),  # 3.1 min for 21 s, 7.4 min for 49.7 s
+    "poses": (1.0, 0.05),  # 1.7 min for 21 s, most of it loading the network
+    "body": (0.5, 0.67),  # per person-second: 28.6 min for two people and 21 s
     "install": (1.0, 0.0),
 }
+# The avatar CPU steps' shares of that time: refine (which solves ground again) took 62 %, texture 28 %.
+BODY_STEPS = ["ground", "refine", "body", "offsets", "texture", "fill"]
+BODY_WEIGHTS = {"ground": 0.05, "refine": 0.62, "body": 0.01, "offsets": 0.01, "texture": 0.27, "fill": 0.04}
+# people.py register: models and frames first, then each refined pose (7.1 s with 1280x720 analysis frames, 3.7 s with
+# 960x540: about 7.7 s per megapixel), then every frame's room render (0.43 s and 0.28 s). Chess refining every 6th
+# frame: 17.7 min measured, 17.8 estimated; every 3rd would have needed 30.
+REG_SETUP_MIN = (0.3, 0.0006)  # fixed, per frame
+REG_REFINE_S_PER_MP = 7.7
+REG_RENDER_S = (0.1, 0.36)  # seconds per frame: fixed, per analysis megapixel
+# people.py pack: 1.15 s per frame at 2560x1440, 0.77 s at 1920x1080 (masks, depth, colour, the encode).
+PACK_S = (0.28, 0.236)  # seconds per frame: fixed, per megapixel of the full frame
 # pipeline/avatar/photofit.py: steps = 72 visits per frame / batch 8, bounded 1500..6000 (pass 1: two thirds, at
-# least 1000); each person's pass stops at its time budget (4.5 min pass 1, 6.5 min the last). A step takes about
-# 0.0012 min (the documented 15 minutes for two people and 12 s). The masks (CPU, before each pass) about 0.1 min/s.
-PF_STEP_MIN = 0.0012
+# least 1000); each person's pass stops at its time budget (4.5 min pass 1, 6.5 min the last). Chess: 0.068 s a step,
+# and before each pass 4.5 min of masks and clip loading. One pass: 17.7 min measured, 17.8 estimated; two passes ran
+# into the cap (31 estimated).
+PF_STEP_MIN = 0.00115
 PF_BUDGET = (4.5, 6.5)
+PF_SETUP_MIN = 0.2
+PF_PREP_MIN = 0.21  # per pass, per second of window
+PF_PERSON_MIN = 0.1  # per person and pass: the renders before and after the fit
+HDR_TRANSFERS = {"arib-std-b67", "smpte2084"}
 
 
 def photofit_minutes(seconds: float, people: int, fps: float = 30.0, passes: int = 2) -> float:
     frames = seconds * fps
     last = min(6000, max(1500, round(72 * frames / 8)))
     first = max(1000, round(last * 2 / 3))
-    if passes == 1:
-        per_person = min(PF_BUDGET[1], last * PF_STEP_MIN)
-    else:
-        per_person = min(PF_BUDGET[0], first * PF_STEP_MIN) + min(PF_BUDGET[1], last * PF_STEP_MIN)
-    return round(RATES["photofit"][0] + 0.1 * seconds * passes + people * per_person, 1)
-BODY_STEPS = ["ground", "refine", "body", "offsets", "texture", "fill"]
-BODY_WEIGHTS = {"ground": 0.1, "refine": 0.2, "body": 0.1, "offsets": 0.2, "texture": 0.3, "fill": 0.1}
-HDR_TRANSFERS = {"arib-std-b67", "smpte2084"}
+    fits = [min(PF_BUDGET[1], last * PF_STEP_MIN)]
+    if passes > 1:
+        fits.insert(0, min(PF_BUDGET[0], first * PF_STEP_MIN))
+    return round(PF_SETUP_MIN + passes * PF_PREP_MIN * seconds + people * sum(f + PF_PERSON_MIN for f in fits), 1)
+
+
+def register_minutes(frames: int, camera: tuple[int, int], every: int = 1) -> float:
+    """people.py register for `frames` output frames of a clip whose camera is `camera` (analysis frames at half
+    size), refining every `every`-th pose (and the last)."""
+    mp = (camera[0] // 2) * (camera[1] // 2) / 1e6
+    refined = len(range(0, frames, every)) + (1 if every > 1 and (frames - 1) % every else 0)
+    s = refined * REG_REFINE_S_PER_MP * mp + frames * (REG_RENDER_S[0] + REG_RENDER_S[1] * mp)
+    return round(REG_SETUP_MIN[0] + REG_SETUP_MIN[1] * frames + s / 60, 1)
+
+
+def pack_minutes(frames: int, camera: tuple[int, int]) -> float:
+    return round(0.2 + frames * (PACK_S[0] + PACK_S[1] * camera[0] * camera[1] / 1e6) / 60, 1)
 
 
 # --- clip facts --------------------------------------------------------------------------------------------------
 
 def probe(clip: Path) -> dict:
-    """ffprobe: frame rate, duration, colour tags, audio. Raises when the file is not a video."""
+    """ffprobe: frame rate, duration, size, colour tags, audio. Raises when the file is not a video."""
     out = subprocess.run(["ffprobe", "-v", "error", "-print_format", "json", "-show_streams", "-show_format", str(clip)],
                          capture_output=True, text=True, check=True).stdout
     return clip_facts(json.loads(out))
+
+
+def count_frames(clip: Path) -> int:
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries",
+                          "stream=nb_read_frames", "-of", "csv=p=0", str(clip)], capture_output=True, text=True,
+                         check=True).stdout
+    return int(out.strip().rstrip(",") or 0)
 
 
 def clip_facts(doc: dict) -> dict:
@@ -106,10 +137,36 @@ def clip_facts(doc: dict) -> dict:
     fps = float(num) / float(den or 1) if float(den or 1) else 30.0
     dur = float(v.get("duration") or doc.get("format", {}).get("duration") or 0.0)
     trc = v.get("color_transfer") or ""
-    return {"fps": round(fps, 4), "duration": dur, "width": int(v.get("width", 0)), "height": int(v.get("height", 0)),
+    rotation = next((sd["rotation"] for sd in v.get("side_data_list") or [] if "rotation" in sd),
+                    (v.get("tags") or {}).get("rotate", 0))
+    w, h = int(v.get("width", 0)), int(v.get("height", 0))
+    if abs(int(round(float(rotation or 0)))) % 180 == 90:  # ffmpeg turns the frames upright when it decodes them
+        w, h = h, w
+    return {"fps": round(fps, 4), "duration": dur, "width": w, "height": h,
             "pixFmt": v.get("pix_fmt", ""), "colorTransfer": trc, "colorPrimaries": v.get("color_primaries", ""),
             "colorSpace": v.get("color_space", ""), "hdr": trc in HDR_TRANSFERS,
             "audio": any(s.get("codec_type") == "audio" for s in doc.get("streams", []))}
+
+
+def poses_camera(poses: dict) -> tuple[int, int]:
+    """The size the clip's camera was solved at: people.py frames needs the clip at exactly this size."""
+    k = poses.get("intrinsics") or {}
+    v = poses.get("video") or {}
+    return int(k.get("width") or v["width"]), int(k.get("height") or v["height"])
+
+
+def world_inputs(world: Path) -> tuple[str, list[str]]:
+    """The world file the place's scene.json names (register renders it, pack copies it with the collider and the
+    map) and the problems with the folder (empty: fine)."""
+    try:
+        w = json.loads((world / "scene.json").read_text()).get("world") or {}
+    except (OSError, ValueError) as e:
+        return "world.spz", [f"{world}/scene.json unreadable ({e}); pack copies the world from it"]
+    name = w.get("file") or ""
+    if not name:
+        return "world.spz", [f"{world}/scene.json has no world.file"]
+    files = [name, w.get("collider"), (w.get("topdown") or {}).get("file")]
+    return name, [f"{world / f} is missing (scene.json names it)" for f in files if f and not (world / f).exists()]
 
 
 def window_poses(poses: dict, start: float, end: float) -> tuple[dict, int, int]:
@@ -137,18 +194,23 @@ def window_poses(poses: dict, start: float, end: float) -> tuple[dict, int, int]
     doc["keyframes"] = shift(poses.get("keyframes", []))
     if not doc["keyframes"]:
         raise ValueError("no solved keyframe inside the window; widen it")
+    doc["registered"] = doc["sampled"] = len(doc["keyframes"])
     doc["window"] = {"start": start, "end": end, "firstFrame": first, "lastFrame": last, "sourceTime": t0}
     if isinstance(doc.get("video"), dict):
         doc["video"] = {**doc["video"], "frames": last - first + 1, "duration": round(doc["track"][-1]["time"], 6)}
     return doc, first, last
 
 
-def cut_command(clip: Path, out: Path, facts: dict, first: int, last: int, t0: float, dur: float) -> list[str]:
-    """ffmpeg: exactly source frames first..last (selected by number, timestamps restarted), re-encoded near-lossless
-    with the clip's own colour tags so HDR stays HDR for people.py; the audio trimmed to the same span."""
+def cut_command(clip: Path, out: Path, facts: dict, first: int, last: int, t0: float, dur: float,
+                size: tuple[int, int] | None = None) -> list[str]:
+    """ffmpeg: exactly source frames first..last (selected by number, timestamps restarted), scaled to `size` (the
+    camera's) when the clip differs, re-encoded near-lossless with the clip's own colour tags so HDR stays HDR for
+    people.py; the first audio track trimmed to the same span (phones add tracks ffmpeg cannot decode)."""
     ten_bit = "10" in facts.get("pixFmt", "") or facts.get("hdr")
     vf = f"select='between(n\\,{first}\\,{last})',setpts=PTS-STARTPTS"
-    cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(clip), "-vf", vf, "-fps_mode", "passthrough"]
+    if size and tuple(size) != (facts.get("width"), facts.get("height")):
+        vf += f",scale={size[0]}:{size[1]}:flags=lanczos"
+    cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(clip), "-map", "0:v:0", "-vf", vf, "-fps_mode", "passthrough"]
     if ten_bit:
         cmd += ["-c:v", "libx265", "-pix_fmt", "yuv420p10le", "-crf", "10", "-preset", "medium", "-tag:v", "hvc1"]
     else:
@@ -158,7 +220,8 @@ def cut_command(clip: Path, out: Path, facts: dict, first: int, last: int, t0: f
         if facts.get(key):
             cmd += [flag, facts[key]]
     if facts.get("audio"):
-        cmd += ["-af", f"atrim=start={t0:.6f}:duration={dur:.6f},asetpts=PTS-STARTPTS", "-c:a", "aac", "-b:a", "192k"]
+        cmd += ["-map", "0:a:0", "-af", f"atrim=start={t0:.6f}:duration={dur:.6f},asetpts=PTS-STARTPTS",
+                "-c:a", "aac", "-b:a", "192k"]
     else:
         cmd += ["-an"]
     return cmd + [str(out)]
@@ -173,7 +236,7 @@ class Step:
     cmd: list[str]
     after: list[str] = field(default_factory=list)
     minutes: float = 0.0
-    env: str = "recon"  # "recon" (people.py: the flashworld env), "avatar", "plain"
+    env: str = "recon"  # "recon" (people.py and this script: the flashworld env) or "avatar"
     checks: dict = field(default_factory=dict)
     note: str = ""
 
@@ -196,6 +259,7 @@ class Plan:
     steps: list[Step]
     warnings: list[str] = field(default_factory=list)
     clip_stem: str = "clip"
+    camera: list[int] = field(default_factory=list)
 
     def to_json(self) -> dict:
         d = asdict(self)
@@ -211,7 +275,7 @@ class Plan:
 
 def estimate(name: str, seconds: float, people: int) -> float:
     fixed, rate = RATES[name]
-    per = seconds * (people if name in ("body", "photofit") else 1)
+    per = seconds * (people if name == "body" else 1)
     return round(fixed + rate * per, 1)
 
 
@@ -236,51 +300,76 @@ def split_body(seconds: float, people: int) -> list[list[str]]:
     return groups
 
 
+# what each avatar CPU step leaves in the work folder for the next one: (file or pattern, per person)
+BODY_OUTPUTS = {"ground": ("tracks.npz", False), "refine": ("refine.json", False), "body": ("asset-*.npz", True),
+                "offsets": ("offsets-*.json", True), "texture": ("texture-*.json", True),
+                "fill": ("tex-[0-9]*.jpg", True)}
+
+
+def cut_path(root: Path, clip: Path) -> Path:
+    return root / "input" / f"{clip.stem}-window{clip.suffix.lower() if clip.suffix else '.mov'}"
+
+
 def make_plan(clip: Path, start: float, end: float, world: Path, mem_id: str, name: str, root: Path, people: int,
-              facts: dict, poses_file: Path, caption: str = "", fps: float = 30.0) -> Plan:
+              facts: dict, camera: tuple[int, int] | None = None, caption: str = "", fps: float = 30.0,
+              world_file: str = "world.spz") -> Plan:
+    """`camera`: the size the clip's camera was solved at (default: the clip's own); `world_file`: the world the
+    place's scene.json names."""
     if end <= start:
         raise ValueError("the window ends before it starts")
     seconds = end - start
+    camera = tuple(camera or (facts["width"], facts["height"]))
+    frames_out = int(seconds * fps)
     W = root / "work"
     stage = root / "scene" / mem_id
     stem = clip.stem
-    cut = root / "input" / f"{stem}-window{clip.suffix.lower() if clip.suffix else '.mov'}"
+    cut = cut_path(root, clip)
     cut_poses = root / "input" / f"{stem}-poses.json"
     code = root / "code"
+    world_spz = world / world_file
     py = "python"
     people_py = [py, "-u", str(code / "pipeline" / "recon" / "people.py")]
     people_out = W / "avatar-out"  # copied into the scene at install: pack writes there in parallel
     avatar = [py, "-W", "ignore", "-m", "pipeline.avatar.run", "--work", str(W / "avatar"), "--video", str(cut),
               "--poses", str(cut_poses), "--out-dir", str(people_out), "--people", str(people), "--fps", str(fps),
-              "--start", "0", "--max-seconds", f"{seconds + 1:.3f}", "--clip", stem, "--world", str(world / "world.spz")]
+              "--start", "0", "--max-seconds", f"{seconds + 1:.3f}", "--clip", stem, "--world", str(world_spz)]
     warnings = []
+    cut_note = (f"scaled from {facts.get('width')}x{facts.get('height')} to the camera's {camera[0]}x{camera[1]}"
+                if camera != (facts.get("width"), facts.get("height")) else "")
     steps = [Step("cut", "cpu", [py, str(code / "pipeline" / "memory_job.py"), "cut", "--plan", str(root / "plan.json")],
-                  minutes=estimate("cut", seconds, people), env="plain",
-                  checks={"files": [str(cut), str(cut_poses)], "duration": [str(cut), seconds]})]
+                  minutes=estimate("cut", seconds, people),
+                  checks={"files": [str(cut), str(cut_poses)], "duration": [str(cut), seconds]}, note=cut_note)]
     frames = people_py + ["frames", "--work", str(W / "people"), "--clip", str(cut), "--poses", str(cut_poses),
                           "--fps", str(fps)]
     if facts.get("hdr"):
         note = "HDR clip: people.py picks the exposure gain"
     else:
         note = "standard (SDR) clip: plain exposure, no HDR gain"
+    least = int(frames_out * 0.9)
     steps.append(Step("frames", "cpu", frames, ["cut"], estimate("frames", seconds, people),
-                      checks={"glob": [str(W / "people"), "**/*.jpg", int(seconds * fps * 0.9)]}, note=note))
-    reg_min = estimate("register", seconds, people)
-    reg = people_py + ["register", "--work", str(W / "people"), "--world", str(world / "world.spz")]
+                      checks={"files": [str(W / "people" / "frames.json")],
+                              "globs": [[str(W / "people"), "small/f*.jpg", least]]}, note=note))
+    reg = people_py + ["register", "--work", str(W / "people"), "--world", str(world_spz)]
+    budget = GPU_LIMIT_MIN * HEADROOM
+    every = next((n for n in range(1, frames_out + 1) if register_minutes(frames_out, camera, n) <= budget), None)
+    if every is None:
+        every = max(1, frames_out)
+        warnings.append(f"register is estimated at {register_minutes(frames_out, camera, every)} min even refining "
+                        "only the first and last pose; a shorter window keeps it under the GPU cap")
+    reg_min = register_minutes(frames_out, camera, every)
     reg_note = ""
-    if reg_min > GPU_LIMIT_MIN * HEADROOM:
-        every = math.ceil((reg_min - RATES["register"][0]) / (GPU_LIMIT_MIN * HEADROOM - RATES["register"][0]))
+    if every > 1:
         reg += ["--refine-every", str(every)]
         reg_note = (f"long window: poses refined on every {ordinal(every)} frame, interpolated between "
-                    "(people.py --refine-every)")
-        reg_min = round(RATES["register"][0] + (reg_min - RATES["register"][0]) / every, 1)
-    steps.append(Step("register", "gpu", reg, ["frames"], reg_min, checks={"dirs": [str(W / "people")]},
-                      note=reg_note))
+                    f"(every frame: {register_minutes(frames_out, camera)} min)")
+    steps.append(Step("register", "gpu", reg, ["frames"], reg_min,
+                      checks={"files": [str(W / "people" / "register.json")],
+                              "globs": [[str(W / "people"), "gpu/f*.npz", least]]}, note=reg_note))
     steps.append(Step("pack", "cpu", people_py + ["pack", "--work", str(W / "people"), "--clip", str(cut),
                                                   "--world-scene", str(world), "--scene-dir", str(stage), "--id", mem_id,
                                                   "--name", name, "--caption", caption],
-                      ["register"], estimate("pack", seconds, people),
-                      checks={"files": [str(stage / "scene.json"), str(stage / "camera-track.json")]}))
+                      ["register"], pack_minutes(frames_out, camera),
+                      checks={"files": [str(stage / f) for f in ("scene.json", "camera-track.json", "people.mp4")]}))
     steps.append(Step("poses", "gpu", avatar + ["--steps", "hmr"], ["register"], estimate("poses", seconds, people),
                       env="avatar", checks={"files": [str(W / "avatar" / "hmr.npz")]},
                       note="pose step only; the CPU steps make the tracks in their own job"))
@@ -289,40 +378,39 @@ def make_plan(clip: Path, start: float, end: float, world: Path, mem_id: str, na
     for k, g in enumerate(groups):
         nm = "body" if len(groups) == 1 else f"body-{k + 1}"
         m = round(sum(estimate("body", seconds, people) * BODY_WEIGHTS[s] for s in g), 1)
-        chk = {"files": [str(W / "avatar" / "tracks.npz")]} if "ground" in g else {}
-        if "body" in g:
-            chk = {"glob": [str(W / "avatar"), "asset-*.npz", people]}
+        chk = {"files": [str(W / "avatar" / BODY_OUTPUTS[s][0]) for s in g if not BODY_OUTPUTS[s][1]],
+               "globs": [[str(W / "avatar"), BODY_OUTPUTS[s][0], people] for s in g if BODY_OUTPUTS[s][1]]}
         steps.append(Step(nm, "cpu", avatar + ["--steps", ",".join(g)], [prev], m, env="avatar", checks=chk,
                           note=f"steps {', '.join(g)}"))
-        if m > CPU_LIMIT_MIN:
-            warnings.append(f"{nm} ({', '.join(g)}) is estimated at {m} min, over the {CPU_LIMIT_MIN:.0f} min CPU cap")
         prev = nm
     pf_min = photofit_minutes(seconds, people, fps)
     pf = avatar + ["--steps", "photofit,glb"]
     pf_note = ""
-    if pf_min > GPU_LIMIT_MIN * HEADROOM:
+    if pf_min > budget:
         one = photofit_minutes(seconds, people, fps, passes=1)
-        if one <= GPU_LIMIT_MIN * HEADROOM:
+        if one <= budget:
             pf += ["--photofit-passes", "1"]
-            pf_note = "long window: one photofit pass (the second pass would run past the GPU cap)"
+            pf_note = f"long window: one photofit pass (two would take {pf_min} min)"
             pf_min = one
         else:
             pf += ["--photofit", "off"]
             pf_note = "very long window: photofit off, the people keep their baked texture"
             warnings.append(f"photofit is estimated at {one} min even with one pass (two: {pf_min}); it is turned off. "
                             "A shorter window, or fewer people, keeps it")
-            pf_min = RATES["photofit"][0] + 0.1 * seconds
+            pf_min = 1.0  # the GLBs alone
     steps.append(Step("photofit", "gpu", pf, [prev], pf_min, env="avatar",
-                      checks={"files": [str(people_out / "avatar.json")], "glob": [str(people_out), "avatar-*.glb", people]},
-                      note=pf_note))
+                      checks={"files": [str(people_out / "avatar.json")],
+                              "globs": [[str(people_out), "avatar-*.glb", people]]}, note=pf_note))
     steps.append(Step("install", "cpu", [py, str(code / "pipeline" / "memory_job.py"), "install", "--plan",
                                          str(root / "plan.json")],
-                      ["pack", "photofit"], estimate("install", seconds, people), env="plain",
-                      checks={"files": [str(stage / "scene.json")], "scene": [str(stage)]}))
+                      ["pack", "photofit"], estimate("install", seconds, people),
+                      checks={"files": [str(stage / "scene.json"), str(stage / "avatar.json")], "scene": [str(stage)]}))
     for s in steps:
         if s.minutes > s.limit:
-            warnings.append(f"{s.name} is estimated at {s.minutes} min, over its {s.limit:.0f} min cap")
-    return Plan(mem_id, name, str(root), str(clip), str(world), start, end, people, facts, steps, warnings, stem)
+            what = f" ({s.note.removeprefix('steps ')})" if s.name.startswith("body") else ""
+            warnings.append(f"{s.name}{what} is estimated at {s.minutes} min, over its {s.limit:.0f} min cap")
+    return Plan(mem_id, name, str(root), str(clip), str(world), start, end, people, facts, steps, warnings, stem,
+                list(camera))
 
 
 # --- the code snapshot -------------------------------------------------------------------------------------------
@@ -389,16 +477,30 @@ def step_roots(code: Path, entry: str) -> tuple[Path, list[Path]]:
     return code / "pipeline" / "memory_job.py", [code / "pipeline"]
 
 
+def env_script(src: Path = REPO) -> Path | None:
+    """hpg/env.sh, which every step sources first: beside pipeline/, else the cluster's repo copy ($TW_REPO or
+    $HPG_ROOT/repo; a working copy such as code-memjob/ holds only pipeline/)."""
+    import os
+
+    found = [src / "hpg" / "env.sh"]
+    for base in (os.environ.get("TW_REPO"), os.environ.get("HPG_ROOT") and f"{os.environ['HPG_ROOT']}/repo"):
+        if base:
+            found.append(Path(base) / "hpg" / "env.sh")
+    return next((f for f in found if f.exists()), None)
+
+
 def snapshot(code: Path, src: Path = REPO) -> dict:
     """Copies pipeline/ (no tests, caches or data) and hpg/env.sh into `code`, then checks every step's imports
-    resolve inside the copy. The chess memory lost a step to a helper module its job copy did not have."""
+    resolve inside the copy. The kitchen memory's pack lost a run to a helper module its job copy did not have."""
+    env = env_script(src)
+    if env is None:
+        raise SystemExit(f"no hpg/env.sh in {src} or $HPG_ROOT/repo: every step sources it first")
     if code.exists():
         shutil.rmtree(code)
     ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache", "tests", "data", "*.spz", "*.ply", "*.glb")
     shutil.copytree(src / "pipeline", code / "pipeline", ignore=ignore)
     (code / "hpg").mkdir(parents=True, exist_ok=True)
-    if (src / "hpg" / "env.sh").exists():
-        shutil.copyfile(src / "hpg" / "env.sh", code / "hpg" / "env.sh")
+    shutil.copyfile(env, code / "hpg" / "env.sh")
     return check_imports(code)
 
 
@@ -418,7 +520,7 @@ def sbatch_script(plan: Plan, step: Step) -> str:
     code = root / "code"
     head = ["#!/bin/bash", f"#SBATCH --job-name=mem-{plan.id}-{step.name}", "#SBATCH --ntasks=1",
             f"#SBATCH --output={root}/logs/{step.name}-%j.log"]
-    t = int(min(step.limit, max(5.0, step.minutes * 1.5)))
+    t = int(min(step.limit, max(10.0, step.minutes * 1.5)))
     head.append(f"#SBATCH --time=00:{t:02d}:00" if t < 60 else f"#SBATCH --time={t // 60:02d}:{t % 60:02d}:00")
     if step.kind == "gpu":
         head += ["#SBATCH --gpus=1", "#SBATCH --cpus-per-task=16", "#SBATCH --mem=96G"]
@@ -430,7 +532,7 @@ def sbatch_script(plan: Plan, step: Step) -> str:
         body += ['export ANNY_CACHE_DIR="${ANNY_CACHE_DIR:-$HPG_ROOT/models/anny}"',
                  'export MULTIHMR2_CKPT="${MULTIHMR2_CKPT:-$HPG_ROOT/models/multihmr2/multihmr2.pt}"',
                  'tw_use_env avatar || tw_die "no avatar env (bash hpg/setup-avatar.sh submit)"']
-    elif step.env == "recon":
+    else:  # python, ffmpeg and ffprobe: a compute node has none of them on its own PATH
         body += ['tw_use_env flashworld || tw_die "no flashworld env (bash hpg/setup.sh)"']
     body += [f'cd "{code}"', 'tw_say "memory step ' + step.name + ' on $(hostname)"',
              " ".join(shlex.quote(c) for c in step.cmd),
@@ -481,15 +583,20 @@ def submit(plan: Plan, sbatch: str = "sbatch", account: str | None = None, qos: 
 
 # --- the in-job commands -----------------------------------------------------------------------------------------
 
-def do_cut(plan: Plan, runner=subprocess.run) -> None:
+def do_cut(plan: Plan, runner=subprocess.run, count_fn=count_frames) -> None:
     root = Path(plan.root)
     poses = json.loads(Path(plan_poses_source(plan)).read_text())
     doc, first, last = window_poses(poses, plan.start, plan.end)
+    cut = cut_path(root, Path(plan.clip))
+    doc["source"] = cut.name
     out_poses = root / "input" / f"{plan.clip_stem}-poses.json"
     out_poses.write_text(json.dumps(doc, indent=None))
-    cut = next(Path(c) for c in plan.steps[0].checks["files"] if not c.endswith(".json"))
     dur = doc["track"][-1]["time"] + 1.0 / max(plan.facts.get("fps", 30.0), 1.0)
-    runner(cut_command(Path(plan.clip), cut, plan.facts, first, last, doc["window"]["sourceTime"], dur), check=True)
+    runner(cut_command(Path(plan.clip), cut, plan.facts, first, last, doc["window"]["sourceTime"], dur,
+                       tuple(plan.camera) or None), check=True)
+    n = count_fn(cut)
+    if n != last - first + 1:  # the poses are matched to the cut's frames by number
+        raise SystemExit(f"the cut has {n} frames, the window {last - first + 1} (source frames {first}..{last})")
 
 
 def plan_poses_source(plan: Plan) -> str:
@@ -504,11 +611,7 @@ def check(plan: Plan, step_name: str, probe_fn=probe) -> list[str]:
     for f in c.get("files", []):
         if not Path(f).exists() or Path(f).stat().st_size == 0:
             problems.append(f"missing or empty: {f}")
-    for d in c.get("dirs", []):
-        if not Path(d).is_dir() or not any(Path(d).iterdir()):
-            problems.append(f"missing or empty folder: {d}")
-    if "glob" in c:
-        d, pattern, n = c["glob"]
+    for d, pattern, n in c.get("globs", []):
         got = len(list(Path(d).glob(pattern)))
         if got < n:
             problems.append(f"{d}/{pattern}: {got} found, {n} expected")
@@ -539,37 +642,33 @@ def check_scene(stage: Path) -> list[str]:
         elif not (stage / f).exists():
             problems.append(f"{key} names {f}, which is not in the folder")
     av = v.get("avatars")
-    if isinstance(av, dict) and not av.get("scene"):
-        j = stage / av.get("json", "avatar.json")
-        if not j.exists():
-            problems.append("video.avatars has no avatar.json beside it")
-        else:
-            for p in json.loads(j.read_text()).get("people", []):
+    av = {"people": av} if isinstance(av, list) else av if isinstance(av, dict) else {}
+    if not av.get("scene"):  # the people are in this folder (named, or avatar.json by the folder convention)
+        j = stage / (av.get("json") or "avatar.json")
+        if j.exists():
+            for p in json.loads(j.read_text()).get("people", []) + list(av.get("people") or []):
                 if not (stage / p["file"]).exists():
-                    problems.append(f"avatar.json lists {p['file']}, which is missing")
+                    problems.append(f"{j.name} lists {p['file']}, which is missing")
+        elif av:
+            problems.append(f"video.avatars names people but {j.name} is missing")
         if av.get("poses") and not (stage / av["poses"]).exists():
             problems.append(f"video.avatars.poses names {av['poses']}, which is missing")
     return problems
 
 
 def do_install(plan: Plan) -> dict:
-    """The memory's folder: the clip's people (avatar-<k>.glb + avatar.json, already written there by photofit) named
-    in video.avatars with the window's poses for the crossfade, then checked. The result stays in the job's scene/
-    folder; copying it to the server's data/scenes/ is a plain rsync (printed)."""
+    """The memory's folder: the clip's people (avatar-<k>.glb + avatar.json from photofit) beside its video, then
+    checked. scene.json stays as pack wrote it: the viewer finds avatar.json in the memory's own folder, and the
+    crossfade follows its camera-track.json, the refined camera of every packed frame (web/src/viewer/avatar-files.ts).
+    The result stays in the job's scene/ folder; copying it to the server's data/scenes/ is a plain rsync (printed)."""
     root = Path(plan.root)
     stage = root / "scene" / plan.id
-    poses_name = f"{plan.clip_stem}-poses.json"
-    shutil.copyfile(root / "input" / poses_name, stage / poses_name)
     people_out = root / "work" / "avatar-out"
     for f in sorted(people_out.glob("avatar-*.glb")) + [people_out / "avatar.json"]:
         if f.exists():
             shutil.copyfile(f, stage / f.name)
-    sj = stage / "scene.json"
-    s = json.loads(sj.read_text())
-    if (stage / "avatar.json").exists():
-        s.setdefault("video", {})["avatars"] = {"poses": poses_name}  # this folder (no `scene`), avatar.json default
-    sj.write_text(json.dumps(s, indent=2))
-    problems = check_scene(stage)
+    problems = [] if (stage / "avatar.json").exists() else ["no avatar.json from the photofit step"]
+    problems += check_scene(stage)
     if problems:
         raise SystemExit("the memory folder is not complete: " + "; ".join(problems))
     return {"scene": str(stage), "rsync": f"rsync -a {stage}/ <server>:data/scenes/{plan.id}/"}
@@ -578,9 +677,10 @@ def do_install(plan: Plan) -> dict:
 # --- printing ----------------------------------------------------------------------------------------------------
 
 def describe(plan: Plan, imports: dict | None = None) -> str:
+    cam = f", camera solved at {plan.camera[0]}x{plan.camera[1]}" if plan.camera else ""
     lines = [f"Memory {plan.id!r} ({plan.name}) from {Path(plan.clip).name}, {plan.start:g}-{plan.end:g} s "
              f"({plan.end - plan.start:.1f} s, {plan.people} people) in {Path(plan.world).name}",
-             f"clip: {plan.facts.get('width')}x{plan.facts.get('height')} at {plan.facts.get('fps')} fps, "
+             f"clip: {plan.facts.get('width')}x{plan.facts.get('height')} at {plan.facts.get('fps')} fps{cam}, "
              f"{'HDR (' + plan.facts.get('colorTransfer') + ')' if plan.facts.get('hdr') else 'standard colour (SDR)'}"
              f", {'audio' if plan.facts.get('audio') else 'no audio'}",
              f"job folder: {plan.root}", "",
@@ -626,12 +726,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--clip", required=True, type=Path)
     ap.add_argument("--start", required=True, type=float)
     ap.add_argument("--end", required=True, type=float)
-    ap.add_argument("--world", required=True, type=Path, help="the place's scene folder (world.spz, <clip>-poses.json)")
+    ap.add_argument("--world", required=True, type=Path,
+                    help="the place's scene folder (scene.json, its world file, collider and map, <clip>-poses.json)")
     ap.add_argument("--id", required=True)
     ap.add_argument("--name", required=True)
     ap.add_argument("--caption", default="")
     ap.add_argument("--people", type=int, default=2)
-    ap.add_argument("--fps", type=float, default=30.0)
+    ap.add_argument("--fps", type=float, default=30.0, help="the packed video's rate (the viewer plays 30)")
     ap.add_argument("--root", type=Path, default=None, help="job folder (default $HPG_ROOT/jobs/memory-<id>)")
     ap.add_argument("--dry-run", action="store_true", help="print the plan; write and submit nothing")
     ap.add_argument("--submit", action="store_true", help="write the job folder and submit the chain")
@@ -643,12 +744,22 @@ def main(argv: list[str] | None = None) -> int:
     if not poses_file.exists():
         raise SystemExit(f"{poses_file} not found: the clip must be one the place was rebuilt from (its camera poses "
                          "come from that reconstruction)")
+    world_file, problems = world_inputs(a.world)
+    if problems:
+        raise SystemExit("the world folder is not complete: " + "; ".join(problems))
     facts = probe(a.clip)
     if a.end > facts["duration"] + 0.05:
         raise SystemExit(f"the window ends at {a.end} s but the clip is {facts['duration']:.2f} s long")
-    window_poses(json.loads(poses_file.read_text()), a.start, a.end)  # fails early on a window with no poses
+    poses = json.loads(poses_file.read_text())
+    window_poses(poses, a.start, a.end)  # fails early on a window with no poses
+    camera = poses_camera(poses)
+    if abs(camera[0] / camera[1] - facts["width"] / facts["height"]) > 0.01:
+        raise SystemExit(f"the clip is {facts['width']}x{facts['height']} but its camera was solved at "
+                         f"{camera[0]}x{camera[1]}, another shape")
     plan = make_plan(a.clip.resolve(), a.start, a.end, a.world.resolve(), a.id, a.name, root.resolve(), a.people,
-                     facts, poses_file, a.caption, a.fps)
+                     facts, camera, a.caption, a.fps, world_file)
+    if env_script() is None:
+        plan.warnings.append(f"no hpg/env.sh beside {PIPELINE.name}/ or in $HPG_ROOT/repo: --submit would stop")
     if a.dry_run or not a.submit:
         import tempfile
 
