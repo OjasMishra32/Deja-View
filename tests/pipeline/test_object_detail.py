@@ -327,3 +327,60 @@ def test_evaluate_ignores_occluders_and_reports_missing_meshes(tmp_path):
     assert rec["meshes"]["current"] == {"missing": True}
     assert min(v["iou"] for v in rec["meshes"]["new"]["views"]) > 0.97  # the occluded pixels are not counted
     assert rec["card"]["score"] is not None and rec["card"]["delta"] is None
+
+
+# --- report, dataset export, source photos ---------------------------------------------------------------------
+
+def test_report_table_and_markers(tmp_path):
+    from objects.detail import report
+
+    tex = checker(128, 8, seed=7)
+    truth = cube(half=0.3, image=tex)
+    cams = [cam_at((2.0 * np.sin(a), 0.9, 2.0 * np.cos(a)), size=96) for a in (0.0, 2.0, 4.0)]
+    scene = make_scene(tmp_path, truth, cams)
+    for name in ("objects", "objects-detail"):
+        d = scene / name / "stove"
+        d.mkdir(parents=True)
+        (d / "roblox.glb").write_bytes(write_glb([cube(half=0.3 if name != "objects" else 0.4, image=tex)], {}))
+    (scene / "objects-detail" / "stove" / "detail-model.json").write_text(json.dumps({"kind": "regular"}))
+    ev.evaluate(scene, log=lambda *_: None)
+    body = report.table(scene / "detail-eval")
+    assert body.splitlines()[0].startswith("| Object | Kind | current score | new score")
+    assert "| stove | regular |" in body
+    doc = tmp_path / "r.md"
+    doc.write_text(f"x\n{report.BEGIN}\nold\n{report.END}\ny\n")
+    report.write_between(doc, body)
+    text = doc.read_text()
+    assert "old" not in text and "| stove |" in text and text.startswith("x\n") and text.endswith("y\n")
+
+
+def test_dataset_transforms_and_points_ply(tmp_path):
+    from objects.detail import export_dataset as ex
+
+    cams = orbit_cameras((0, 0.5, 0), 0.5, count=3, size=64, elevations=(10.0,), top=False)
+    t = ex.transforms(cams, ["a.png", "b.png", "c.png"])
+    assert t["camera_angle_x"] == pytest.approx(np.deg2rad(50.0))
+    assert len(t["frames"]) == 3 and t["frames"][1]["file_path"] == "./images/b"  # 3DGS appends .png
+    np.testing.assert_allclose(t["frames"][0]["transform_matrix"], cams[0].c2w)
+    xyz = np.random.default_rng(0).random((10, 3))
+    ex.write_points_ply(tmp_path / "p.ply", xyz, np.full((10, 3), 200.0))
+    q = read_mesh(tmp_path / "p.ply")[0]
+    np.testing.assert_allclose(q.V, xyz, atol=1e-6)
+
+
+def test_source_photo_sharpness_ratio():
+    from objects.detail import source_photos as sp
+
+    rng = np.random.default_rng(3)
+    photo = rng.random((64, 64, 3))
+    soft = np.stack([M._gauss_filter(photo[..., c], 1.5) for c in range(3)], axis=-1)
+    rows = sp.sharpness_table([("a.jpg", photo, soft, None), ("b.jpg", photo, photo, None)])
+    assert rows[0]["ratio"] > 5 and rows[1]["ratio"] == pytest.approx(1.0)
+
+
+def test_ao_survives_a_mesh_with_flipped_winding():
+    box = cube()
+    inside_out = Prim("c", box.V, box.F[:, [0, 2, 1]], -box.N, box.UV, box.image)
+    ao = maps.ambient_occlusion([inside_out], size=64, directions=12)[0]
+    face, _ = maps.uv_raster(inside_out, 64)
+    assert ao[face >= 0].mean() > 0.9  # a lone convex box is unoccluded
