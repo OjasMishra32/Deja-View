@@ -475,8 +475,7 @@ local function onHit(player: Player, payload: any)
 		return
 	end
 	-- the ball must be on their half; a volley there is allowed (friendlier than a strict bounce gate)
-	local lp = frame:PointToObjectSpace(state.p)
-	local onSide = (side == "A" and lp.Z < 0) or (side == "B" and lp.Z > 0)
+	local onSide = (side == "A" and state.p.Z < 0) or (side == "B" and state.p.Z > 0)
 	if not onSide then
 		return
 	end
@@ -493,7 +492,8 @@ local function onHit(player: Player, payload: any)
 	if aimed and payload.vr ~= true then
 		-- hold to charge, aim with the camera: reach and pace grow with the hold, and a late aim sails out
 		local reach = (len / 2) * (0.55 + charge * 0.95)
-		local target = p0 + (dir :: Vector3).Unit * reach
+		local dirLocal = frame:VectorToObjectSpace((dir :: Vector3).Unit)
+		local target = p0 + dirLocal * reach
 		if target.Y < Sim.TOP_Y + Sim.BALL_R then
 			target = Vector3.new(target.X, Sim.TOP_Y + Sim.BALL_R, target.Z)
 		end
@@ -516,16 +516,22 @@ local function onHit(player: Player, payload: any)
 		-- the paddle really hit it: reflect off the blade and let the ball fly
 		local blade = payload.cf :: CFrame
 		local claimed = payload.p
-		if typeof(claimed) == "Vector3" and (claimed - state.p).Magnitude > 2 then
+		local ballWorld = frame:PointToWorldSpace(state.p)
+		if typeof(claimed) == "Vector3" and (claimed - ballWorld).Magnitude > 2 then
 			broadcastState()
 			return
 		end
-		if (blade.Position - state.p).Magnitude > 2.2 then
+		if (blade.Position - ballWorld).Magnitude > 2.2 then
 			broadcastState()
 			return
 		end
 		local before = state.v
-		Sim.paddleHit(state, blade.UpVector, payload.vel :: Vector3, 0.8)
+		Sim.paddleHit(
+			state,
+			frame:VectorToObjectSpace(blade.UpVector),
+			frame:VectorToObjectSpace(payload.vel :: Vector3),
+			0.8
+		)
 		if state.v ~= before then
 			local boost = 0.75 + charge * 0.5
 			state.v = state.v * boost
@@ -560,7 +566,8 @@ local function serveHit(player: Player, payload: any)
 	local dir = type(payload) == "table" and payload.dir or nil
 	if typeof(dir) == "Vector3" and dir.Magnitude > 0.1 then
 		local reach = (len / 2) * (0.55 + charge * 0.95)
-		local target = state.p + dir.Unit * reach
+		local dirLocal = frame:VectorToObjectSpace(dir.Unit)
+		local target = state.p + dirLocal * reach
 		if target.Y < Sim.TOP_Y + Sim.BALL_R then
 			target = Vector3.new(target.X, Sim.TOP_Y + Sim.BALL_R, target.Z)
 		end
