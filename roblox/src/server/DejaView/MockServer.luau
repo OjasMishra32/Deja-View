@@ -179,6 +179,14 @@ function MockServer.map(sceneId: string, maxParts: number?)
 	return true, proceduralMap(sceneId, count), 200
 end
 
+-- No uploaded models in mock mode: rooms come from ServerStorage.Rooms or blocks.
+function MockServer.model(sceneId: string)
+	if not jitter() then
+		return false, "mock failure", 0
+	end
+	return true, { sceneId = sceneId, units = "studs", studsPerMeter = SPM, chunks = {}, assetId = nil }, 200
+end
+
 function MockServer.presence(sceneId: string, body: any)
 	lastScene = lastScene or sceneId
 	if elapsed() < JUDGE_MOVES_AT then

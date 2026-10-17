@@ -67,9 +67,20 @@ local function read(key: string): any
 	return if v == MISSING then nil else v
 end
 
+Config.loaded = false
+
+-- Blocks until the live config has loaded (or failed), at most `timeout` seconds.
+function Config.waitLoaded(timeout: number)
+	local t0 = os.clock()
+	while not Config.loaded and os.clock() - t0 < timeout do
+		task.wait(0.1)
+	end
+end
+
 function Config.init()
 	if not ConfigServiceOk or not ConfigService then
 		warn("[DejaView] ConfigService unavailable, using built-in defaults")
+		Config.loaded = true
 		return
 	end
 	local ok, snap = pcall(function()
@@ -77,6 +88,7 @@ function Config.init()
 	end)
 	if not ok or not snap then
 		warn("[DejaView] GetConfigAsync failed, using defaults:", snap)
+		Config.loaded = true
 		return
 	end
 	snapshot = snap
@@ -86,6 +98,7 @@ function Config.init()
 			cache = {}
 		end)
 	end)
+	Config.loaded = true
 	print("[DejaView] config: base =", Config.base(), "mock =", Config.useMock(), "round =", Config.roundSeconds())
 end
 
@@ -94,7 +107,14 @@ function Config.set(key: string, value: any)
 	values[key] = value
 end
 
+-- Emergency override that works from the F9 server console (a console `require` gets its own copy of this module,
+-- so Config.set from there does not reach the game; workspace attributes are shared):
+--   workspace:SetAttribute("DejaViewBase", "https://...")   workspace:SetAttribute("DejaViewMock", false)
 function Config.base(): string
+	local o = workspace:GetAttribute("DejaViewBase")
+	if type(o) == "string" and o ~= "" then
+		return (o:gsub("/+$", ""))
+	end
 	local v = read("dejaview_base")
 	if type(v) == "string" and v ~= "" then
 		return (v:gsub("/+$", ""))
@@ -103,6 +123,10 @@ function Config.base(): string
 end
 
 function Config.useMock(): boolean
+	local o = workspace:GetAttribute("DejaViewMock")
+	if type(o) == "boolean" then
+		return o
+	end
 	local v = read("use_mock")
 	if type(v) == "boolean" then
 		return v

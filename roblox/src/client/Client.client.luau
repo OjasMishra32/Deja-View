@@ -134,6 +134,8 @@ local function refresh()
 		ui.roomName.Text = "LOBBY"
 		if phase == "loading" then
 			status = "Building " .. roomName .. "..."
+		elseif (W("JudgeRoom") or "") ~= "" then
+			status = "JUDGE IS IN " .. string.upper(W("JudgeRoom"))
 		elseif judge and roomName ~= "" then
 			status = "JUDGE IS IN " .. string.upper(roomName)
 		elseif phase == "room" then
@@ -145,7 +147,7 @@ local function refresh()
 	ui.status.Text = status
 	if boardStatus then
 		boardStatus.Text = if inRoom then "" else status
-		boardStatus.TextColor3 = if judge then Theme.Accent else Theme.Text
+		boardStatus.TextColor3 = if judge or (W("JudgeRoom") or "") ~= "" then Theme.Accent else Theme.Text
 	end
 
 	-- buttons
@@ -290,7 +292,7 @@ end)
 
 -- Attribute wiring
 for _, name in { "Phase", "RoomName", "LoadProgress", "LoadStage", "Banner", "JudgeHere", "JudgeName", "RoundState",
-	"AutoJoin", "Follow", "MockJudge", "HasImagined" } do
+	"AutoJoin", "Follow", "MockJudge", "HasImagined", "JudgeRoom" } do
 	workspace:GetAttributeChangedSignal(name):Connect(refresh)
 end
 workspace:GetAttributeChangedSignal("RoomsJson"):Connect(renderCards)

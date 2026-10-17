@@ -1,5 +1,7 @@
 -- Room list, prefetch + swatches, votes, switching, auto-join, JOIN and Follow (team/shivin.md 7.2).
+local AssetService = game:GetService("AssetService")
 local HttpService = game:GetService("HttpService")
+local ServerStorage = game:GetService("ServerStorage")
 local Players = game:GetService("Players")
 local Config = require(script.Parent.Config)
 local Backend = require(script.Parent.Backend)
@@ -27,6 +29,11 @@ Rooms.onRoomReady = nil :: ((joined: boolean) -> ())?
 
 local function now()
 	return workspace:GetServerTimeNow()
+end
+
+-- Only Photo worlds become Roblox places; a video memory stays in the headset (shivin.md Update 2).
+local function playable(s: any): boolean
+	return s ~= nil and s.status == "ready" and s.mode ~= "video"
 end
 
 local function sceneById(id: string): any?
@@ -67,6 +74,28 @@ local function entry(id: string): Entry
 		cache[id] = e
 	end
 	return e
+end
+
+-- The textured room imported in Studio ahead of time (demo worlds), if any.
+local function storedRoom(sceneId: string): Instance?
+	local rooms = ServerStorage:FindFirstChild("Rooms")
+	return rooms and rooms:FindFirstChild(sceneId)
+end
+
+-- The textured room the server uploaded with Open Cloud (contract 6.2b), loaded by asset id; nil without one.
+local function uploadedRoom(sceneId: string): Instance?
+	local ok, info = Backend.model(sceneId)
+	local assetId = ok and type(info) == "table" and tonumber(info.assetId)
+	if not assetId then
+		return nil
+	end
+	local okLoad, container = pcall(AssetService.LoadAssetAsync, AssetService, assetId)
+	if not okLoad or not container then
+		warn("[DejaView] LoadAssetAsync failed for", sceneId, assetId, container)
+		return nil
+	end
+	print("[DejaView] loaded uploaded room model", sceneId, assetId)
+	return container
 end
 
 -- One map fetch attempt. Returns "ok" | "wait" | "fail".
@@ -136,7 +165,7 @@ local function publishBoard()
 		if #cards >= Config.PICKER_MAX then
 			break
 		end
-		if s.status == "failed" then
+		if s.status == "failed" or s.mode == "video" then
 			continue
 		end
 		local e = cache[s.id]
@@ -162,11 +191,22 @@ local function publishBoard()
 	end
 end
 
+local listFailures = 0
+
 local function refreshList()
-	local ok, data = Backend.scenes()
+	local ok, data, status = Backend.scenes()
 	if not ok or type(data) ~= "table" then
+		-- The presence loop owns the banner once a room is loaded; before that, the room list does.
+		listFailures += 1
+		if listFailures >= 3 and (workspace:GetAttribute("SceneId") or "") == "" then
+			workspace:SetAttribute("Banner", if status == 401 then "Key rejected" else "Reconnecting to Déjà View...")
+		end
 		return
 	end
+	if listFailures >= 3 and (workspace:GetAttribute("SceneId") or "") == "" then
+		workspace:SetAttribute("Banner", "")
+	end
+	listFailures = 0
 	local fresh = {}
 	for _, s in data do
 		if type(s) == "table" and type(s.id) == "string" then
@@ -187,7 +227,7 @@ end
 
 local function prefetchOne()
 	for _, s in list do
-		if s.status == "ready" then
+		if playable(s) then
 			local e = entry(s.id)
 			if not e.map and not e.failed and os.clock() >= e.nextTry then
 				fetchOnce(s.id)
@@ -200,7 +240,7 @@ end
 local function newestReadyOther(): string?
 	local current = workspace:GetAttribute("SceneId")
 	for _, s in list do
-		if s.status == "ready" and s.id ~= current then
+		if playable(s) and s.id ~= current then
 			return s.id
 		end
 	end
@@ -229,12 +269,30 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 	workspace:SetAttribute("LoadStage", "Moving in...")
 	workspace:SetAttribute("SceneId", sceneId)
 
-	local map, reason = fetchMap(sceneId)
+	-- A room imported in Studio (ServerStorage.Rooms.<sceneId>) needs only one quick try at the block map, which is
+	-- just its invisible floor; everything else waits for the map per the contract.
+	local stored = storedRoom(sceneId)
+	local map, reason
+	if stored then
+		local e = entry(sceneId)
+		if not e.map then
+			fetchOnce(sceneId)
+		end
+		map = e.map
+	else
+		map, reason = fetchMap(sceneId)
+	end
+	if mySwitch ~= switching then
+		return
+	end
+	local visual = if stored then stored:Clone() else if map then uploadedRoom(sceneId) else nil
 	if mySwitch ~= switching then
 		return
 	end
 	local info = nil
-	if map then
+	if not map and visual then
+		info = MapBuilder.buildFromModel(sceneId, name, visual)
+	elseif map then
 		info = MapBuilder.build(map, function(built, total)
 			if mySwitch == switching then
 				workspace:SetAttribute("LoadProgress", built / math.max(total, 1))
@@ -242,9 +300,12 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 				workspace:SetAttribute("LoadTotal", total)
 				workspace:SetAttribute("LoadStage", "Moving in...")
 			end
-		end)
+		end, { collisionOnly = visual ~= nil })
 		if not info then
 			return -- cancelled by a newer switch
+		end
+		if visual then
+			MapBuilder.attachModel(visual)
 		end
 	elseif MapBuilder.hasBaked(sceneId) then
 		info = MapBuilder.buildBaked(sceneId)
@@ -320,6 +381,10 @@ function Rooms.vote(player: Player, sceneId: string)
 		return
 	end
 	local s = sceneById(sceneId)
+	if s.mode == "video" then
+		World.toast("Video memories live in the headset only", player)
+		return
+	end
 	if s.status ~= "ready" then
 		World.toast("That room is still building", player)
 		return
@@ -359,8 +424,8 @@ local function judgeIn(sceneId: string?)
 		return
 	end
 	local s = sceneById(sceneId)
-	if not s or s.status ~= "ready" then
-		return
+	if not playable(s) then
+		return -- not a Roblox room (a video memory, or still building)
 	end
 	lastFollowed = sceneId
 	World.toast("Judge entered " .. (s.name or sceneId))
@@ -377,6 +442,11 @@ end
 
 function Rooms.onActive(active: any)
 	activeSeenAt = os.clock()
+	-- Where the judge is, even when it is not a Roblox room (the game-night video): the lobby board shows it.
+	local name = if type(active) == "table" then (active.name or (sceneById(active.sceneId or "") or {}).name or "") else ""
+	if workspace:GetAttribute("JudgeRoom") ~= name then
+		workspace:SetAttribute("JudgeRoom", name)
+	end
 	if type(active) == "table" and type(active.sceneId) == "string" then
 		judgeIn(active.sceneId)
 	end
@@ -393,11 +463,35 @@ function Rooms.newestReady(): string?
 		return Config.DEFAULT_SCENE
 	end
 	for _, s in list do
-		if s.status == "ready" then
+		if playable(s) then
 			return s.id
 		end
 	end
 	return nil
+end
+
+-- Something to stand in when Déjà View cannot be reached: the first baked room, else the fixture room.
+function Rooms.loadFallback()
+	local baked = game:GetService("ServerStorage"):FindFirstChild("BakedRooms")
+	local first = baked and baked:GetChildren()[1]
+	local info = if first then MapBuilder.buildBaked(first.Name) else nil
+	if not info then
+		info = MapBuilder.build(HttpService:JSONDecode(Fixtures.MAP_SMALL))
+	end
+	if not info then
+		return
+	end
+	workspace:SetAttribute("SceneId", info.sceneId)
+	workspace:SetAttribute("RoomName", info.name)
+	workspace:SetAttribute("Phase", "room")
+	if workspace:GetAttribute("AutoJoin") == true then
+		Rooms.joinAll(true)
+	end
+	publishBoard()
+end
+
+function Rooms.isListLoaded(): boolean
+	return listLoaded
 end
 
 function Rooms.waitForList(timeout: number)

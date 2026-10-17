@@ -17,6 +17,10 @@ function Backend.map(sceneId: string, maxParts: number?)
 	return impl().map(sceneId, maxParts)
 end
 
+function Backend.model(sceneId: string)
+	return impl().model(sceneId)
+end
+
 function Backend.presence(sceneId: string, body: any)
 	return impl().presence(sceneId, body)
 end
