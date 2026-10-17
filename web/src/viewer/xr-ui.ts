@@ -4,9 +4,11 @@
 import * as THREE from 'three';
 import { BRAND } from './hud.ts';
 
-const ACCENT = 0xffb547;
-const OK = 0x7ee2a8;
-const BAD = 0xff6d5e;
+// Apple system colours, the same as the site.
+const ACCENT = 0x007aff;
+const OK = 0x34c759;
+const BAD = 0xff3b30;
+const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", Roboto, system-ui, sans-serif';
 
 let matcapTex: THREE.Texture | null = null;
 
@@ -17,15 +19,15 @@ function matcap(): THREE.Texture {
   c.width = c.height = 128;
   const g = c.getContext('2d')!;
   const base = g.createRadialGradient(46, 40, 6, 64, 64, 64);
-  base.addColorStop(0, '#d8d4cc');
-  base.addColorStop(0.35, '#8d8a85');
-  base.addColorStop(0.8, '#2b2a2c');
-  base.addColorStop(1, '#141416');
+  base.addColorStop(0, '#ffffff');
+  base.addColorStop(0.35, '#d1d1d6');
+  base.addColorStop(0.8, '#6e6e73');
+  base.addColorStop(1, '#3a3a3c');
   g.fillStyle = base;
   g.fillRect(0, 0, 128, 128);
   const rim = g.createRadialGradient(64, 64, 48, 64, 64, 64);
-  rim.addColorStop(0, 'rgba(255,200,130,0)');
-  rim.addColorStop(1, 'rgba(255,200,130,0.35)');
+  rim.addColorStop(0, 'rgba(255,255,255,0)');
+  rim.addColorStop(1, 'rgba(255,255,255,0.3)');
   g.fillStyle = rim;
   g.fillRect(0, 0, 128, 128);
   matcapTex = new THREE.CanvasTexture(c);
@@ -37,8 +39,8 @@ function matcap(): THREE.Texture {
 export function makeControllerModel(hand: 'left' | 'right'): THREE.Group {
   const g = new THREE.Group();
   g.name = `controller-${hand}`;
-  const body = new THREE.MeshMatcapMaterial({ matcap: matcap(), color: 0x9c9893 });
-  const dark = new THREE.MeshMatcapMaterial({ matcap: matcap(), color: 0x3a383a });
+  const body = new THREE.MeshMatcapMaterial({ matcap: matcap(), color: 0xf2f2f7 });
+  const dark = new THREE.MeshMatcapMaterial({ matcap: matcap(), color: 0x2c2c2e });
   const accent = new THREE.MeshBasicMaterial({ color: ACCENT });
 
   const grip = new THREE.Mesh(new THREE.CapsuleGeometry(0.017, 0.07, 6, 14), body);
@@ -269,22 +271,19 @@ export class WristPanel {
       g.arcTo(x, y, x + w, y, r);
       g.closePath();
     };
-    round(4, 4, W - 8, H - 8, 34);
-    g.fillStyle = 'rgba(18,17,21,0.9)';
+    // a light iOS-style panel: brand and time, the world's name, four tiles
+    round(4, 4, W - 8, H - 8, 40);
+    g.fillStyle = 'rgba(255,255,255,0.94)';
     g.fill();
-    g.strokeStyle = 'rgba(255,250,240,0.14)';
-    g.lineWidth = 2;
-    g.stroke();
 
-    g.fillStyle = '#ffb547';
-    g.font = '500 22px "Geist Mono", ui-monospace, monospace';
-    g.fillText(BRAND.toUpperCase(), 36, 58);
-    g.fillStyle = 'rgba(242,238,231,0.55)';
+    g.fillStyle = '#6e6e73';
+    g.font = `500 24px ${FONT}`;
+    g.fillText(BRAND, 36, 58);
     g.textAlign = 'right';
     g.fillText(this.state.time, W - 36, 58);
     g.textAlign = 'left';
-    g.fillStyle = '#f2eee7';
-    g.font = 'italic 46px "Instrument Serif", Georgia, serif';
+    g.fillStyle = '#1d1d1f';
+    g.font = `600 44px ${FONT}`;
     let title = this.state.title || BRAND;
     while (g.measureText(title).width > W - 72 && title.length > 4) title = title.slice(0, -2);
     if (title !== (this.state.title || BRAND)) title += '…';
@@ -302,13 +301,14 @@ export class WristPanel {
       const x = 36 + i * (bw + 14);
       this.buttons.push({ id, label, x, y: by, w: bw, h: bh, enabled });
       const hov = this.hover === id && enabled;
-      round(x, by, bw, bh, 24);
-      g.fillStyle = !enabled ? 'rgba(255,255,255,0.03)' : hov ? '#ffb547' : 'rgba(255,255,255,0.08)';
+      round(x, by, bw, bh, 28);
+      g.fillStyle = !enabled ? 'rgba(118,118,128,0.06)' : hov ? '#007aff' : 'rgba(118,118,128,0.12)';
       g.fill();
-      g.fillStyle = !enabled ? 'rgba(242,238,231,0.25)' : hov ? '#201505' : '#f2eee7';
+      g.fillStyle = !enabled ? 'rgba(60,60,67,0.3)' : hov ? '#ffffff' : '#007aff';
       g.strokeStyle = g.fillStyle;
       this.icon(id, x + bw / 2, by + 58, this.state.playing);
-      g.font = '500 22px "Geist", system-ui, sans-serif';
+      g.fillStyle = !enabled ? 'rgba(60,60,67,0.3)' : hov ? '#ffffff' : '#1d1d1f';
+      g.font = `500 24px ${FONT}`;
       g.textAlign = 'center';
       g.fillText(label, x + bw / 2, by + bh - 28);
       g.textAlign = 'left';

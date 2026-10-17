@@ -550,7 +550,7 @@ class GuideImpl implements Guide {
     this.layer = new HotspotLayer({ actionHint: () => (this.presenting ? 'Pull the trigger to ask' : 'Click to ask') });
     ctx.three.add(this.layer.group, this.panel.mesh);
     const laserGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]);
-    this.laser = new THREE.Line(laserGeo, new THREE.LineBasicMaterial({ color: 0xc6ff3d, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false, toneMapped: false }));
+    this.laser = new THREE.Line(laserGeo, new THREE.LineBasicMaterial({ color: 0x007aff, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false, toneMapped: false }));
     this.laser.renderOrder = 975;
     this.laser.frustumCulled = false;
     this.laser.visible = false;

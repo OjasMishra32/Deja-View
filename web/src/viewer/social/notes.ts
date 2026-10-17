@@ -6,7 +6,7 @@
 // Also the social layer's small synthesised sound set (no audio files to load).
 
 import * as THREE from 'three';
-import { CanvasPlane, FONT, INK, LIME, LIME_HEX, ORDER, damp, redrawWhenFontsLoad, roundRect, wrapText } from './ghosts.ts';
+import { ACCENT, ACCENT_HEX, BUBBLE, CanvasPlane, FONT, GLASS, INK, INK_2, ORDER, RED, damp, redrawWhenFontsLoad, roundRect, softShadow, wrapText } from './ghosts.ts';
 import { fetchJson, joinUrl, localNow, NAME_MAX, type FetchLike, type V3 } from './presence-client.ts';
 
 export interface Note {
@@ -64,6 +64,8 @@ export function parseNotes(raw: unknown): Note[] | null {
 }
 
 const NOTE_W = 0.42;
+/** Widest line of note text on the 512 px canvas (the bubble shrinks to fit shorter notes). */
+const BUBBLE_TEXT_W = 512 - 44 - 56;
 /** Footprint used to keep notes from overlapping (metres). */
 export const NOTE_GAP = { radius: 0.4, height: 0.34 };
 
@@ -338,11 +340,11 @@ export class StickyNote {
 
   constructor(public note: Note, delay = 0) {
     const lines = StickyNote.measure(note.text);
-    const pxH = Math.round(150 + lines * 58 + 70);
+    const pxH = Math.round(168 + lines * 58);
     const hm = (NOTE_W * pxH) / 512;
     this.plane = new CanvasPlane(512, pxH, NOTE_W, hm, { order: ORDER.note });
     this.plane.mesh.name = 'note';
-    this.glowMat = new THREE.MeshBasicMaterial({ color: LIME_HEX, transparent: true, opacity: 0, depthWrite: false, depthTest: false, toneMapped: false, blending: THREE.AdditiveBlending });
+    this.glowMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, depthTest: false, toneMapped: false });
     this.glow = new THREE.Mesh(new THREE.RingGeometry(0.24, 0.265, 48), this.glowMat);
     this.glow.renderOrder = ORDER.note - 1;
     this.group.add(this.glow, this.plane.mesh);
@@ -355,61 +357,51 @@ export class StickyNote {
 
   static measure(text: string): number {
     const c = document.createElement('canvas').getContext('2d')!;
-    c.font = `800 46px ${FONT}`;
-    return Math.max(1, wrapText((s) => c.measureText(s).width, text, 512 - 84, 22, 4).length);
+    c.font = `400 46px ${FONT}`;
+    return Math.max(1, wrapText((s) => c.measureText(s).width, text, BUBBLE_TEXT_W, 22, 4).length);
   }
 
   redraw(): void {
     const note = this.note;
     const pending = this.pending;
     this.plane.draw((g, W, H) => {
-      const pad = 18;
-      // soft shadow
-      g.shadowColor = 'rgba(0,0,0,0.45)';
-      g.shadowBlur = 22;
-      g.shadowOffsetY = 8;
-      roundRect(g, pad, pad, W - pad * 2, H - pad * 2 - 6, 22);
-      const grad = g.createLinearGradient(0, pad, 0, H - pad);
-      grad.addColorStop(0, pending ? '#a6c860' : '#d4ff63');
-      grad.addColorStop(1, pending ? '#90ad55' : LIME);
-      g.fillStyle = grad;
-      g.fill();
-      g.shadowColor = 'transparent';
-      // folded corner
-      g.beginPath();
-      g.moveTo(W - pad - 46, H - pad - 6);
-      g.lineTo(W - pad, H - pad - 52);
-      g.lineTo(W - pad, H - pad - 6 - 22);
-      g.arcTo(W - pad, H - pad - 6, W - pad - 22, H - pad - 6, 22);
-      g.closePath();
-      g.fillStyle = 'rgba(0,0,0,0.12)';
-      g.fill();
-      // tape
-      g.save();
-      g.translate(W / 2, pad + 4);
-      g.rotate(-0.04);
-      g.fillStyle = 'rgba(255,255,255,0.42)';
-      g.fillRect(-58, -14, 116, 30);
-      g.restore();
-      // text
-      g.fillStyle = INK;
-      g.font = `800 46px ${FONT}`;
+      // a received iMessage: the sender's name above a gray bubble with a tail at the bottom left
+      const pad = 22;
       g.textBaseline = 'alphabetic';
-      const lines = wrapText((s) => g.measureText(s).width, note.text, W - 84, 22, 4);
-      let y = 104;
-      for (const line of lines) {
-        g.fillText(line, 42, y);
-        y += 58;
-      }
-      g.font = `600 30px ${FONT}`;
-      g.fillStyle = 'rgba(11,12,10,0.72)';
-      g.fillText(`— ${note.author}`, 42, y + 14);
+      g.font = `500 30px ${FONT}`;
+      g.fillStyle = INK_2;
+      g.fillText(note.author, pad + 26, 50);
       if (pending) {
-        g.font = `600 22px ${FONT}`;
         g.textAlign = 'right';
-        g.fillText('posting…', W - 44, 58);
+        g.fillText('Sending…', W - pad - 10, 50);
         g.textAlign = 'left';
       }
+      g.font = `400 46px ${FONT}`;
+      const lines = wrapText((s) => g.measureText(s).width, note.text, BUBBLE_TEXT_W, 22, 4);
+      const widest = Math.max(...lines.map((l) => g.measureText(l).width));
+      const bx = pad, by = 68;
+      const bw = Math.min(W - pad * 2, widest + 56), bh = lines.length * 58 + 44;
+      g.globalAlpha = pending ? 0.6 : 1;
+      const reset = softShadow(g, 16, 4, 0.2);
+      g.beginPath();
+      roundRect(g, bx, by, bw, bh, 40);
+      g.fillStyle = BUBBLE;
+      g.fill();
+      // tail
+      g.beginPath();
+      g.moveTo(bx + 4, by + bh - 40);
+      g.quadraticCurveTo(bx + 6, by + bh + 2, bx - 14, by + bh + 12);
+      g.quadraticCurveTo(bx + 20, by + bh + 10, bx + 42, by + bh - 4);
+      g.closePath();
+      g.fill();
+      reset();
+      g.fillStyle = '#000';
+      let y = by + 64;
+      for (const line of lines) {
+        g.fillText(line, bx + 28, y);
+        y += 58;
+      }
+      g.globalAlpha = 1;
     });
   }
 
@@ -634,9 +626,9 @@ export function aimNoteTarget(origin: THREE.Vector3, dir: THREE.Vector3, world: 
 class AimMarker {
   readonly group = new THREE.Group();
   private card = new CanvasPlane(384, 256, 0.3, 0.2, { order: ORDER.burst });
-  private ringMat = new THREE.MeshBasicMaterial({ color: LIME_HEX, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+  private ringMat = new THREE.MeshBasicMaterial({ color: ACCENT_HEX, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
   private ring = new THREE.Mesh(new THREE.RingGeometry(0.17, 0.185, 48), this.ringMat);
-  private beamMat = new THREE.MeshBasicMaterial({ color: LIME_HEX, transparent: true, opacity: 0.75, depthTest: false, depthWrite: false, toneMapped: false });
+  private beamMat = new THREE.MeshBasicMaterial({ color: ACCENT_HEX, transparent: true, opacity: 0.75, depthTest: false, depthWrite: false, toneMapped: false });
   private beam = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, 1, 6, 1, true).rotateX(Math.PI / 2).translate(0, 0, 0.5), this.beamMat);
   private t = 0;
 
@@ -646,21 +638,27 @@ class AimMarker {
       m.frustumCulled = false;
     }
     this.card.draw((g, W, H) => {
-      roundRect(g, 8, 8, W - 16, H - 16, 26);
-      g.fillStyle = 'rgba(198,255,61,0.22)';
+      roundRect(g, 8, 8, W - 16, H - 16, 34);
+      g.fillStyle = 'rgba(255,255,255,0.86)';
       g.fill();
-      g.setLineDash([22, 14]);
+      g.beginPath();
+      g.arc(W / 2, H / 2 - 30, 40, 0, Math.PI * 2);
+      g.fillStyle = ACCENT;
+      g.fill();
+      g.strokeStyle = '#fff';
       g.lineWidth = 8;
-      g.strokeStyle = LIME;
+      g.lineCap = 'round';
+      g.beginPath();
+      g.moveTo(W / 2 - 18, H / 2 - 30);
+      g.lineTo(W / 2 + 18, H / 2 - 30);
+      g.moveTo(W / 2, H / 2 - 48);
+      g.lineTo(W / 2, H / 2 - 12);
       g.stroke();
-      g.setLineDash([]);
-      g.fillStyle = LIME;
-      g.font = `800 64px ${FONT}`;
+      g.fillStyle = INK;
+      g.font = `600 38px ${FONT}`;
       g.textAlign = 'center';
       g.textBaseline = 'middle';
-      g.fillText('+', W / 2, H / 2 - 30);
-      g.font = `800 38px ${FONT}`;
-      g.fillText('NOTE HERE', W / 2, H / 2 + 42);
+      g.fillText('Note here', W / 2, H / 2 + 46);
     });
     this.group.add(this.card.mesh, this.ring);
     this.group.visible = false;
@@ -746,17 +744,14 @@ class PhrasePicker {
     if (!this.dirty) return;
     this.dirty = false;
     this.plane.draw((g, W, H) => {
-      roundRect(g, 6, 6, W - 12, H - 12, 34);
-      g.fillStyle = 'rgba(12,13,11,0.94)';
+      roundRect(g, 6, 6, W - 12, H - 12, 40);
+      g.fillStyle = GLASS;
       g.fill();
-      g.lineWidth = 4;
-      g.strokeStyle = LIME;
-      g.stroke();
-      g.fillStyle = LIME;
-      g.font = `800 40px ${FONT}`;
+      g.fillStyle = INK;
+      g.font = `600 40px ${FONT}`;
       g.fillText('Leave a note here', 40, 72);
-      g.fillStyle = 'rgba(244,247,236,0.6)';
-      g.font = `500 24px ${FONT}`;
+      g.fillStyle = INK_2;
+      g.font = `400 24px ${FONT}`;
       g.fillText(this.status ? '' : 'Point and pull the trigger · grip again for “I was here”', 40, 110);
       this.buttons = [];
       const list = this.phrases.slice(0, 4);
@@ -765,27 +760,27 @@ class PhrasePicker {
         const x = 40 + (i % 2) * (bw + 20), y = 140 + Math.floor(i / 2) * (bh + 18);
         this.buttons.push({ id: `p${i}`, label: p, x, y, w: bw, h: bh });
         const hov = this.hover === `p${i}`;
-        roundRect(g, x, y, bw, bh, 22);
-        g.fillStyle = hov ? LIME : 'rgba(255,255,255,0.08)';
+        roundRect(g, x, y, bw, bh, 36);
+        g.fillStyle = hov ? ACCENT : BUBBLE;
         g.fill();
-        g.fillStyle = hov ? INK : '#f4f7ec';
-        g.font = `700 32px ${FONT}`;
+        g.fillStyle = hov ? '#fff' : '#000';
+        g.font = `400 32px ${FONT}`;
         const lines = wrapText((s) => g.measureText(s).width, p, bw - 40, 18, 2);
         lines.forEach((ln, k) => g.fillText(ln, x + 22, y + (lines.length === 1 ? 68 : 48 + k * 38)));
       });
       const cy = 140 + 2 * (bh + 18);
       this.buttons.push({ id: 'cancel', label: 'Cancel', x: 40, y: cy, w: W - 80, h: 84 });
-      roundRect(g, 40, cy, W - 80, 84, 22);
-      g.fillStyle = this.hover === 'cancel' ? 'rgba(255,109,94,0.9)' : 'rgba(255,255,255,0.05)';
+      roundRect(g, 40, cy, W - 80, 84, 24);
+      g.fillStyle = this.hover === 'cancel' ? RED : 'rgba(118,118,128,0.12)';
       g.fill();
-      g.fillStyle = this.hover === 'cancel' ? INK : 'rgba(244,247,236,0.75)';
-      g.font = `700 30px ${FONT}`;
+      g.fillStyle = this.hover === 'cancel' ? '#fff' : ACCENT;
+      g.font = `600 30px ${FONT}`;
       g.textAlign = 'center';
       g.fillText('Cancel', W / 2, cy + 54);
       g.textAlign = 'left';
       if (this.status) {
-        g.fillStyle = this.status.kind === 'error' ? '#ff8a7a' : LIME;
-        g.font = `700 26px ${FONT}`;
+        g.fillStyle = this.status.kind === 'error' ? RED : ACCENT;
+        g.font = `500 26px ${FONT}`;
         g.fillText(this.status.text, 40, 112);
       }
     });

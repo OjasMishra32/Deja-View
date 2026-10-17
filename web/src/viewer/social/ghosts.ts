@@ -11,17 +11,56 @@ import { ClockSync, wrapAngle, type Person, type PersonKind, type PresenceSnapsh
 // ---------------------------------------------------------------------------------------------
 // look
 
-export const LIME = '#C6FF3D';
-export const LIME_HEX = 0xc6ff3d;
-export const INK = '#0b0c0a';
+// Apple system colours on light frosted material, the same as the site.
+export const ACCENT = '#007AFF';
+export const ACCENT_HEX = 0x007aff;
+/** Text on light material. */
+export const INK = '#1d1d1f';
+/** Secondary text on light material. */
+export const INK_2 = '#6e6e73';
+/** Light material for canvas panels: a texture cannot blur what is behind it, so it is nearly opaque. */
+export const GLASS = 'rgba(255,255,255,0.94)';
+/** The gray of a received iMessage bubble. */
+export const BUBBLE = '#e9e9eb';
+export const RED = '#ff3b30';
 export const KIND_COLOR: Record<PersonKind, number> = {
-  vr: 0xc6ff3d,
-  roblox: 0xff4f9a,
-  web: 0x63e3ff,
+  vr: 0x007aff,
+  roblox: 0xff2d55,
+  web: 0xff9500,
 };
-export const KIND_LABEL: Record<PersonKind, string> = { vr: 'VR', roblox: 'ROBLOX', web: 'WEB' };
-export const FONT = '"Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
-export const MONO = '"Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+export const KIND_LABEL: Record<PersonKind, string> = { vr: 'VR', roblox: 'Roblox', web: 'Web' };
+export const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", Roboto, system-ui, sans-serif';
+export const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+
+/** The app icon (blue tile, white chat bubble with a doorway), for notification-style panels. */
+export function drawAppIcon(g: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+  g.save();
+  g.translate(x, y);
+  g.scale(size / 32, size / 32);
+  const grad = g.createLinearGradient(0, 0, 0, 32);
+  grad.addColorStop(0, '#5ac8fa');
+  grad.addColorStop(1, '#007aff');
+  roundRect(g, 0, 0, 32, 32, 7.2);
+  g.fillStyle = grad;
+  g.fill();
+  g.fillStyle = '#fff';
+  g.fill(new Path2D('M16 7.6c-5.2 0-9.4 3.4-9.4 7.7 0 2.5 1.4 4.7 3.7 6.1-.2 1.3-.9 2.5-1.9 3.4 2-.1 3.8-.8 5.1-1.9.8.1 1.6.2 2.5.2 5.2 0 9.4-3.4 9.4-7.8S21.2 7.6 16 7.6z'));
+  g.fillStyle = '#007aff';
+  g.fill(new Path2D('M13.7 19.4v-4.2a2.3 2.3 0 0 1 4.6 0v4.2z'));
+  g.restore();
+}
+
+/** A soft drop shadow under a canvas panel; call the returned function after the fill. */
+export function softShadow(g: CanvasRenderingContext2D, blur = 18, y = 4, alpha = 0.22): () => void {
+  g.shadowColor = `rgba(0,0,0,${alpha})`;
+  g.shadowBlur = blur;
+  g.shadowOffsetY = y;
+  return () => {
+    g.shadowColor = 'transparent';
+    g.shadowBlur = 0;
+    g.shadowOffsetY = 0;
+  };
+}
 
 /** Render order bands: after the splats, before the head veil (10000). */
 export const ORDER = { ghost: 700, ghostOutline: 701, label: 760, note: 740, burst: 900, hud: 980 } as const;
@@ -324,7 +363,7 @@ const bodyVert = /* glsl */ `
 // (no extra outline mesh, so nothing bleeds through the glass), soft scanlines, fading at the feet
 const bodyFrag = /* glsl */ `
   uniform vec3 color;
-  uniform vec3 lime;
+  uniform vec3 rim;
   uniform float opacity;
   uniform float time;
   uniform float floorY;
@@ -336,14 +375,13 @@ const bodyFrag = /* glsl */ `
     float ndv = abs(dot(normalize(vN), v));
     float fr = 1.0 - ndv;
     float edge = smoothstep(1.0 - edgeWidth - 0.07, 1.0 - edgeWidth, fr);
-    float scan = 0.5 + 0.5 * sin(vW.y * 46.0 - time * 2.4);
-    vec3 core = color * (0.62 + 0.18 * scan) + color * pow(fr, 1.5) * 0.7;
-    vec3 c = mix(core, lime * 1.1, edge);
+    vec3 core = color * 0.78 + color * pow(fr, 1.5) * 0.45;
+    vec3 c = mix(core, rim, edge);
     float feet = smoothstep(floorY + 0.03, floorY + 0.6, vW.y);
     float a = mix(0.5 + 0.35 * pow(fr, 1.5), 1.0, edge) * opacity * mix(0.3, 1.0, feet);
     gl_FragColor = vec4(c, a);
   }`;
-// a soft lime halo just outside the silhouette (additive, so it never darkens what is behind)
+// a faint white halo just outside the silhouette (additive, so it never darkens what is behind)
 const glowVert = /* glsl */ `
   uniform float thickness;
   varying vec3 vN;
@@ -366,7 +404,7 @@ const glowFrag = /* glsl */ `
     vec3 v = normalize(cameraPosition - vW);
     float ndv = abs(dot(normalize(vN), v));
     float feet = smoothstep(floorY + 0.03, floorY + 0.6, vW.y);
-    gl_FragColor = vec4(color * pow(ndv, 2.2) * 0.55 * opacity * feet, 1.0);
+    gl_FragColor = vec4(color * pow(ndv, 2.2) * 0.22 * opacity * feet, 1.0);
   }`;
 const ringFrag = /* glsl */ `
   uniform vec3 color;
@@ -416,7 +454,7 @@ function geo(): Shared {
 
 function glowMaterial(thickness: number): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    uniforms: { color: { value: new THREE.Color(LIME_HEX) }, opacity: { value: 1 }, floorY: { value: 0 }, thickness: { value: thickness } },
+    uniforms: { color: { value: new THREE.Color(0xffffff) }, opacity: { value: 1 }, floorY: { value: 0 }, thickness: { value: thickness } },
     vertexShader: glowVert,
     fragmentShader: glowFrag,
     transparent: true,
@@ -430,7 +468,7 @@ function bodyMaterial(color: number, edgeWidth = 0.2): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: {
       color: { value: new THREE.Color(color) },
-      lime: { value: new THREE.Color(LIME_HEX) },
+      rim: { value: new THREE.Color(0xffffff) },
       opacity: { value: 1 },
       time: geo().time,
       floorY: { value: 0 },
@@ -480,34 +518,33 @@ export class NameTag {
     const W = this.canvas.width, H = this.canvas.height;
     g.clearRect(0, 0, W, H);
     const badge = KIND_LABEL[this.kind];
-    g.font = `800 64px ${FONT}`;
+    g.font = `600 62px ${FONT}`;
     let name = this.name;
     const maxName = W - 210;
     while (g.measureText(name).width > maxName && name.length > 3) name = name.slice(0, -1);
     if (name !== this.name) name = name.replace(/\s+$/, '') + '…';
     const nameW = g.measureText(name).width;
-    g.font = `700 26px ${MONO}`;
-    const badgeW = g.measureText(badge).width + 28;
-    const w = Math.min(W - 8, nameW + badgeW + 76);
-    const x = (W - w) / 2, y = 22, h = H - 36;
+    g.font = `600 28px ${FONT}`;
+    const badgeW = g.measureText(badge).width + 30;
+    const w = Math.min(W - 24, nameW + badgeW + 76);
+    const x = (W - w) / 2, y = 24, h = H - 44;
     roundRect(g, x, y, w, h, h / 2);
-    g.fillStyle = 'rgba(11,12,10,0.86)';
+    const reset = softShadow(g);
+    g.fillStyle = GLASS;
     g.fill();
-    g.lineWidth = 5;
-    g.strokeStyle = LIME;
-    g.stroke();
-    // kind badge
+    reset();
+    // kind capsule
     const col = '#' + KIND_COLOR[this.kind].toString(16).padStart(6, '0');
-    const bx = x + 22, by = y + (h - 44) / 2;
-    roundRect(g, bx, by, badgeW, 44, 12);
+    const bx = x + 20, by = y + (h - 44) / 2;
+    roundRect(g, bx, by, badgeW, 44, 22);
     g.fillStyle = col;
     g.fill();
-    g.fillStyle = INK;
+    g.fillStyle = '#fff';
     g.textBaseline = 'middle';
-    g.fillText(badge, bx + 14, by + 23);
-    g.font = `800 64px ${FONT}`;
-    g.fillStyle = '#f4f7ec';
-    g.fillText(name, bx + badgeW + 18, y + h / 2 + 3);
+    g.fillText(badge, bx + 15, by + 23);
+    g.font = `600 62px ${FONT}`;
+    g.fillStyle = INK;
+    g.fillText(name, bx + badgeW + 16, y + h / 2 + 3);
     this.aspect = W / H;
     this.tex.needsUpdate = true;
   }
@@ -868,50 +905,49 @@ export function smoothInto(d: PoseSample, t: PoseSample, dt: number, catchup = G
 
 const STYLE_ID = 'dvs-style';
 const CSS = `
-.dvs-root { position: fixed; inset: 0; pointer-events: none; z-index: 30; font-family: ${FONT}; color: #f4f7ec; }
+.dvs-root { position: fixed; inset: 0; pointer-events: none; z-index: 30; font-family: ${FONT}; color: ${INK}; }
 .dvs-root * { box-sizing: border-box; }
-.dvs-flash { position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 40; overflow: hidden; }
-.dvs-flash::before { content: ''; position: absolute; inset: -10%; background: radial-gradient(circle at 50% 50%, rgba(198,255,61,0.34), rgba(198,255,61,0.0) 58%); animation: dvs-burst 0.9s ease-out forwards; }
-.dvs-flash__box { position: relative; display: grid; justify-items: center; gap: 10px; animation: dvs-slam 1.7s cubic-bezier(.2,1.3,.3,1) forwards; }
-.dvs-flash__word { font: 900 clamp(52px, 10.5vw, 150px)/0.86 ${FONT}; letter-spacing: -0.045em; color: ${LIME}; text-shadow: 0 0 46px rgba(198,255,61,0.55), 0 8px 0 #0b0c0a; transform: rotate(-4deg); }
-.dvs-flash__sub { font: 800 clamp(16px, 2.2vw, 26px)/1.1 ${FONT}; color: #0b0c0a; background: ${LIME}; padding: 8px 16px; border-radius: 999px; transform: rotate(-4deg); }
-.dvs-flash--banner .dvs-flash__word, .dvs-flash--end .dvs-flash__word { font-size: clamp(40px, 7.5vw, 112px); }
-.dvs-flash--end .dvs-flash__word { color: #f4f7ec; text-shadow: 0 0 36px rgba(198,255,61,0.4), 0 6px 0 #0b0c0a; }
-@keyframes dvs-slam { 0% { opacity: 0; transform: scale(1.9); } 12% { opacity: 1; transform: scale(0.94); } 20% { transform: scale(1.03); } 28% { transform: scale(1); } 82% { opacity: 1; } 100% { opacity: 0; transform: scale(1.04); } }
-@keyframes dvs-burst { 0% { opacity: 0; transform: scale(0.6); } 15% { opacity: 1; } 100% { opacity: 0; transform: scale(1.4); } }
-.dvs-round { position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); left: 50%; transform: translate(-50%, -12px); opacity: 0; transition: opacity .35s, transform .35s; display: flex; align-items: stretch; gap: 0; background: rgba(12,13,11,0.86); border: 1.5px solid rgba(198,255,61,0.55); border-radius: 18px; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); overflow: hidden; pointer-events: none; max-width: calc(100vw - 32px); }
+/* tags, round start and round end arrive as an iOS notification sliding down from the top */
+.dvs-flash { position: fixed; left: 0; right: 0; top: calc(12px + env(safe-area-inset-top, 0px)); display: flex; justify-content: center; pointer-events: none; z-index: 40; }
+.dvs-flash__box { position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr); column-gap: 12px; row-gap: 1px; align-items: center; width: min(400px, calc(100vw - 24px)); padding: 12px 16px 13px 12px; background: rgba(246,246,248,0.84); backdrop-filter: saturate(180%) blur(24px); -webkit-backdrop-filter: saturate(180%) blur(24px); border-radius: 22px; box-shadow: 0 12px 36px rgba(0,0,0,0.22), 0 1px 2px rgba(0,0,0,0.08); animation: dvs-drop 1.7s cubic-bezier(.25,.1,.25,1) forwards; }
+.dvs-flash__box::before { content: ''; grid-row: 1 / span 2; width: 40px; height: 40px; border-radius: 9px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%235ac8fa'/%3E%3Cstop offset='1' stop-color='%23007aff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7.2' fill='url(%23g)'/%3E%3Cpath d='M16 7.6c-5.2 0-9.4 3.4-9.4 7.7 0 2.5 1.4 4.7 3.7 6.1-.2 1.3-.9 2.5-1.9 3.4 2-.1 3.8-.8 5.1-1.9.8.1 1.6.2 2.5.2 5.2 0 9.4-3.4 9.4-7.8S21.2 7.6 16 7.6z' fill='%23fff'/%3E%3Cpath d='M13.7 19.4v-4.2a2.3 2.3 0 0 1 4.6 0v4.2z' fill='%23007aff'/%3E%3C/svg%3E") center / cover no-repeat; }
+.dvs-flash__box::after { content: 'now'; position: absolute; top: 13px; right: 16px; font: 400 13px/1 ${FONT}; color: #8e8e93; }
+.dvs-flash__word { grid-column: 2; padding-right: 36px; font: 600 16px/1.25 ${FONT}; color: ${INK}; letter-spacing: -0.01em; }
+.dvs-flash__sub { grid-column: 2; font: 400 15px/1.3 ${FONT}; color: ${INK}; }
+@keyframes dvs-drop { 0% { opacity: 0; transform: translateY(-120%); } 14% { opacity: 1; transform: translateY(0); } 86% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-60%); } }
+.dvs-round { position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); left: 50%; transform: translate(-50%, -12px); opacity: 0; transition: opacity .35s, transform .35s; display: flex; align-items: center; gap: 4px; padding: 6px; background: rgba(255,255,255,0.8); border-radius: 18px; backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); box-shadow: 0 8px 28px rgba(0,0,0,0.16); overflow: hidden; pointer-events: none; max-width: calc(100vw - 32px); }
 .dvs-round.is-on { opacity: 1; transform: translate(-50%, 0); }
-.dvs-round__clock { display: grid; place-items: center; padding: 10px 18px; background: ${LIME}; color: #0b0c0a; min-width: 96px; }
-.dvs-round__label { font: 800 10px/1 ${MONO}; letter-spacing: .14em; opacity: .7; }
-.dvs-round__time { font: 900 30px/1 ${MONO}; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; margin-top: 3px; }
-.dvs-round.is-urgent .dvs-round__clock { background: #ff4f9a; }
-.dvs-round__scores { display: flex; gap: 4px; padding: 8px 10px; align-items: center; overflow: hidden; }
-.dvs-score { display: grid; gap: 2px; padding: 4px 10px; border-radius: 10px; min-width: 64px; }
-.dvs-score.is-me { background: rgba(198,255,61,0.12); }
-.dvs-score__name { font: 700 12px/1.1 ${FONT}; color: rgba(244,247,236,0.7); white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
-.dvs-score__pts { font: 900 20px/1 ${MONO}; color: #f4f7ec; }
-.dvs-score.is-me .dvs-score__pts { color: ${LIME}; }
-.dvs-note-dialog { position: fixed; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(480px, calc(100vw - 32px)); background: rgba(12,13,11,0.94); border: 1.5px solid ${LIME}; border-radius: 20px; padding: 18px; display: grid; gap: 12px; z-index: 45; pointer-events: auto; font-family: ${FONT}; color: #f4f7ec; box-shadow: 0 20px 60px rgba(0,0,0,0.5); animation: dvs-rise .28s cubic-bezier(.2,1.2,.3,1); user-select: text; -webkit-user-select: text; }
+.dvs-round__clock { display: grid; place-items: center; padding: 8px 16px; background: ${ACCENT}; color: #fff; border-radius: 13px; min-width: 92px; }
+.dvs-round__label { font: 600 11px/1 ${FONT}; opacity: .85; }
+.dvs-round__time { font: 600 28px/1 ${FONT}; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; margin-top: 3px; }
+.dvs-round.is-urgent .dvs-round__clock { background: ${RED}; }
+.dvs-round__scores { display: flex; gap: 2px; padding: 0 4px; align-items: center; overflow: hidden; }
+.dvs-score { display: grid; gap: 2px; padding: 5px 10px; border-radius: 11px; min-width: 64px; }
+.dvs-score.is-me { background: rgba(0,122,255,0.1); }
+.dvs-score__name { font: 500 12px/1.1 ${FONT}; color: ${INK_2}; white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.dvs-score__pts { font: 600 20px/1 ${FONT}; font-variant-numeric: tabular-nums; color: ${INK}; }
+.dvs-score.is-me .dvs-score__pts { color: ${ACCENT}; }
+.dvs-note-dialog { position: fixed; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(460px, calc(100vw - 32px)); background: rgba(250,250,252,0.9); backdrop-filter: saturate(180%) blur(24px); -webkit-backdrop-filter: saturate(180%) blur(24px); border-radius: 22px; padding: 18px; display: grid; gap: 12px; z-index: 45; pointer-events: auto; font-family: ${FONT}; color: ${INK}; box-shadow: 0 20px 60px rgba(0,0,0,0.3); animation: dvs-rise .3s cubic-bezier(.25,.1,.25,1); user-select: text; -webkit-user-select: text; }
 @keyframes dvs-rise { from { opacity: 0; transform: translate(-50%, 16px); } to { opacity: 1; transform: translate(-50%, 0); } }
-.dvs-note-dialog__title { font: 800 20px/1.1 ${FONT}; color: ${LIME}; letter-spacing: -0.01em; }
+.dvs-note-dialog__title { font: 600 19px/1.2 ${FONT}; color: ${INK}; letter-spacing: -0.01em; }
 .dvs-note-dialog__chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.dvs-chip { font: 700 13px/1 ${FONT}; color: #f4f7ec; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); border-radius: 999px; padding: 9px 13px; cursor: pointer; }
-.dvs-chip:hover, .dvs-chip:focus-visible { background: ${LIME}; color: #0b0c0a; border-color: ${LIME}; outline: none; }
-.dvs-note-dialog__input { font: 600 16px/1.2 ${FONT}; color: #f4f7ec; background: rgba(255,255,255,0.06); border: 1.5px solid rgba(255,255,255,0.14); border-radius: 12px; padding: 12px 14px; outline: none; width: 100%; }
-.dvs-note-dialog__input:focus { border-color: ${LIME}; }
+.dvs-chip { font: 400 15px/1 ${FONT}; color: #000; background: ${BUBBLE}; border: 0; border-radius: 18px; padding: 9px 14px; cursor: pointer; }
+.dvs-chip:hover, .dvs-chip:focus-visible { background: ${ACCENT}; color: #fff; outline: none; }
+.dvs-note-dialog__input { font: 400 16px/1.25 ${FONT}; color: ${INK}; background: #fff; border: 1px solid rgba(60,60,67,0.2); border-radius: 18px; padding: 10px 14px; outline: none; width: 100%; }
+.dvs-note-dialog__input:focus { border-color: ${ACCENT}; box-shadow: 0 0 0 3px rgba(0,122,255,0.2); }
 .dvs-note-dialog__row { display: flex; justify-content: flex-end; gap: 8px; }
-.dvs-note-dialog__status { font: 600 13px/1.2 ${FONT}; color: rgba(244,247,236,0.6); min-height: 1em; }
-.dvs-note-dialog__status.is-error { color: #ff8a7a; }
-.dvs-btn { font: 800 14px/1 ${FONT}; color: #0b0c0a; background: ${LIME}; border: 0; border-radius: 12px; padding: 12px 16px; cursor: pointer; }
-.dvs-btn--ghost { background: transparent; color: rgba(244,247,236,0.75); border: 1px solid rgba(255,255,255,0.16); }
-.dvs-reality { position: fixed; left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(84px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 6px; padding: 12px 14px; background: rgba(12,13,11,0.86); border: 1.5px solid rgba(198,255,61,0.4); border-radius: 16px; font-family: ${FONT}; opacity: 0; transform: translateY(8px); transition: opacity .4s, transform .4s; pointer-events: none; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.dvs-note-dialog__status { font: 400 13px/1.2 ${FONT}; color: ${INK_2}; min-height: 1em; }
+.dvs-note-dialog__status.is-error { color: #d70015; }
+.dvs-btn { font: 600 15px/1 ${FONT}; color: #fff; background: ${ACCENT}; border: 0; border-radius: 12px; padding: 11px 16px; cursor: pointer; }
+.dvs-btn--ghost { background: rgba(118,118,128,0.12); color: ${ACCENT}; }
+.dvs-reality { position: fixed; left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(84px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 7px; padding: 12px 14px; background: rgba(255,255,255,0.82); border-radius: 16px; font-family: ${FONT}; opacity: 0; transform: translateY(8px); transition: opacity .4s, transform .4s; pointer-events: none; backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); box-shadow: 0 8px 28px rgba(0,0,0,0.16); }
 .dvs-reality.is-on { opacity: 1; transform: none; }
-.dvs-reality__title { font: 800 11px/1 ${MONO}; letter-spacing: .16em; color: ${LIME}; }
-.dvs-reality__row { display: flex; align-items: center; gap: 8px; font: 700 13px/1.1 ${FONT}; color: #f4f7ec; }
-.dvs-reality__dot { width: 12px; height: 12px; border-radius: 4px; flex: none; }
-.dvs-reality__pct { font: 800 12px/1 ${MONO}; color: rgba(244,247,236,0.6); margin-left: auto; padding-left: 10px; }
-@media (max-width: 560px) { .dvs-round__time { font-size: 24px; } .dvs-score { min-width: 52px; padding: 4px 6px; } .dvs-reality { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); } }
-@media (prefers-reduced-motion: reduce) { .dvs-flash__box, .dvs-flash::before, .dvs-note-dialog { animation-duration: 0.01s; } }
+.dvs-reality__title { font: 600 13px/1 ${FONT}; color: ${INK}; }
+.dvs-reality__row { display: flex; align-items: center; gap: 8px; font: 400 13px/1.1 ${FONT}; color: ${INK}; }
+.dvs-reality__dot { width: 12px; height: 12px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12); }
+.dvs-reality__pct { font: 500 13px/1 ${FONT}; font-variant-numeric: tabular-nums; color: ${INK_2}; margin-left: auto; padding-left: 10px; }
+@media (max-width: 560px) { .dvs-round__time { font-size: 22px; } .dvs-score { min-width: 52px; padding: 4px 6px; } .dvs-reality { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); } }
+@media (prefers-reduced-motion: reduce) { .dvs-flash__box, .dvs-note-dialog { animation-duration: 0.01s; } }
 `;
 
 /** Adds the social layer's stylesheet once. */

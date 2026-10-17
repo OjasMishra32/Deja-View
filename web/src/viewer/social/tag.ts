@@ -1,12 +1,12 @@
 // Tag moments (contracts 6.4): Roblox's server is the referee and sends `tag` and `round`
 // events; the Déjà View server stamps them with `t` and pushes {type:'roblox', event} on /ws.
-// The headset shows a big TAGGED flash with a haptic pulse and a burst at the target, a
-// "TAG: YOU'RE IT" banner on round start, a round timer and scoreboard, and a winner card.
+// The headset shows a "Tagged" notification with a haptic pulse and a burst at the target, a
+// "You're it" notification on round start, a round timer and scoreboard, and a winner card.
 //
 // Also the in-headset toasts (DOM toasts are invisible in a headset).
 
 import * as THREE from 'three';
-import { CanvasPlane, FONT, INK, LIME, LIME_HEX, MONO, ORDER, damp, redrawWhenFontsLoad, roundRect } from './ghosts.ts';
+import { ACCENT, ACCENT_HEX, CanvasPlane, FONT, GLASS, INK, INK_2, ORDER, RED, damp, drawAppIcon, redrawWhenFontsLoad, roundRect, softShadow } from './ghosts.ts';
 import { toSeconds } from './presence-client.ts';
 
 export const DEFAULT_ROUND_SECONDS = 90;
@@ -223,41 +223,39 @@ class HeadBanner {
     this.plane.mesh.name = 'tag-banner';
   }
 
-  show(word: string, sub: string | null, accent = LIME, dur = 1.7): void {
+  show(word: string, sub: string | null, accent = ACCENT, dur = 1.7): void {
     const draw = () =>
       this.plane.draw((g, W, H) => {
-        g.textAlign = 'center';
-        g.textBaseline = 'middle';
-        let size = 210;
-        g.font = `900 ${size}px ${FONT}`;
-        while (g.measureText(word).width > W - 60 && size > 70) {
-          size -= 10;
-          g.font = `900 ${size}px ${FONT}`;
+        // a notification card: app icon, title, message, "now"
+        const x = 24, y = 60, w = W - 48, h = H - 120;
+        roundRect(g, x, y, w, h, 64);
+        const reset = softShadow(g, 30, 8, 0.28);
+        g.fillStyle = GLASS;
+        g.fill();
+        reset();
+        drawAppIcon(g, x + 40, y + (h - 120) / 2, 120);
+        g.textBaseline = 'alphabetic';
+        g.textAlign = 'right';
+        g.fillStyle = '#8e8e93';
+        g.font = `400 38px ${FONT}`;
+        g.fillText('now', x + w - 44, y + 74);
+        g.textAlign = 'left';
+        const tx = x + 196, maxW = w - 196 - 140;
+        let size = 66;
+        g.font = `600 ${size}px ${FONT}`;
+        while (g.measureText(word).width > maxW && size > 40) {
+          size -= 4;
+          g.font = `600 ${size}px ${FONT}`;
         }
-        g.save();
-        g.translate(W / 2, H * 0.4);
-        g.rotate(-0.06);
-        g.lineJoin = 'round';
-        g.lineWidth = 22;
-        g.strokeStyle = 'rgba(11,12,10,0.92)';
-        g.strokeText(word, 0, 0);
-        g.shadowColor = accent;
-        g.shadowBlur = 40;
-        g.fillStyle = accent;
-        g.fillText(word, 0, 0);
-        g.restore();
+        g.fillStyle = accent === RED ? RED : INK;
+        g.fillText(word, tx, sub ? y + h / 2 - 8 : y + h / 2 + 22);
         if (sub) {
-          g.font = `800 46px ${FONT}`;
-          const w = Math.min(W - 40, g.measureText(sub).width + 60);
-          g.save();
-          g.translate(W / 2, H * 0.82);
-          g.rotate(-0.06);
-          roundRect(g, -w / 2, -38, w, 76, 38);
-          g.fillStyle = accent;
-          g.fill();
+          g.font = `400 50px ${FONT}`;
           g.fillStyle = INK;
-          g.fillText(sub, 0, 3);
-          g.restore();
+          let line = sub;
+          while (g.measureText(line).width > w - 196 - 50 && line.length > 4) line = line.slice(0, -2);
+          if (line !== sub) line = line.replace(/\s+$/, '') + '…';
+          g.fillText(line, tx, y + h / 2 + 62);
         }
       });
     draw();
@@ -277,11 +275,11 @@ class HeadBanner {
       this.plane.opacity = 0;
       return;
     }
-    // slam: big and transparent -> slightly small -> settle; fade at the end
-    const inT = Math.min(1, this.t / 0.22);
-    const scale = inT < 1 ? 1.9 - 0.96 * easeOut(inT) : 0.94 + 0.06 * Math.min(1, (this.t - 0.22) / 0.2);
-    this.plane.mesh.scale.setScalar(scale);
-    this.plane.opacity = Math.min(1, this.t / 0.08) * (p > 0.8 ? 1 - (p - 0.8) / 0.2 : 1);
+    // drops in from slightly above, settles, fades at the end
+    const inT = Math.min(1, this.t / 0.32);
+    this.plane.mesh.position.y = 0.04 + 0.06 * (1 - easeOut(inT));
+    this.plane.mesh.scale.setScalar(0.97 + 0.03 * easeOut(inT));
+    this.plane.opacity = easeOut(inT) * (p > 0.82 ? 1 - (p - 0.82) / 0.18 : 1);
   }
 }
 
@@ -306,44 +304,41 @@ class RoundPanel {
     if (key === this.key) return;
     this.key = key;
     this.plane.draw((g, W, H) => {
-      roundRect(g, 4, 4, W - 8, H - 8, 30);
-      g.fillStyle = 'rgba(12,13,11,0.92)';
+      roundRect(g, 4, 4, W - 8, H - 8, 34);
+      g.fillStyle = GLASS;
       g.fill();
-      g.lineWidth = 4;
-      g.strokeStyle = 'rgba(198,255,61,0.7)';
-      g.stroke();
       // clock block
-      roundRect(g, 18, 18, 230, H - 36, 22);
-      g.fillStyle = urgent ? '#ff4f9a' : LIME;
+      roundRect(g, 18, 18, 230, H - 36, 24);
+      g.fillStyle = urgent ? RED : ACCENT;
       g.fill();
-      g.fillStyle = INK;
+      g.fillStyle = '#fff';
       g.textAlign = 'center';
-      g.font = `800 22px ${MONO}`;
+      g.font = `600 28px ${FONT}`;
       g.fillText(title, 133, 70);
-      g.font = `900 92px ${MONO}`;
+      g.font = `600 88px ${FONT}`;
       g.fillText(time, 133, 190);
       g.textAlign = 'left';
       // scores
       const list = rows.slice(0, 4);
       if (!list.length) {
-        g.fillStyle = 'rgba(244,247,236,0.6)';
-        g.font = `700 30px ${FONT}`;
+        g.fillStyle = INK_2;
+        g.font = `400 30px ${FONT}`;
         g.fillText('Tag them with your hands', 276, H / 2 + 10);
       }
       list.forEach((r, i) => {
         const y = 62 + i * 66;
         if (r.me) {
           roundRect(g, 266, y - 42, W - 286, 58, 14);
-          g.fillStyle = 'rgba(198,255,61,0.14)';
+          g.fillStyle = 'rgba(0,122,255,0.1)';
           g.fill();
         }
-        g.fillStyle = r.me ? LIME : '#f4f7ec';
-        g.font = `800 34px ${FONT}`;
+        g.fillStyle = r.me ? ACCENT : INK;
+        g.font = `500 34px ${FONT}`;
         let name = r.me ? `${r.name} (you)` : r.name;
         while (g.measureText(name).width > W - 420 && name.length > 3) name = name.slice(0, -2);
         g.fillText(name, 284, y);
         g.textAlign = 'right';
-        g.font = `900 40px ${MONO}`;
+        g.font = `600 40px ${FONT}`;
         g.fillText(String(r.score), W - 36, y + 2);
         g.textAlign = 'left';
       });
@@ -387,30 +382,27 @@ export class XrToast {
   }
 
   show(title: string, body = '', kind: 'info' | 'error' | 'ok' = 'info', seconds = 3.2): void {
-    const accent = kind === 'error' ? '#ff6d5e' : LIME;
+    const accent = kind === 'error' ? RED : INK;
     const draw = () =>
       this.plane.draw((g, W, H) => {
-        roundRect(g, 4, 4, W - 8, H - 8, 34);
-        g.fillStyle = 'rgba(12,13,11,0.93)';
+        roundRect(g, 4, 4, W - 8, H - 8, 40);
+        g.fillStyle = GLASS;
         g.fill();
-        g.lineWidth = 4;
-        g.strokeStyle = accent;
-        g.stroke();
-        roundRect(g, 26, 34, 12, H - 68, 6);
+        const icon = Math.min(76, H - 56);
+        drawAppIcon(g, 30, (H - icon) / 2, icon);
+        const tx = 30 + icon + 24, maxW = W - tx - 34;
         g.fillStyle = accent;
-        g.fill();
-        g.fillStyle = '#f4f7ec';
-        g.font = `800 44px ${FONT}`;
+        g.font = `600 42px ${FONT}`;
         let tt = title;
-        while (g.measureText(tt).width > W - 100 && tt.length > 4) tt = tt.slice(0, -2);
-        g.fillText(tt, 62, body ? 88 : 116);
+        while (g.measureText(tt).width > maxW && tt.length > 4) tt = tt.slice(0, -2);
+        g.fillText(tt, tx, body ? 88 : 116);
         if (body) {
-          g.fillStyle = 'rgba(244,247,236,0.7)';
-          g.font = `600 30px ${FONT}`;
+          g.fillStyle = INK_2;
+          g.font = `400 32px ${FONT}`;
           let bb = body;
-          while (g.measureText(bb).width > W - 100 && bb.length > 4) bb = bb.slice(0, -2);
+          while (g.measureText(bb).width > maxW && bb.length > 4) bb = bb.slice(0, -2);
           if (bb !== body) bb = bb.replace(/\s+$/, '') + '…';
-          g.fillText(bb, 62, 142);
+          g.fillText(bb, tx, 140);
         }
       });
     draw();
@@ -436,9 +428,9 @@ export class XrToast {
 /** The world-space burst where someone got tagged: a shock ring, sparks, and a rising tag. */
 class TagBurst {
   readonly group = new THREE.Group();
-  private ringMat = new THREE.MeshBasicMaterial({ color: LIME_HEX, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, blending: THREE.AdditiveBlending });
+  private ringMat = new THREE.MeshBasicMaterial({ color: ACCENT_HEX, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, blending: THREE.AdditiveBlending });
   private ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.5, 64), this.ringMat);
-  private sparkMat = new THREE.MeshBasicMaterial({ color: LIME_HEX, transparent: true, depthTest: false, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending });
+  private sparkMat = new THREE.MeshBasicMaterial({ color: ACCENT_HEX, transparent: true, depthTest: false, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending });
   private sparks: THREE.InstancedMesh;
   private dirs: THREE.Vector3[] = [];
   private label = new CanvasPlane(512, 160, 0.62, 0.194, { order: ORDER.burst + 1 });
@@ -461,14 +453,14 @@ class TagBurst {
     }
     this.label.mesh.position.y = headY - at.y + 0.45;
     this.label.draw((g, W, H) => {
-      roundRect(g, 6, 6, W - 12, H - 12, 40);
-      g.fillStyle = LIME;
+      roundRect(g, 10, 10, W - 20, H - 20, (H - 20) / 2);
+      g.fillStyle = GLASS;
       g.fill();
-      g.fillStyle = INK;
+      g.fillStyle = ACCENT;
       g.textAlign = 'center';
       g.textBaseline = 'middle';
-      g.font = `900 100px ${FONT}`;
-      g.fillText('TAGGED', W / 2, H / 2 + 6);
+      g.font = `600 96px ${FONT}`;
+      g.fillText('Tagged', W / 2, H / 2 + 4);
     });
     this.group.add(this.ring, this.sparks, this.label.mesh);
   }
@@ -577,11 +569,11 @@ export class TagHud {
     const sub = me ? `${byName} got you` : mine ? `You got ${tName}` : `${byName} got ${tName}`;
     this.host.sounds.tag();
     if (this.host.presenting()) {
-      this.banner.show('TAGGED', sub, LIME, 1.6);
+      this.banner.show('Tagged', sub, ACCENT, 1.6);
       pulseControllers(this.host.session(), mine || me ? 1 : 0.5, 140);
       if (mine || me) setTimeout(() => pulseControllers(this.host.session(), 0.6, 110), 200);
     }
-    this.domFlash('TAGGED', sub);
+    this.domFlash('Tagged', sub);
     const where = this.host.whereIs(target);
     if (where) {
       const b = new TagBurst(where.position, where.head.y);
@@ -592,13 +584,13 @@ export class TagHud {
 
   private onStart(youAreIt: boolean, duration: number): void {
     this.host.sounds.roundStart();
-    const word = youAreIt ? "YOU'RE IT" : 'TAG!';
+    const word = youAreIt ? "You're it" : 'Tag!';
     const sub = youAreIt ? `${Math.round(duration)} s · tag them with your hands` : `${Math.round(duration)} s round`;
     if (this.host.presenting()) {
-      this.banner.show(word, sub, LIME, 2.4);
+      this.banner.show(word, sub, ACCENT, 2.4);
       pulseControllers(this.host.session(), 0.6, 120);
     }
-    this.domFlash(youAreIt ? "TAG: YOU'RE IT" : 'TAG!', sub, 'banner');
+    this.domFlash(youAreIt ? "Tag: you're it" : 'Tag!', sub, 'banner');
     this.lastTick = -1;
   }
 
@@ -607,8 +599,8 @@ export class TagHud {
     const name = winner ? this.host.nameOf(winner) : null;
     const me = winner ? this.host.myIds().has(winner) : false;
     const sub = name ? (me ? 'You win!' : `${name} wins`) : "It's a tie";
-    if (this.host.presenting()) this.banner.show('ROUND OVER', sub, LIME, 3.4);
-    this.domFlash('ROUND OVER', sub, 'end', 3200);
+    if (this.host.presenting()) this.banner.show('Round over', sub, ACCENT, 3.4);
+    this.domFlash('Round over', sub, 'end', 3200);
     this.endShownUntil = this.host.serverNow() + 6;
   }
 
@@ -643,7 +635,7 @@ export class TagHud {
     const rows = showRound ? this.game.rows((id) => this.host.nameOf(id)) : [];
     const time = left !== null ? formatClock(left) : '0:00';
     const urgent = left !== null && left <= 10;
-    const title = left !== null ? (this.game.it && this.host.myIds().has(this.game.it) ? "YOU'RE IT" : 'TAG') : 'FINAL';
+    const title = left !== null ? (this.game.it && this.host.myIds().has(this.game.it) ? "You're it" : 'Tag') : 'Final';
     if (left !== null && left <= 5 && left > 0) {
       const s = Math.ceil(left);
       if (s !== this.lastTick) {

@@ -440,11 +440,10 @@ export function stackLifts(list: Array<{ position: Vec3 }>, near = 0.4, step = 0
 // ---------------------------------------------------------------------------------------------
 // The label layer (three.js)
 
-export const LIME = '#C6FF3D';
-const LIME_HEX = 0xc6ff3d;
-const INK = '#0B0B0C';
-const FONT = '"Geist", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
-const MONO = '"Geist Mono", ui-monospace, "SF Mono", Menlo, monospace';
+// Apple colours: frosted white pills with dark text, blue when you point at one.
+export const ACCENT = '#007AFF';
+const INK = '#1d1d1f';
+const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", Roboto, system-ui, sans-serif';
 
 const CW = 640;
 const CH = 256;
@@ -648,9 +647,9 @@ export class HotspotLayer {
     root.name = `hotspot:${h.label}`;
     root.position.set(h.position[0], h.position[1], h.position[2]);
     const mat = (o: THREE.MeshBasicMaterialParameters) => new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false, toneMapped: false, ...o });
-    const pinMat = mat({ color: LIME_HEX });
-    const haloMat = mat({ color: LIME_HEX, opacity: 0.5, side: THREE.DoubleSide });
-    const stemMat = mat({ color: LIME_HEX, opacity: 0.75 });
+    const pinMat = mat({ color: 0xffffff });
+    const haloMat = mat({ color: 0xffffff, opacity: 0.45, side: THREE.DoubleSide });
+    const stemMat = mat({ color: 0xffffff, opacity: 0.8 });
     const pin = new THREE.Mesh(new THREE.SphereGeometry(0.011, 16, 10), pinMat);
     const halo = new THREE.Mesh(new THREE.RingGeometry(0.017, 0.022, 32), haloMat);
     const stemGeo = new THREE.CylinderGeometry(0.0022, 0.0022, 1, 6, 1, true);
@@ -702,26 +701,19 @@ export class HotspotLayer {
     const px = (CW - pw) / 2;
     // soft shadow
     g.save();
-    g.shadowColor = 'rgba(0,0,0,0.45)';
-    g.shadowBlur = 14;
-    if (lit) {
-      g.shadowColor = 'rgba(198,255,61,0.55)';
-      g.shadowBlur = 22;
-    }
+    g.shadowColor = 'rgba(0,0,0,0.28)';
+    g.shadowBlur = 16;
+    g.shadowOffsetY = 4;
     roundRect(g, px, pillY, pw, PILL_H, PILL_H / 2);
-    g.fillStyle = filled ? LIME : 'rgba(14,14,16,0.9)';
+    g.fillStyle = filled ? ACCENT : 'rgba(255,255,255,0.92)';
     g.fill();
     g.restore();
-    roundRect(g, px + 1.5, pillY + 1.5, pw - 3, PILL_H - 3, PILL_H / 2);
-    g.lineWidth = 3;
-    g.strokeStyle = filled ? 'rgba(11,11,12,0.3)' : 'rgba(198,255,61,0.55)';
-    g.stroke();
-    // dot
+    // marker
     g.beginPath();
     g.arc(px + 44, pillY + PILL_H / 2, 10, 0, Math.PI * 2);
-    g.fillStyle = filled ? INK : LIME;
+    g.fillStyle = filled ? '#fff' : ACCENT;
     g.fill();
-    g.fillStyle = filled ? INK : '#F4F4F0';
+    g.fillStyle = filled ? '#fff' : INK;
     g.textBaseline = 'middle';
     g.textAlign = 'left';
     g.fillText(label, px + 68, pillY + PILL_H / 2 + 2);
@@ -734,18 +726,15 @@ export class HotspotLayer {
       const lines = it.h.blurb ? wrapLines(it.h.blurb, cardW - 56, (s) => g.measureText(s).width, 2) : [];
       const cardH = 30 + lines.length * 40 + 44;
       const cardY = pillY - 10 - cardH;
-      roundRect(g, cardX, cardY, cardW, cardH, 26);
-      g.fillStyle = 'rgba(14,14,16,0.92)';
+      roundRect(g, cardX, cardY, cardW, cardH, 30);
+      g.fillStyle = 'rgba(255,255,255,0.94)';
       g.fill();
-      g.lineWidth = 2;
-      g.strokeStyle = 'rgba(198,255,61,0.35)';
-      g.stroke();
-      g.fillStyle = 'rgba(244,244,240,0.9)';
+      g.fillStyle = INK;
       g.textBaseline = 'alphabetic';
       lines.forEach((l, i) => g.fillText(l, cardX + 28, cardY + 52 + i * 40));
-      g.font = `600 23px ${MONO}`;
-      g.fillStyle = LIME;
-      g.fillText(this.opts.actionHint().toUpperCase(), cardX + 28, cardY + cardH - 20);
+      g.font = `500 26px ${FONT}`;
+      g.fillStyle = ACCENT;
+      g.fillText(this.opts.actionHint(), cardX + 28, cardY + cardH - 20);
       it.hitRects.push({ x: cardX, y: cardY, w: cardW, h: cardH });
     }
     it.tex.needsUpdate = true;
