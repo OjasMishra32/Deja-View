@@ -43,20 +43,25 @@ export interface HpgConfig {
 }
 
 export function hpgConfig(env: Record<string, string | undefined> = process.env): HpgConfig {
+  const profile = (env.HPG_PROFILE ?? 'hipergator').trim().toLowerCase() || 'hipergator';
+  if (profile !== 'hipergator' && profile !== 'pace') {
+    throw new Error(`unknown HPG_PROFILE '${profile}' (use hipergator or pace)`);
+  }
+  const pace = profile === 'pace';
   const cfg: HpgConfig = {
     enabled: !/^(0|off|false|no)$/i.test((env.THIRDWHEEL_HPG ?? '').trim()),
-    socket: expandHome(env.HPG_SOCKET || '~/.ssh/cm-hpg'),
-    user: env.HPG_USER || 'sbernalorta',
-    host: env.HPG_HOST || 'hpg.rc.ufl.edu',
-    root: (env.HPG_ROOT || '/blue/phz3152/sbernalorta/thirdwheel').replace(/\/+$/, ''),
-    account: env.HPG_ACCOUNT || 'phz3152',
-    qos: env.HPG_QOS || env.HPG_ACCOUNT || 'phz3152',
-    partition: env.HPG_PARTITION ?? 'hpg-rtx6000',
+    socket: expandHome((pace ? env.PACE_SOCKET : env.HPG_SOCKET) || (pace ? '~/.ssh/cm-pace-ice' : '~/.ssh/cm-hpg')),
+    user: (pace ? env.PACE_USER : env.HPG_USER) || (pace ? 'bmorgan62' : 'sbernalorta'),
+    host: (pace ? env.PACE_HOST : env.HPG_HOST) || (pace ? 'login-ice.pace.gatech.edu' : 'hpg.rc.ufl.edu'),
+    root: ((pace ? env.PACE_ROOT : env.HPG_ROOT) || (pace ? '/home/hice1/bmorgan62/scratch/thirdwheel' : '/blue/phz3152/sbernalorta/thirdwheel')).replace(/\/+$/, ''),
+    account: (pace ? env.PACE_ACCOUNT : env.HPG_ACCOUNT) || (pace ? 'math' : 'phz3152'),
+    qos: (pace ? env.PACE_QOS : env.HPG_QOS) || (pace ? env.PACE_ACCOUNT || 'coe-ice' : env.HPG_ACCOUNT || 'phz3152'),
+    partition: pace ? env.PACE_PARTITION ?? 'ice-bw-gpu' : env.HPG_PARTITION ?? 'hpg-rtx6000',
     ssh: env.HPG_SSH_BIN || 'ssh',
     rsync: env.HPG_RSYNC_BIN || 'rsync',
     connectTimeout: Number(env.HPG_CONNECT_TIMEOUT || 10),
     repoDir: ROOT,
-    site: 'HiPerGator',
+    site: pace ? 'PACE ICE' : 'HiPerGator',
     slurm: true,
     login: 'socket',
     identity: '',

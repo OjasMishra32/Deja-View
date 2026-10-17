@@ -4,6 +4,13 @@ World generation (FlashWorld for Rent Free and the Third Wheel room, AnySplat fo
 HiPerGator GPUs. The Bun server on the Mac drives everything over one SSH ControlMaster socket. This page is for
 the teammate who holds the login, and for anyone touching `hpg/`.
 
+## Two cluster profiles
+
+The default profile is Ojasva's HiPerGator allocation.
+Brianna's PACE ICE allocation is opt-in and uses the same `hpg/` scripts.
+Set `HPG_PROFILE=pace` with the `PACE_*` values in `.env.example` for that lane.
+Do not change the default `HPG_*` values when Ojasva is using HiPerGator.
+
 ## Etiquette first
 
 - This is a **class allocation** (account and QOS `phz3152`) with **two GPUs for the whole class**. Use **one GPU at a
