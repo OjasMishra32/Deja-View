@@ -9,4 +9,3 @@ __pycache__/
 *.log
 .DS_Store
 .context/
-team/
