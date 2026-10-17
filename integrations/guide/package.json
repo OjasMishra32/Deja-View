@@ -1,0 +1,13 @@
+{
+  "name": "dejaview-guide",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=.env server.mjs",
+    "dev": "node --watch --env-file=.env server.mjs"
+  },
+  "dependencies": {
+    "@google/genai": "^1.30.0"
+  }
+}
