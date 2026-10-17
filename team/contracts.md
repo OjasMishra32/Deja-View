@@ -281,6 +281,9 @@ of being ready. A room is loadable once its map (6.2) returns 200.
 
 ### 6.2b The real room: `GET BASE/api/roblox/:sceneId/model` and `.../model.glb`
 
+Shivin's experience: "Deja View", place id `106038900865360` (VR / Meta Quest enabled). Join link for a room:
+`https://www.roblox.com/games/start?placeId=106038900865360&launchData=<sceneId>`.
+
 Photo scenes only. `model.glb` is the room as a textured mesh in named chunks (`room_00`, ...), each under Roblox's
 triangle limit, in the same frame as the map. `model` is JSON: units, studsPerMeter, chunk names and triangle counts,
 bounds, spawn in studs, and `assetId` once the server has uploaded it with Open Cloud (only when `ROBLOX_API_KEY` and
