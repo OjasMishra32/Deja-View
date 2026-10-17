@@ -2,6 +2,7 @@
 -- The proxy is inflated so it covers the rough scanned original. No data means no change.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Backend = require(script.Parent.Backend)
+local ObjectFixtures = require(ReplicatedStorage.Shared.ObjectFixtures)
 local ObjectLayout = require(ReplicatedStorage.Shared.ObjectLayout)
 
 local ObjectLayer = {}
@@ -47,15 +48,15 @@ end
 
 function ObjectLayer.build(sceneId: string, room: Instance?)
 	local ok, doc, status = Backend.objects(sceneId)
-	if not ok or type(doc) ~= "table" then
-		if status ~= 404 then
-			warn("[DejaView] object layer unavailable for", sceneId, status)
+	if not ok or type(doc) ~= "table" or type(doc.objects) ~= "table" or #doc.objects == 0 then
+		doc = ObjectFixtures[sceneId]
+		if not doc then
+			if status ~= 404 then
+				warn("[DejaView] object layer unavailable for", sceneId, status)
+			end
+			return
 		end
-		return
-	end
-	local objects = doc.objects
-	if type(objects) ~= "table" or #objects == 0 then
-		return
+		print(`[DejaView] using baked object layer for {sceneId}`)
 	end
 	local plan = ObjectLayout.plan(doc, { style = doc.style or "flat", inflate = 0.15 })
 	local container = room or workspace:FindFirstChild("Room") or workspace
