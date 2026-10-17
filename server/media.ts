@@ -1,6 +1,9 @@
 // Media helpers built on ffmpeg/ffprobe (Homebrew) and macOS sips.
+// HDR video (HLG or PQ, e.g. any iPhone 12 or later clip) is tone-mapped to SDR in thumbnails, extracted frames
+// and frame picking (server/hdr.ts); SDR video takes exactly the plain path.
 
-import { rename, unlink } from 'node:fs/promises';
+import { rename, stat, unlink } from 'node:fs/promises';
+import { hdrChain, hdrSourceFromStream, RGB_TO_JPEG, type HdrChain, type HdrSource, type HdrTransfer } from './hdr.ts';
 
 export const FFMPEG = process.env.FFMPEG_BIN || 'ffmpeg';
 export const FFPROBE = process.env.FFPROBE_BIN || 'ffprobe';
@@ -60,6 +63,21 @@ export async function execBytes(argv: string[], timeoutMs = 120_000): Promise<{ 
 
 export function lastLines(text: string, n = 6): string {
   return text.trim().split(/\r?\n/).slice(-n).join('\n');
+}
+
+/**
+ * A file we cannot use. `message` is the end of a product sentence that follows the file name
+ * ('"clip.mp4" looks incomplete ...'); `detail` is the tool output, for the server log only.
+ */
+export class MediaReadError extends Error {
+  constructor(
+    message: string,
+    readonly detail = '',
+    readonly reason: 'unreadable' | 'no-video' | 'no-duration' = 'unreadable',
+  ) {
+    super(message);
+    this.name = 'MediaReadError';
+  }
 }
 
 export type MediaKind = 'jpeg' | 'png' | 'heic' | 'webp' | 'gif' | 'avif' | 'bmp' | 'tiff' | 'video' | 'unknown';
@@ -228,32 +246,94 @@ export interface ProbeInfo {
   hasAudio: boolean;
   codec: string;
   rotation: number;
+  /** Set for HDR video ('hlg' or 'pq'); thumbnails and extracted frames are tone-mapped to SDR. */
+  hdr?: HdrTransfer;
 }
 
-/** ffprobe a video. Throws a readable error when the file has no decodable video stream. */
+// ---- colour / HDR detection: probeVideo records each file's colour so the frame helpers need no second probe.
+
+const colorCache = new Map<string, { version: string; source: HdrSource | null }>();
+
+async function fileVersion(path: string): Promise<string | null> {
+  try {
+    const st = await stat(path);
+    return `${st.mtimeMs}:${st.size}`;
+  } catch {
+    return null;
+  }
+}
+
+async function rememberColor(path: string, source: HdrSource | null): Promise<void> {
+  const version = await fileVersion(path);
+  if (version === null) return;
+  if (colorCache.size > 256) colorCache.clear();
+  colorCache.set(path, { version, source });
+}
+
+/** How to tone-map this video, or null for SDR (or when it cannot be probed). Free after probeVideo. */
+export async function videoHdrSource(path: string): Promise<HdrSource | null> {
+  const version = await fileVersion(path);
+  const hit = colorCache.get(path);
+  if (hit && version !== null && hit.version === version) return hit.source;
+  const r = await exec(
+    [FFPROBE, '-v', 'error', '-select_streams', 'v', '-print_format', 'json', '-show_entries',
+      'stream=codec_type,color_transfer,color_primaries,color_space,color_range:stream_disposition=attached_pic', path],
+    { timeoutMs: 30_000 },
+  ).catch(() => null);
+  if (!r || r.code !== 0) return null;
+  let streams: any[] = [];
+  try {
+    streams = JSON.parse(r.stdout).streams ?? [];
+  } catch {
+    return null;
+  }
+  const v = streams.find((s) => s.disposition?.attached_pic !== 1);
+  if (!v) return null;
+  const source = hdrSourceFromStream(v);
+  await rememberColor(path, source);
+  return source;
+}
+
+/** The tone-mapping filters for an HDR video, null for SDR (or when the LUT cannot be written). */
+async function hdrFor(path: string): Promise<HdrChain | null> {
+  const source = await videoHdrSource(path);
+  if (!source) return null;
+  try {
+    return await hdrChain(source);
+  } catch (e) {
+    console.warn(`[media] HDR tone mapping unavailable for ${path}: ${(e as Error).message}`);
+    return null;
+  }
+}
+
+const UNREADABLE_VIDEO = 'looks incomplete or damaged (still copying?). Export or AirDrop it again.';
+
+/** ffprobe a video. Throws a MediaReadError (product phrase + tool output) when it has no usable video stream. */
 export async function probeVideo(path: string): Promise<ProbeInfo> {
   const r = await exec(
     [FFPROBE, '-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', path],
     { timeoutMs: 30_000 },
   );
-  if (r.code !== 0) throw new Error(`not a readable video (${lastLines(r.stderr, 2) || 'ffprobe failed'})`);
+  if (r.code !== 0) throw new MediaReadError(UNREADABLE_VIDEO, `ffprobe exit ${r.code}: ${lastLines(r.stderr, 3)}`);
   let info: any;
   try {
     info = JSON.parse(r.stdout);
   } catch {
-    throw new Error('not a readable video (ffprobe output unreadable)');
+    throw new MediaReadError(UNREADABLE_VIDEO, 'ffprobe output unreadable');
   }
   const streams: any[] = info.streams ?? [];
   const v = streams.find((s) => s.codec_type === 'video' && s.disposition?.attached_pic !== 1);
-  if (!v) throw new Error('the file has no video stream');
+  if (!v) throw new MediaReadError('has no video in it.', 'no video stream', 'no-video');
   const duration = Number(v.duration ?? info.format?.duration ?? 0);
-  if (!(duration > 0)) throw new Error('the video has no duration (is it a still image or truncated?)');
+  if (!(duration > 0)) throw new MediaReadError('looks incomplete (it has no length). Export it again.', 'no duration in the container', 'no-duration');
   const rate = String(v.avg_frame_rate || v.r_frame_rate || '0/1');
   const [n, d] = rate.split('/').map(Number);
   const fps = d ? n! / d : Number(n) || 0;
   let rotation = 0;
   for (const sd of v.side_data_list ?? []) if (typeof sd.rotation === 'number') rotation = sd.rotation;
   if (v.tags?.rotate) rotation = Number(v.tags.rotate) || rotation;
+  const hdr = hdrSourceFromStream(v);
+  await rememberColor(path, hdr);
   return {
     duration,
     width: Number(v.width) || 0,
@@ -262,6 +342,7 @@ export async function probeVideo(path: string): Promise<ProbeInfo> {
     hasAudio: streams.some((s) => s.codec_type === 'audio'),
     codec: String(v.codec_name ?? ''),
     rotation,
+    ...(hdr ? { hdr: hdr.transfer } : {}),
   };
 }
 
@@ -308,7 +389,7 @@ export async function normalizeImage(src: string, kind: MediaKind, dest: string)
   if (tmp) await unlink(tmp).catch(() => {});
   if (r.code !== 0 || !(await Bun.file(out).exists())) {
     await unlink(out).catch(() => {});
-    throw new Error(`could not read the image (${lastLines(r.stderr, 2) || 'ffmpeg failed'})`);
+    throw new MediaReadError("isn't a photo we can open.", `ffmpeg exit ${r.code}: ${lastLines(r.stderr, 3)}`);
   }
   if (exif.focal35) {
     const bytes = new Uint8Array(await Bun.file(out).arrayBuffer());
@@ -347,17 +428,41 @@ export async function thumbFromImage(src: string, dest: string, width = 640): Pr
   await rename(out, dest);
 }
 
-/** Thumbnail from a video frame at time t (seconds). Rotation metadata is applied by ffmpeg. */
+/** Thumbnail from a video frame at time t (seconds). Rotation metadata is applied by ffmpeg; HDR is tone-mapped. */
 export async function thumbFromVideo(src: string, dest: string, t: number, width = 640): Promise<void> {
   const out = `${dest}.part.jpg`;
-  const args = (ss: number) => [
+  const hdr = await hdrFor(src);
+  const plainVf = `scale='min(${width},iw)':-2,format=yuvj420p`;
+  const hdrVf = hdr ? [`scale='min(${width},iw)':-2${hdr.scaleOptions}`, ...hdr.toSdr, RGB_TO_JPEG].join(',') : null;
+  const args = (ss: number, vf: string) => [
     FFMPEG, '-hide_banner', '-loglevel', 'error', '-y', '-ss', ss.toFixed(3), '-i', src, '-frames:v', '1',
-    '-vf', `scale='min(${width},iw)':-2,format=yuvj420p`, '-q:v', '4', out,
+    '-vf', vf, '-q:v', '4', out,
   ];
-  let r = await exec(args(t), { timeoutMs: 60_000 });
-  if ((r.code !== 0 || !(await Bun.file(out).exists())) && t > 0) r = await exec(args(0), { timeoutMs: 60_000 });
+  const run = (ss: number) => runWithHdrFallback(hdrVf, plainVf, out, (vf) => args(ss, vf), 60_000, src);
+  let r = await run(t);
+  if ((r.code !== 0 || !(await Bun.file(out).exists())) && t > 0) r = await run(0);
   if (r.code !== 0 || !(await Bun.file(out).exists())) throw new Error(`thumbnail failed: ${lastLines(r.stderr, 2)}`);
   await rename(out, dest);
+}
+
+/**
+ * Runs ffmpeg with the tone-mapping filters when there are any; if that writes nothing, runs it again with the
+ * plain filters (an ffmpeg without lut3d still gets a picture, just not tone-mapped).
+ */
+async function runWithHdrFallback(
+  hdrVf: string | null,
+  plainVf: string,
+  out: string,
+  argv: (vf: string) => string[],
+  timeoutMs: number,
+  src: string,
+): Promise<ExecResult> {
+  if (hdrVf) {
+    const r = await exec(argv(hdrVf), { timeoutMs });
+    if (r.code === 0 && (await Bun.file(out).exists())) return r;
+    console.warn(`[media] HDR tone mapping failed for ${src}, using the plain frame: ${lastLines(r.stderr, 2)}`);
+  }
+  return exec(argv(plainVf), { timeoutMs });
 }
 
 /** A soft gradient placeholder for prompt-only scenes. */
@@ -379,12 +484,48 @@ export async function placeholderThumb(dest: string, seed: number): Promise<void
   await rename(out, dest);
 }
 
-/** Full-resolution still at time t (seconds). */
+/**
+ * Rewrites a video's container without re-encoding. Streamed recordings (MediaRecorder WebM, many screen and game
+ * recorders) have no duration in the header; a remux to a seekable file writes it, for us and for the pipelines.
+ */
+export async function remuxVideo(src: string, dest: string): Promise<void> {
+  const r = await exec([FFMPEG, '-hide_banner', '-loglevel', 'error', '-y', '-i', src, '-map', '0', '-c', 'copy', dest], { timeoutMs: 5 * 60_000 });
+  if (r.code !== 0 || !(await Bun.file(dest).exists())) {
+    await unlink(dest).catch(() => {});
+    throw new MediaReadError(UNREADABLE_VIDEO, `remux failed (exit ${r.code}): ${lastLines(r.stderr, 3)}`);
+  }
+}
+
+/** Containers without a seek index (broadcast/recorder streams): seeking into them lands mid-GOP and decodes nothing. */
+export const UNINDEXED_VIDEO_EXT = new Set(['ts', 'm2ts', 'mts', 'mpg', 'mpeg', 'flv']);
+
+/**
+ * Copies the video and audio streams of an unindexed container (game and camera recordings in .ts, .m2ts, .mpg ...)
+ * into Matroska, which has a seek index, without re-encoding. Data streams are dropped. Throws MediaReadError.
+ */
+export async function remuxToIndexed(src: string, dest: string): Promise<void> {
+  const r = await exec(
+    [FFMPEG, '-hide_banner', '-loglevel', 'error', '-y', '-fflags', '+genpts', '-i', src, '-map', '0:v:0', '-map', '0:a:0?', '-c', 'copy', '-f', 'matroska', dest],
+    { timeoutMs: 5 * 60_000 },
+  );
+  if (r.code !== 0 || !(await Bun.file(dest).exists()) || Bun.file(dest).size === 0) {
+    await unlink(dest).catch(() => {});
+    throw new MediaReadError(UNREADABLE_VIDEO, `remux to Matroska failed (exit ${r.code}): ${lastLines(r.stderr, 3)}`);
+  }
+}
+
+/** Full-resolution still at time t (seconds). HDR is tone-mapped to SDR. */
 export async function extractFrame(src: string, t: number, dest: string): Promise<void> {
   const out = `${dest}.part.jpg`;
-  const r = await exec(
-    [FFMPEG, '-hide_banner', '-loglevel', 'error', '-y', '-ss', t.toFixed(3), '-i', src, '-frames:v', '1', '-vf', 'format=yuvj420p', '-q:v', '2', out],
-    { timeoutMs: 60_000 },
+  const hdr = await hdrFor(src);
+  const hdrVf = hdr ? [`scale=flags=accurate_rnd+full_chroma_int${hdr.scaleOptions}`, ...hdr.toSdr, RGB_TO_JPEG].join(',') : null;
+  const r = await runWithHdrFallback(
+    hdrVf,
+    'format=yuvj420p',
+    out,
+    (vf) => [FFMPEG, '-hide_banner', '-loglevel', 'error', '-y', '-ss', t.toFixed(3), '-i', src, '-frames:v', '1', '-vf', vf, '-q:v', '2', out],
+    60_000,
+    src,
   );
   if (r.code !== 0 || !(await Bun.file(out).exists())) throw new Error(`frame extraction failed: ${lastLines(r.stderr, 2)}`);
   await rename(out, dest);
@@ -426,11 +567,17 @@ export async function pickBestFrameTime(src: string, duration: number, samples =
   const start = Math.min(0.3, duration * 0.05);
   const span = Math.max(0.1, duration - start - Math.min(0.3, duration * 0.05));
   const fps = Math.min(8, Math.max(0.2, samples / span));
-  const r = await execBytes(
-    [FFMPEG, '-hide_banner', '-loglevel', 'error', '-ss', start.toFixed(3), '-i', src, '-t', span.toFixed(3),
-      '-vf', `fps=${fps.toFixed(4)},scale=${W}:${H}:flags=area,format=gray`, '-f', 'rawvideo', 'pipe:1'],
-    180_000,
-  );
+  const argv = (vf: string) => [FFMPEG, '-hide_banner', '-loglevel', 'error', '-ss', start.toFixed(3), '-i', src, '-t', span.toFixed(3),
+    '-vf', vf, '-f', 'rawvideo', 'pipe:1'];
+  const hdr = await hdrFor(src);
+  let r = hdr
+    ? await execBytes(argv([`fps=${fps.toFixed(4)}`, `scale=${W}:${H}:flags=area${hdr.scaleOptions}`, ...hdr.toSdr, 'format=gray'].join(',')), 180_000)
+    : null;
+  if (r && (r.code !== 0 || r.data.length < W * H)) {
+    console.warn(`[media] HDR tone mapping failed for ${src}, picking from plain frames: ${lastLines(r.stderr, 2)}`);
+    r = null;
+  }
+  r ??= await execBytes(argv(`fps=${fps.toFixed(4)},scale=${W}:${H}:flags=area,format=gray`), 180_000);
   const frameBytes = W * H;
   const count = Math.floor(r.data.length / frameBytes);
   if (r.code !== 0 || count === 0) return Math.min(duration / 2, 1);

@@ -2,6 +2,7 @@
 // ring, and a wrist panel with buttons (selected with the trigger).
 
 import * as THREE from 'three';
+import { BRAND } from './hud.ts';
 
 const ACCENT = 0xffb547;
 const OK = 0x7ee2a8;
@@ -277,16 +278,16 @@ export class WristPanel {
 
     g.fillStyle = '#ffb547';
     g.font = '500 22px "Geist Mono", ui-monospace, monospace';
-    g.fillText('THIRDWHEEL', 36, 58);
+    g.fillText(BRAND.toUpperCase(), 36, 58);
     g.fillStyle = 'rgba(242,238,231,0.55)';
     g.textAlign = 'right';
     g.fillText(this.state.time, W - 36, 58);
     g.textAlign = 'left';
     g.fillStyle = '#f2eee7';
     g.font = 'italic 46px "Instrument Serif", Georgia, serif';
-    let title = this.state.title || 'ThirdWheel';
+    let title = this.state.title || BRAND;
     while (g.measureText(title).width > W - 72 && title.length > 4) title = title.slice(0, -2);
-    if (title !== (this.state.title || 'ThirdWheel')) title += '…';
+    if (title !== (this.state.title || BRAND)) title += '…';
     g.fillText(title, 36, 116);
 
     const defs: Array<[string, string, boolean]> = [

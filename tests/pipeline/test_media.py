@@ -3,10 +3,10 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from conftest import make_clip, requires_ffmpeg
+from pipeline_helpers import make_clip, requires_ffmpeg
 
 from common.jobio import Job, JobError, write_json_atomic
-from common.media import fit_size, iter_frames, load_image, output_fps, probe
+from common.media import MediaError, fit_size, iter_frames, load_image, output_fps, probe
 
 
 def test_fit_size_long_side_and_multiples():
@@ -36,6 +36,43 @@ def test_probe_and_decode(tmp_path):
     assert info.has_audio and info.fps == pytest.approx(10)
     frames = list(iter_frames(clip, (160, 112), fps=Fraction(5)))
     assert len(frames) in (5, 6) and frames[0].shape == (112, 160, 3)
+
+
+def test_media_error_keeps_detail_and_product_sentence():
+    e = MediaError("ffprobe could not read x.mp4: moov atom not found", user="We couldn't read this video.")
+    assert str(e) == "ffprobe could not read x.mp4: moov atom not found" and e.user == "We couldn't read this video."
+    assert MediaError("technical only").user is None
+    assert isinstance(e, RuntimeError)
+
+
+def _product_sentence(e: MediaError) -> str:
+    assert e.user and e.user.endswith("."), e.user
+    for word in ("ffmpeg", "ffprobe", "pillow", "heif", "stream", "decode"):
+        assert word not in e.user.lower(), e.user
+    return e.user
+
+
+@requires_ffmpeg
+def test_media_errors_carry_a_product_sentence(tmp_path):
+    import subprocess
+
+    (tmp_path / "notes.mp4").write_text("not a video")
+    with pytest.raises(MediaError) as ei:
+        probe(tmp_path / "notes.mp4")
+    assert "notes.mp4" in str(ei.value) and "ffprobe" in str(ei.value)
+    assert "video" in _product_sentence(ei.value)
+    with pytest.raises(MediaError) as ei:
+        list(iter_frames(tmp_path / "notes.mp4", (64, 48)))
+    assert "could not decode" in str(ei.value) and _product_sentence(ei.value)
+    audio = tmp_path / "voice.m4a"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=0.3", "-c:a", "aac", str(audio)], check=True)
+    with pytest.raises(MediaError) as ei:
+        probe(audio)
+    assert "no video stream" in str(ei.value) and "no video" in _product_sentence(ei.value)
+    (tmp_path / "broken.jpg").write_bytes(b"\xff\xd8\xff\x00 not really a jpeg")
+    with pytest.raises(MediaError) as ei:
+        load_image(tmp_path / "broken.jpg")
+    assert "broken.jpg" in str(ei.value) and "photo" in _product_sentence(ei.value)
 
 
 def test_load_image_heic_and_png(tmp_path):

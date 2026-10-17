@@ -1,7 +1,7 @@
 // Capture / upload flow, phone first: pick a mode, take or choose media, name it, upload with
 // progress, land on the gallery with the new card highlighted.
 
-import { createScene, getHealth, lanUrls, splitErrorMessage, type CreatableMode, type UploadFile, type UploadHandle } from './api.ts';
+import { ApiError, createScene, errorText, getHealth, lanUrls, type UploadFile, type UploadHandle, type UploadMode } from './api.ts';
 import { qrSvg } from './gallery.ts';
 
 export type MediaKind = 'image' | 'video';
@@ -12,26 +12,25 @@ export interface SelectionSummary {
   prompt: string;
 }
 
-/** Returns an error message, or null when the selection can be uploaded for this mode. */
-export function validateSelection(mode: CreatableMode, sel: SelectionSummary): string | null {
+/** Returns an error message, or null when the selection can be uploaded in this mode. */
+export function validateSelection(mode: UploadMode, sel: SelectionSummary): string | null {
   const { images, videos } = sel;
   const prompt = sel.prompt.trim();
-  if (mode === 'thirdwheel') {
-    if (images > 0) return 'Third Wheel takes one video, not photos. Photos go in Rent Free.';
-    if (videos === 0) return 'Add one video: prop the phone up, hit record, cook.';
+  if (mode === 'video') {
+    if (images > 0) return 'Video mode takes one video, not photos. Photos go in Photo mode.';
+    if (videos === 0) return 'Add one video: prop the phone up and hit record.';
     if (videos > 1) return 'Just one video, please. Pick your favourite take.';
     return null;
   }
-  if (mode === 'rentfree') {
-    if (images > 0 && videos > 0) return 'Pick photos or a clip, not both.';
-    if (videos > 1) return 'One clip at a time.';
-    if (!images && !videos && !prompt) return 'Add a photo or a clip, or describe a room in the prompt.';
-    return null;
-  }
-  if (images > 0 && videos > 0) return 'Pick photos or a video, not both.';
-  if (videos > 1) return 'One video at a time.';
-  if (!videos && images < 8) return `Reconstruct needs at least 8 photos (you have ${images}) or one video.`;
+  if (images > 0 && videos > 0) return 'Pick a photo or a clip, not both.';
+  if (videos > 1) return 'One clip at a time.';
+  if (!images && !videos && !prompt) return 'Add a photo, or describe a room in the prompt.';
   return null;
+}
+
+/** The mode a capture link asks for. Older links used the internal ids. */
+export function modeFromParam(value: string | null): UploadMode {
+  return value === 'video' || value === 'thirdwheel' ? 'video' : 'photo';
 }
 
 export function kindOf(file: { type: string; name: string }): MediaKind | null {
@@ -43,10 +42,39 @@ export function kindOf(file: { type: string; name: string }): MediaKind | null {
   return null;
 }
 
-/** The message to keep on the page after a failed upload. */
-export function uploadErrorMessage(error: unknown): string {
+export interface FormMessage {
+  message: string;
+  details: string;
+}
+
+/** The message (and any technical details) to keep on the page after a failed upload. */
+export function uploadErrorMessage(error: unknown): FormMessage {
   const msg = error instanceof Error ? error.message : String(error ?? '');
-  return msg.trim() || 'The upload failed without a reason. Try again.';
+  return {
+    message: msg.trim() || 'The upload did not go through. Try again.',
+    details: error instanceof ApiError ? error.details : '',
+  };
+}
+
+export interface FormState {
+  mode: UploadMode;
+  selection: SelectionSummary;
+  /** Validation problems are only shown once Submit has been pressed, except picks that can never work. */
+  triedSubmit: boolean;
+  /** The server's answer to the last upload, kept until the selection or mode changes. */
+  uploadError: FormMessage | null;
+  /** Notes about the last pick (skipped files, a long clip). */
+  pickNotes: string[];
+}
+
+/** What the form shows under the button: a problem with the selection, else the last upload's error, else pick notes. */
+export function formMessage(s: FormState): FormMessage | null {
+  const problem = validateSelection(s.mode, s.selection);
+  const neverWorks = s.mode === 'video' && (s.selection.images > 0 || s.selection.videos > 1);
+  if (problem && (s.triedSubmit || neverWorks)) return { message: problem, details: '' };
+  if (s.uploadError) return s.uploadError;
+  if (s.pickNotes.length) return { message: s.pickNotes.join(' '), details: '' };
+  return null;
 }
 
 /** Size that fits inside max x max, never upscaling. */
@@ -186,22 +214,72 @@ export async function downscaleToJpeg(file: Blob, max = 2048, quality = 0.9): Pr
   }
 }
 
-function videoInfo(file: Blob): Promise<{ duration: number; width: number; height: number }> {
+interface VideoInfo {
+  duration: number;
+  width: number;
+  height: number;
+  /** False when this browser cannot show a frame of it (a truncated file, or a codec it lacks). */
+  decodes: boolean;
+}
+
+/** Where in a clip its preview frame is taken: a second in, or a quarter of the way through a short one. */
+export function previewTime(duration: number | undefined): number {
+  return Number.isFinite(duration) && duration! > 0 ? Math.round(Math.min(1, duration! * 0.25) * 100) / 100 : 0.1;
+}
+
+/** True when a decoded frame is pure black, which is what a frame with missing data turns into. */
+function frameIsBlank(v: HTMLVideoElement): boolean {
+  try {
+    const c = document.createElement('canvas');
+    c.width = 32;
+    c.height = 18;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return false;
+    ctx.drawImage(v, 0, 0, c.width, c.height);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    let max = 0;
+    for (let i = 0; i < d.length; i += 4) max = Math.max(max, d[i], d[i + 1], d[i + 2]);
+    return max < 6;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Reads a clip's size and length, then decodes its preview frame. A file that is still copying
+ * can have complete metadata and no error event, yet decode to black: the frame data is missing.
+ * Browsers that only load metadata until playback (iOS Safari) never finish the seek, so a clip
+ * with metadata and no error counts as fine there.
+ */
+function videoInfo(file: Blob): Promise<VideoInfo> {
   return new Promise((resolve) => {
     const v = document.createElement('video');
     const url = URL.createObjectURL(file);
-    const done = (info: { duration: number; width: number; height: number }) => {
+    let info: VideoInfo = { duration: NaN, width: 0, height: 0, decodes: false };
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const done = (decodes: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      v.onloadedmetadata = v.onseeked = v.onerror = null;
       URL.revokeObjectURL(url);
       v.removeAttribute('src');
       v.load();
-      resolve(info);
+      resolve({ ...info, decodes });
     };
-    v.preload = 'metadata';
+    v.preload = 'auto';
     v.muted = true;
     v.playsInline = true;
-    v.onloadedmetadata = () => done({ duration: v.duration, width: v.videoWidth, height: v.videoHeight });
-    v.onerror = () => done({ duration: NaN, width: 0, height: 0 });
-    setTimeout(() => done({ duration: NaN, width: 0, height: 0 }), 8000);
+    v.onloadedmetadata = () => {
+      info = { duration: v.duration, width: v.videoWidth, height: v.videoHeight, decodes: false };
+      clearTimeout(timer);
+      timer = setTimeout(() => done(info.width > 0), 2500);
+      v.currentTime = previewTime(v.duration);
+    };
+    v.onseeked = () => done(v.videoWidth > 0 && !frameIsBlank(v));
+    v.onerror = () => done(false);
+    timer = setTimeout(() => done(false), 8000);
     v.src = url;
   });
 }
@@ -209,20 +287,62 @@ function videoInfo(file: Blob): Promise<{ duration: number; width: number; heigh
 // ---------------------------------------------------------------------------------------------
 // Page
 
-interface Item {
+/** What a preview tile needs to know about a picked file. */
+export interface PreviewItem {
   id: number;
   kind: MediaKind;
-  file: File;
-  blob?: Blob; // processed upload (images)
+  file: { size: number };
+  blob?: { size: number }; // processed upload (images)
   url: string; // preview
   width?: number;
   height?: number;
   duration?: number;
+  /** raw: this browser could not decode it, so it is sent as is and the server has the final say. */
   status: 'processing' | 'ready' | 'raw';
-  note?: string;
 }
 
-const COPY: Record<CreatableMode, {
+interface Item extends PreviewItem {
+  file: File;
+  blob?: Blob;
+}
+
+const ICON_PHOTO =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>';
+const ICON_VIDEO =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10.5l5-3v9l-5-3z"/></svg>';
+
+function esc(s: unknown): string {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+}
+
+/**
+ * One preview tile. Media this browser cannot decode would only show a broken or black frame, so
+ * photos and videos alike get a placeholder tile instead.
+ */
+export function previewTile(it: PreviewItem): string {
+  const size = formatBytes((it.kind === 'image' && it.blob?.size) || it.file.size);
+  const meta =
+    it.status === 'processing'
+      ? it.kind === 'video'
+        ? 'reading…'
+        : 'shrinking…'
+      : it.status === 'raw'
+        ? `sent as is · ${size}`
+        : it.kind === 'video'
+          ? `${Number.isFinite(it.duration) ? `${it.duration!.toFixed(1)} s · ` : ''}${it.width ? `${it.width}×${it.height} · ` : ''}${size}`
+          : it.width
+            ? `${it.width}×${it.height} · ${size}`
+            : size;
+  const media =
+    it.status === 'raw'
+      ? `<div class="pv-ph" aria-hidden="true">${it.kind === 'video' ? ICON_VIDEO : ICON_PHOTO}<span>No preview</span></div>`
+      : it.kind === 'video'
+        ? `<video src="${esc(it.url)}#t=${previewTime(it.duration)}" muted playsinline preload="metadata"></video>`
+        : `<img src="${esc(it.url)}" alt="">`;
+  return `<div class="pv${it.kind === 'video' ? ' wide' : ''}" data-id="${it.id}">${media}<span class="pv-meta">${esc(meta)}</span><button type="button" class="pv-x" aria-label="Remove">&times;</button></div>`;
+}
+
+const COPY: Record<UploadMode, {
   eyebrow: string;
   title: string;
   lede: string;
@@ -232,76 +352,53 @@ const COPY: Record<CreatableMode, {
   name: string;
   promptLabel: string;
   promptHint: string;
+  promptPlaceholder: string;
   submit: string;
   sideTitle: string;
   tips: [string, string][];
   note: string;
 }> = {
-  rentfree: {
-    eyebrow: 'New world · Rent Free',
-    title: 'Snap it. Move in.',
-    lede: 'One photo of a room, a calm game clip, or just a description. We build the rest of the room around it.',
-    media: 'Add your shot',
+  photo: {
+    eyebrow: 'New world · Photo',
+    title: 'One photo. The whole room.',
+    lede: 'Take one photo of a room, or just describe one. The parts the camera missed get built around it, so you can turn around and walk in.',
+    media: 'Add your photo',
     camera: ['Take a photo', 'Opens the camera on a phone', 'image/*'],
-    files: ['Choose photos or a clip', 'Or drop files here', 'image/*,video/*'],
-    name: 'Room, rent free',
-    promptLabel: 'Prompt',
-    promptHint: 'optional, or use it instead of a photo',
+    files: ['Choose a photo', 'A short clip works too. Or drop it here', 'image/*,video/*'],
+    name: 'My room',
+    promptLabel: 'Describe it',
+    promptHint: 'optional; with no photo, this alone builds the room',
+    promptPlaceholder: 'A sunlit kitchen with green tiles and a very judgmental cat',
     submit: 'Build my world',
     sideTitle: 'One wide photo from a corner.',
     tips: [
-      ['Back into a corner and shoot wide.', 'Floor and ceiling in the frame.'],
+      ['Back into a corner and shoot wide.', 'Get the floor and the ceiling in the frame.'],
       ['Lights on, no zoom, landscape.', 'Hold still for a beat before you tap.'],
-      ['Game clips: calm camera.', 'Slow pans, no menus, no motion blur. We pick the sharpest frame.'],
+      ['Using a clip?', 'Keep the camera calm. The sharpest, steadiest frame is the one that gets used.'],
     ],
-    note: 'What happens next: a world model builds the whole room around your shot, including what is behind you. Seconds on the warm GPU worker, a few minutes on a fallback.',
+    note: 'What happens next: the rest of the room is generated around your photo, including what was behind you. Seconds on the warm GPU, a few minutes on a backup.',
   },
-  thirdwheel: {
-    eyebrow: 'New world · Third Wheel',
-    title: 'Roll camera. Be the third wheel.',
-    lede: 'One video of someone doing something: cooking, juggling, explaining their sourdough starter. You get to stand in the room with them.',
+  video: {
+    eyebrow: 'New world · Video',
+    title: 'Roll camera. Step inside.',
+    lede: 'One video from a phone that stays put: someone cooking, dancing, explaining their sourdough starter. You get the room, with the real footage standing in it, sound and all.',
     media: 'Add one video',
     camera: ['Record a video', 'Opens the camera on a phone', 'video/*'],
     files: ['Choose a video', 'Or drop it here', 'video/*'],
-    name: 'Cooking, plus one',
+    name: 'Kitchen, take one',
     promptLabel: 'Describe the room',
     promptHint: 'optional, helps fill in what the camera missed',
-    submit: 'Third-wheel it',
+    promptPlaceholder: 'A small kitchen with open shelves and a window over the sink',
+    submit: 'Make it walkable',
     sideTitle: 'Prop the phone. Do not hold it.',
     tips: [
       ['Prop the phone on something solid.', 'The room is built from whatever stays still.'],
       ['Whole person in frame, 1 to 3 m away.', 'Feet included, please.'],
       ['10 to 30 seconds, good light.', 'Nobody walking through the shot.'],
     ],
-    note: 'What happens next: per-frame depth, a cut-out of your friend, an empty-room plate, then a generated room around it. Sound stays. A minute or two on the GPU.',
-  },
-  reconstruct: {
-    eyebrow: 'New world · Reconstruct',
-    title: 'Every angle. Exactly.',
-    lede: 'Lots of overlapping photos become a faithful copy of exactly what you shot. Nothing invented.',
-    media: 'Add 8 or more photos, or a video',
-    camera: ['Take a photo', 'Repeat as you walk around', 'image/*'],
-    files: ['Choose photos or a video', 'Or drop them here', 'image/*,video/*'],
-    name: 'Exact copy',
-    promptLabel: 'Notes',
-    promptHint: 'optional',
-    submit: 'Reconstruct it',
-    sideTitle: 'Walk a slow loop.',
-    tips: [
-      ['8 to 40 photos, overlapping by half.', 'Step sideways between shots, do not just turn.'],
-      ['Same exposure throughout.', 'No zoom, no portrait mode.'],
-      ['A slow walking video works too.', 'We sample frames from it.'],
-    ],
-    note: 'What happens next: cameras are estimated and a splat is fitted to your photos. Takes a few minutes on the GPU.',
+    note: 'What happens next: depth for every frame, the moving parts lifted out, an empty-room plate, then a room built around it. The sound stays. A minute or two on the GPU.',
   },
 };
-
-const ICON_PHOTO =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>';
-
-function esc(s: unknown): string {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-}
 
 function main() {
   const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -318,9 +415,7 @@ function main() {
   const dropzone = $('dropzone');
 
   const params = new URLSearchParams(location.search);
-  let mode: CreatableMode = (['rentfree', 'thirdwheel', 'reconstruct'] as const).includes(params.get('mode') as CreatableMode)
-    ? (params.get('mode') as CreatableMode)
-    : 'rentfree';
+  let mode: UploadMode = modeFromParam(params.get('mode'));
   let items: Item[] = [];
   let nextId = 1;
   let nameTouched = false;
@@ -328,7 +423,7 @@ function main() {
   let triedSubmit = false;
   // Messages that outlive revalidate(): the server's answer to the last upload, and notes about
   // the last pick (skipped files, a long clip). Both clear when the selection or mode changes.
-  let uploadError: string | null = null;
+  let uploadError: FormMessage | null = null;
   let pickNotes: string[] = [];
 
   const summary = (): SelectionSummary => ({
@@ -337,11 +432,12 @@ function main() {
     prompt: promptInput.value,
   });
 
-  /** Shows a message; server errors keep their tool output in a collapsed details block. */
-  function showError(msg: string | null) {
-    if (errorEl.dataset.msg === (msg ?? '')) return; // keep an opened details block open
-    errorEl.dataset.msg = msg ?? '';
-    const { headline, detail } = splitErrorMessage(msg);
+  /** Shows a message; technical details from the server go in a collapsed block. */
+  function showError(msg: string | null, details = '') {
+    const key = msg ? `${msg}\u0000${details}` : '';
+    if (errorEl.dataset.msg === key) return; // keep an opened details block open
+    errorEl.dataset.msg = key;
+    const { headline, detail } = errorText(msg, details);
     errorEl.replaceChildren();
     if (!headline) return;
     const line = document.createElement('span');
@@ -366,16 +462,12 @@ function main() {
   }
 
   function revalidate() {
-    // Do not nag before the first attempt, except for picks that can never work in this mode.
-    const sel = summary();
-    const err = validateSelection(mode, sel);
-    const hardWrong = mode === 'thirdwheel' && (sel.images > 0 || sel.videos > 1);
-    const validation = triedSubmit || hardWrong ? err : null;
-    showError(validation ?? uploadError ?? (pickNotes.length ? pickNotes.join(' ') : null));
+    const msg = formMessage({ mode, selection: summary(), triedSubmit, uploadError, pickNotes });
+    showError(msg?.message ?? null, msg?.details);
     submit.disabled = !!busy || items.some((i) => i.status === 'processing');
   }
 
-  function applyMode(next: CreatableMode) {
+  function applyMode(next: UploadMode) {
     if (next !== mode) selectionChanged();
     mode = next;
     const c = COPY[mode];
@@ -390,8 +482,9 @@ function main() {
     $('pick-files-text').textContent = c.files[0];
     $('pick-files-hint').textContent = c.files[1];
     filesInput.accept = c.files[2];
-    filesInput.multiple = mode !== 'thirdwheel';
+    filesInput.multiple = mode !== 'video';
     $('prompt-label').innerHTML = `${esc(c.promptLabel)} <small>${esc(c.promptHint)}</small>`;
+    promptInput.placeholder = c.promptPlaceholder;
     nameInput.placeholder = c.name;
     if (!nameTouched) nameInput.value = c.name;
     submit.innerHTML = `${esc(c.submit)} <span class="arrow">&rarr;</span>`;
@@ -407,26 +500,7 @@ function main() {
   }
 
   function renderPreviews() {
-    previews.innerHTML = items
-      .map((it) => {
-        const meta =
-          it.kind === 'video'
-            ? `${Number.isFinite(it.duration) ? `${it.duration!.toFixed(1)} s · ` : ''}${it.width ? `${it.width}×${it.height} · ` : ''}${(it.file.size / 1024 / 1024).toFixed(1)} MB`
-            : it.status === 'processing'
-              ? 'shrinking…'
-              : it.width
-                ? `${it.width}×${it.height} · ${formatBytes(it.blob?.size ?? it.file.size)}`
-                : it.note ?? formatBytes(it.file.size);
-        // A photo this browser could not decode (status 'raw') would only show a broken-image icon.
-        const media =
-          it.kind === 'video'
-            ? `<video src="${esc(it.url)}#t=0.1" muted playsinline preload="metadata"></video>`
-            : it.status === 'raw'
-              ? `<div class="pv-ph" aria-hidden="true">${ICON_PHOTO}</div>`
-              : `<img src="${esc(it.url)}" alt="">`;
-        return `<div class="pv${it.kind === 'video' ? ' wide' : ''}" data-id="${it.id}">${media}<span class="pv-meta">${esc(meta)}</span><button type="button" class="pv-x" aria-label="Remove">&times;</button></div>`;
-      })
-      .join('');
+    previews.innerHTML = items.map(previewTile).join('');
   }
 
   async function addFiles(list: FileList | File[]) {
@@ -440,12 +514,12 @@ function main() {
         pickNotes.push(`${file.name}: not a photo or a video, skipped.`);
         continue;
       }
-      // Third Wheel holds exactly one video: a new pick replaces the old one.
-      if (mode === 'thirdwheel' && kind === 'video') {
+      // Video mode holds exactly one video: a new pick replaces the old one.
+      if (mode === 'video' && kind === 'video') {
         for (const old of items.filter((i) => i.kind === 'video')) URL.revokeObjectURL(old.url);
         items = items.filter((i) => i.kind !== 'video');
       }
-      const it: Item = { id: nextId++, kind, file, url: URL.createObjectURL(file), status: kind === 'image' ? 'processing' : 'ready' };
+      const it: Item = { id: nextId++, kind, file, url: URL.createObjectURL(file), status: 'processing' };
       items.push(it);
       fresh.push(it);
     }
@@ -454,9 +528,15 @@ function main() {
     await Promise.all(
       fresh.map(async (it) => {
         if (it.kind === 'video') {
-          const info = await videoInfo(it.file);
+          const { decodes, ...info } = await videoInfo(it.file);
           Object.assign(it, info);
-          if (mode === 'thirdwheel' && info.duration > 60 && items.includes(it)) pickNotes.push('Long clip. Anything past 30 s just takes longer to process.');
+          if (!decodes) {
+            // This browser cannot show it (an HEVC clip in some browsers, or a broken file); the server has the final say.
+            it.status = 'raw';
+            return;
+          }
+          it.status = 'ready';
+          if (mode === 'video' && info.duration > 60 && items.includes(it)) pickNotes.push('Long clip. Anything past 30 s just takes longer to process.');
           return;
         }
         try {
@@ -470,7 +550,6 @@ function main() {
         } catch {
           // The server can still try (for example HEIC on a browser that cannot decode it).
           it.status = 'raw';
-          it.note = 'sent as is';
         }
       }),
     );
@@ -499,7 +578,7 @@ function main() {
       return;
     }
     if (items.some((i) => i.status === 'processing')) {
-      showError('Still shrinking your photos, one second.');
+      showError('Still getting your files ready, one second.');
       return;
     }
     uploadError = null;
@@ -533,12 +612,12 @@ function main() {
 
   // Wire up
   for (const b of document.querySelectorAll<HTMLButtonElement>('.mode-opt')) {
-    b.addEventListener('click', () => applyMode(b.dataset.mode as CreatableMode));
+    b.addEventListener('click', () => applyMode(modeFromParam(b.dataset.mode ?? null)));
     b.addEventListener('keydown', (e) => {
-      const order: CreatableMode[] = ['rentfree', 'thirdwheel', 'reconstruct'];
+      const order: UploadMode[] = ['photo', 'video'];
       const i = order.indexOf(mode);
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') applyMode(order[(i + 1) % 3]);
-      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') applyMode(order[(i + 2) % 3]);
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') applyMode(order[(i + 1) % order.length]);
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') applyMode(order[(i + order.length - 1) % order.length]);
       else return;
       e.preventDefault();
       document.querySelector<HTMLButtonElement>(`.mode-opt[data-mode="${mode}"]`)?.focus();
@@ -550,6 +629,19 @@ function main() {
       input.value = '';
     });
   }
+  // A preview that fails to load after all (error events do not bubble, so listen in the capture phase).
+  previews.addEventListener(
+    'error',
+    (e) => {
+      const el = e.target as HTMLElement;
+      if (!(el instanceof HTMLVideoElement || el instanceof HTMLImageElement)) return;
+      const it = items.find((i) => i.id === Number(el.closest<HTMLElement>('.pv')?.dataset.id));
+      if (!it || it.status !== 'ready') return;
+      it.status = 'raw';
+      renderPreviews();
+    },
+    true,
+  );
   previews.addEventListener('click', (e) => {
     const x = (e.target as HTMLElement).closest('.pv-x');
     if (!x) return;

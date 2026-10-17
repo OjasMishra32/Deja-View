@@ -20,7 +20,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".3gp", ".mts"}
+# Every container the server accepts (server/media.ts VIDEO_EXT): recorded game clips are often .ts or .m2ts.
+VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".3gp", ".mts", ".m2ts", ".ts", ".mpg", ".mpeg", ".flv", ".wmv"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".bmp", ".tif", ".tiff", ".avif"}
 
 
@@ -74,7 +75,43 @@ def read_json(path: Path | str, default: Any = None) -> Any:
 
 
 class JobError(RuntimeError):
-    """A failure with a message meant for the user (shown in the UI)."""
+    """A failure the app can explain.
+
+    `user` is one short product sentence shown in the app (no tool, model or service names, no paths);
+    `detail` is the technical cause and only goes to log.txt and progress.json `detail`. str(e) is the detail.
+    """
+
+    def __init__(self, user: str, detail: str | None = None):
+        super().__init__(detail or user)
+        self.user = user
+        self.detail = detail or user
+
+
+# What the app says when a step failed without a more specific reason (server/copy.ts GENERIC_FAILURE says the same).
+GENERIC_FAILURE = {
+    "rentfree": "We couldn't build this world. Try again in a minute.",
+    "thirdwheel": "We couldn't turn this video into a room. Try again in a minute.",
+    "reconstruct": "We couldn't reconstruct this place. Try again in a minute.",
+}
+OUT_OF_MEMORY = "This one needed more memory than we had. Try a shorter clip or a smaller photo."
+UNREADABLE_MEDIA = "We couldn't read this file. Export it again and upload it once more."
+
+
+def explain_failure(e: BaseException, mode: str = "") -> tuple[str, str]:
+    """(product sentence for the app, technical detail for the log) for any exception a job can raise."""
+    detail = str(e).strip() or type(e).__name__
+    if isinstance(e, JobError):
+        return e.user, e.detail
+    if isinstance(e, MemoryError) or "out of memory" in detail.lower():
+        return OUT_OF_MEMORY, detail if detail != "MemoryError" else "ran out of memory"
+    user = getattr(e, "user", None)  # common.media.MediaError carries one
+    if isinstance(user, str) and user.strip():
+        return user.strip(), detail
+    if type(e).__name__ == "MediaError":
+        return UNREADABLE_MEDIA, detail
+    if not isinstance(e, RuntimeError) or type(e) is not RuntimeError:
+        detail = f"{type(e).__name__}: {detail}"
+    return GENERIC_FAILURE.get(mode, "Something went wrong. Try again in a minute."), detail
 
 
 class Job:
@@ -83,7 +120,7 @@ class Job:
     def __init__(self, jobdir: Path | str, echo: bool = True):
         self.dir = Path(jobdir).resolve()
         if not self.dir.is_dir():
-            raise JobError(f"job directory not found: {self.dir}")
+            raise JobError("We couldn't start this job. Try again.", f"job directory not found: {self.dir}")
         self.input_dir = self.dir / "input"
         self.out_dir = self.dir / "out"
         self.work_dir = self.dir / "work"
@@ -93,9 +130,10 @@ class Job:
         self._lock = threading.Lock()
         self._range = (0.0, 1.0)
         self._last = {"stage": "Starting", "progress": 0.0}
+        self.notices: list[str] = []
         spec = read_json(self.dir / "job.json")
         if not isinstance(spec, dict):
-            raise JobError(f"missing or invalid job.json in {self.dir}")
+            raise JobError("We couldn't start this job. Try again.", f"missing or invalid job.json in {self.dir}")
         self.spec: dict = spec
         self.id: str = str(spec.get("id") or self.dir.name)
         self.mode: str = str(spec.get("mode") or "")
@@ -136,6 +174,14 @@ class Job:
 
     def warn(self, msg: str) -> None:
         self.log(f"WARNING: {msg}")
+
+    def notice(self, user: str, detail: str | None = None) -> None:
+        """A warning the person should see (it ends up in the scene caption), e.g. "Nobody was found moving in this
+        clip." `detail` (technical) goes to the log only."""
+        self.log(f"WARNING: {detail or user}")
+        with self._lock:
+            if user not in self.notices:
+                self.notices.append(user)
 
     # ---- progress ---------------------------------------------------------
     def set_range(self, lo: float, hi: float) -> None:
@@ -191,7 +237,8 @@ class Job:
             write_json_atomic(self.progress_path, self._last)
         (self.dir / "DONE").write_text(time.strftime("%Y-%m-%dT%H:%M:%S%z") + "\n")
 
-    def finish_failed(self, error: str) -> None:
+    def finish_failed(self, error: str, detail: str | None = None) -> None:
+        """`error` is the product sentence the app shows; `detail` (technical) is kept next to it for the log."""
         with self._lock:
             self._last = {
                 "stage": self._last.get("stage", "Failed"),
@@ -199,8 +246,11 @@ class Job:
                 "error": error,
                 "done": True,
             }
+            if detail and detail.strip() and detail.strip() != error.strip():
+                self._last["detail"] = detail.strip()[:4000]
             write_json_atomic(self.progress_path, self._last)
-        (self.dir / "FAILED").write_text(error.strip() + "\n")
+        text = error.strip() if not detail or detail.strip() == error.strip() else f"{error.strip()}\n{detail.strip()}"
+        (self.dir / "FAILED").write_text(text + "\n")
 
 
 class ChildProgressRelay:

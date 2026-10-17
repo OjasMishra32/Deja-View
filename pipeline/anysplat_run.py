@@ -70,6 +70,16 @@ def choose_views(n_total: int, max_views: int) -> list[int]:
     return sorted(set(int(round(x)) for x in np.linspace(0, n_total - 1, max_views)))
 
 
+def _sdr_filters(video, jpeg: bool = False) -> list[str]:
+    """Tone-mapping filters for HDR (iPhone HLG/PQ) video, empty for SDR (common.media.sdr_filters)."""
+    try:
+        from common.media import sdr_filters
+
+        return sdr_filters(video, jpeg=jpeg)
+    except Exception:
+        return []
+
+
 def extract_video_frames(video: str | Path, out_dir: str | Path, count: int, oversample: int = 3) -> list[Path]:
     """Samples `count` frames spread over the video, keeping the sharpest of `oversample` candidates per slot."""
     from PIL import Image
@@ -87,8 +97,8 @@ def extract_video_frames(video: str | Path, out_dir: str | Path, count: int, ove
             pass
         want = count * oversample
         fps = want / dur if dur > 0 else 4.0
-        subprocess.run(["ffmpeg", "-v", "error", "-i", str(video), "-vf", f"fps={fps:.4f}", "-frames:v", str(want), "-q:v", "2",
-                        str(tmp / "%05d.jpg")], check=True, timeout=1200)
+        subprocess.run(["ffmpeg", "-v", "error", "-i", str(video), "-vf", ",".join([f"fps={fps:.4f}", *_sdr_filters(video, jpeg=True)]),
+                        "-frames:v", str(want), "-q:v", "2", str(tmp / "%05d.jpg")], check=True, timeout=1200)
         cands = sorted(tmp.glob("*.jpg"))
         if not cands:
             raise RuntimeError(f"could not decode frames from {video}")
@@ -373,13 +383,13 @@ def finish_reconstruction(
     poses_gl = [sio.c2w_cv_to_gl(c) for c in c2w_cv]
     centres = np.array([p[:3, 3] for p in poses_gl])
     raw = len(splats)
-    prog("Cleaning up the splats", 0.0)
+    prog("Cleaning up the world", 0.0)
     splats = splats.subset(sio.prune_indices(splats, max_splats, cameras=centres))
     prog("Finding the floor", 0.2)
     place = sio.place_world(splats.means, splats.opacities, poses_gl[0], camera_height=camera_height,
                             scale_limits=(1e-4, 1e4), fallback_scale=None, fallback_median_distance=2.5)
     s = place["scale"]
-    prog("Writing the world", 0.35)
+    prog("Saving the world", 0.35)
     sio.write_ply(out_dir / "world.ply", splats, sh_degree=sh_degree)
     world_file = "world.ply"
     if write_spz:
@@ -396,14 +406,14 @@ def finish_reconstruction(
     ow, oh = info0["width"], info0["height"]
     dscale = min(1.0, 1024 / max(ow, oh))
     dw, dh = max(1, int(round(ow * dscale))), max(1, int(round(oh * dscale)))
-    prog("Rendering depth at the first photo", 0.5)
+    prog("Measuring the room", 0.5)
     tensors: dict = {}
     r = sio.render(splats, poses_gl[0], fx * dscale, fy * dscale, cx * dscale, cy * dscale, dw, dh, prefer_gpu=prefer_gpu,
                    tensors=tensors)
     depth = (r.depth * s).astype(np.float32)
     depth[r.alpha < 0.5] = 0.0
     np.save(out_dir / "input_depth.npy", depth)
-    prog("Rendering the thumbnail", 0.75)
+    prog("Making the thumbnail", 0.75)
     tw = 640
     th = max(1, int(round(oh * tw / ow)))
     ts = tw / ow
@@ -442,7 +452,7 @@ def finish_reconstruction(
         "source": "anysplat",
         "splatCount": len(splats),
     }
-    result = {"world": world, "thumb": "thumb.jpg", "caption": f"Reconstructed from {len(infos)} views with AnySplat."}
+    result = {"world": world, "thumb": "thumb.jpg", "caption": f"Reconstructed from {len(infos)} views."}
     sio.write_json_atomic(out_dir / "scene.json", result)
     sio.write_json_atomic(out_dir / "anysplat.json", {
         "views": len(infos), "rawSplats": raw, "keptSplats": len(splats), "shDegree": min(sh_degree, splats.sh_degree),
@@ -495,7 +505,7 @@ def generate(
         first = ImageOps.exif_transpose(Image.open(files[0])).convert("RGB")
         model = get_model()
         if model.model is None:
-            prog("Loading AnySplat onto the GPU", 0.08)
+            prog("Warming up the reconstruction model", 0.08)
             model.load()
         prog("Reconstructing", 0.2)
         splats, c2w, K, secs = model.infer(views)

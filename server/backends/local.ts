@@ -6,9 +6,10 @@
 import { spawn } from 'node:child_process';
 import { access, constants as fsc, open, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import type { SceneMode } from '../../shared/types.ts';
+import type { JobProgress, SceneMode } from '../../shared/types.ts';
 import { exec, lastLines } from '../media.ts';
 import {
+  ProductError,
   ResumeImpossible,
   readProgress,
   sleep,
@@ -75,15 +76,26 @@ async function exists(p: string): Promise<boolean> {
   return stat(p).then(() => true, () => false);
 }
 
-/** Error text for a finished-but-failed pipeline run, best source first. */
+/**
+ * Error text for a finished-but-failed pipeline run, best source first. The pipeline writes a product sentence
+ * into progress.json `error` (and the technical cause into `detail` and its log); that sentence is what the UI shows.
+ */
 export async function failureText(jobDir: string, fallback: string): Promise<string> {
+  return (await pipelineFailure(jobDir, fallback)).message;
+}
+
+/** The pipeline's failure as a ProductError: `user` from progress.json, the technical detail as the message. */
+export async function pipelineFailure(jobDir: string, fallback: string): Promise<Error> {
   const failed = (await Bun.file(join(jobDir, 'FAILED')).text().catch(() => '')).trim();
-  const prog = await readProgress(join(jobDir, 'progress.json'));
-  if (prog?.error) return prog.error;
-  if (failed) return lastLines(failed, 6);
+  const prog = (await readProgress(join(jobDir, 'progress.json'))) as (JobProgress & { detail?: string }) | null;
+  if (prog?.error) {
+    const detail = typeof prog.detail === 'string' && prog.detail.trim() ? `${prog.error} (${prog.detail.trim()})` : prog.error;
+    return new ProductError(prog.error, detail);
+  }
+  if (failed) return new Error(lastLines(failed, 6));
   const console = (await Bun.file(join(jobDir, 'console.txt')).text().catch(() => '')).trim();
-  if (console) return `${fallback}: ${lastLines(console, 4)}`;
-  return fallback;
+  if (console) return new Error(`${fallback}: ${lastLines(console, 4)}`);
+  return new Error(fallback);
 }
 
 export function localDriver(opts: LocalOptions): BackendDriver {
@@ -119,6 +131,9 @@ export function localDriver(opts: LocalOptions): BackendDriver {
         ctx.log(`re-attached to local pipeline pid ${pid}`);
       } else if (await exists(join(ctx.jobDir, 'DONE'))) {
         return;
+      } else if (await exists(join(ctx.jobDir, 'FAILED'))) {
+        // It finished (and failed) while the server was down: report that instead of running it all again.
+        throw await pipelineFailure(ctx.jobDir, 'the local pipeline failed while the server was stopped');
       } else {
         throw new ResumeImpossible('the local pipeline is no longer running');
       }
@@ -156,7 +171,7 @@ export function localDriver(opts: LocalOptions): BackendDriver {
     };
     ctx.signal.addEventListener('abort', onAbort, { once: true });
     try {
-      ctx.report({ status: 'running', stage: 'Running the local pipeline' });
+      if (!ctx.resume) ctx.report({ status: 'running', stage: 'Starting on this computer' });
       while (true) {
         const prog = await readProgress(join(ctx.jobDir, 'progress.json'));
         if (prog) ctx.reportProgress(prog);
@@ -178,12 +193,13 @@ export function localDriver(opts: LocalOptions): BackendDriver {
     const failed = await exists(join(ctx.jobDir, 'FAILED'));
     if (done && !failed && (exitCode === null || exitCode === 0)) return;
     const code = exitCode === null ? '' : ` (exit ${exitCode})`;
-    throw new Error(await failureText(ctx.jobDir, `the local pipeline stopped without finishing${code}`));
+    throw await pipelineFailure(ctx.jobDir, `the local pipeline stopped without finishing${code}`);
   }
 
   return {
     name: 'local',
     label: 'Local pipeline',
+    place: 'this computer',
     lane: 'local',
     canResume: true,
     supports: (mode) => modes.has(mode),

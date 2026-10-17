@@ -1,4 +1,4 @@
-// ThirdWheel server: pages (Bun HTML imports), JSON API, scene assets with Range, WebSocket events, job runner.
+// Déjà View server: pages (Bun HTML imports), JSON API, scene assets with Range, WebSocket events, job runner.
 //
 //   bun run dev     http on :8787 with HMR
 //   bun run https   https (certs/ from `bun run cert`), needed by the Quest for WebXR over the LAN
@@ -16,6 +16,7 @@ import { localDriver } from './backends/local.ts';
 import { spaceDriver, spaceStatus } from './backends/space.ts';
 import {
   CERTS_DIR,
+  DATA_DIR,
   FLASHWORLD_PY,
   HTTPS,
   JOBS_DIR,
@@ -28,10 +29,13 @@ import {
   SCENES_DIR,
   VERSION,
 } from './config.ts';
+import { MESSAGES } from './app.ts';
 import { CORS_HEADERS } from './files.ts';
+import { guardOptionsFromEnv } from './guard.ts';
 import { HealthMonitor } from './health.ts';
 import { hpgConfig } from './hpg.ts';
 import { JobRunner, parseBackendOrder } from './jobs.ts';
+import { acquireDataLock, DataDirLocked, type DataLock } from './lock.ts';
 import { SceneStore } from './store.ts';
 
 const TOPIC = 'events';
@@ -44,6 +48,9 @@ interface Core {
   server?: Server<undefined>;
   lastHealth?: string;
   healthTimer?: ReturnType<typeof setInterval>;
+  lock?: DataLock;
+  /** THIRDWHEEL_READONLY=1 and another server owns the data folder: show scenes, run nothing. */
+  readOnly?: boolean;
 }
 
 // State that must survive `bun --hot` re-evaluation lives on globalThis: one runner, one server.
@@ -65,6 +72,21 @@ async function publishHealthIfChanged(core: Core): Promise<void> {
 async function createCore(): Promise<Core> {
   await mkdir(SCENES_DIR, { recursive: true });
   await mkdir(JOBS_DIR, { recursive: true });
+  // One server per data folder: a second one would resume and double-run the first one's jobs.
+  let lock: DataLock | undefined;
+  let readOnly = false;
+  try {
+    lock = acquireDataLock(DATA_DIR, PORT);
+  } catch (e) {
+    if (!(e instanceof DataDirLocked)) throw e;
+    if (process.env.THIRDWHEEL_READONLY !== '1') {
+      console.error(`\n${e.message}\n`);
+      process.exit(1);
+    }
+    readOnly = true;
+    console.warn(`\nRead-only: pid ${e.holder.pid} owns ${DATA_DIR}; this server shows scenes and runs no jobs.\n`);
+  }
+  if (lock) process.on('exit', () => lock.release());
   const store = new SceneStore(SCENES_DIR);
   const local = localDriver({ python: LOCAL_PYTHON, script: RUN_JOB_PY, cwd: ROOT });
   const space = spaceDriver({
@@ -90,6 +112,8 @@ async function createCore(): Promise<Core> {
   const core: Core = {
     store,
     health,
+    lock,
+    readOnly,
     publish: (e) => core.server?.publish(TOPIC, JSON.stringify(e)),
     runner: undefined as unknown as JobRunner,
   };
@@ -118,6 +142,8 @@ const app = createApp({
   publish: core.publish,
   maxUploadBytes: MAX_UPLOAD_BYTES,
   publicDir: join(ROOT, 'web', 'public'),
+  guard: guardOptionsFromEnv(),
+  readOnly: core.readOnly,
 });
 
 async function tlsOptions() {
@@ -154,9 +180,9 @@ const handlers = {
       if (res) return res;
     } catch (e) {
       console.error(`[http] ${req.method} ${url.pathname}:`, e);
-      return Response.json({ error: `Server error: ${(e as Error).message}` }, { status: 500, headers: CORS_HEADERS });
+      return Response.json({ error: MESSAGES.serverError }, { status: 500 });
     }
-    return Response.json({ error: 'Not found' }, { status: 404, headers: CORS_HEADERS });
+    return Response.json({ error: MESSAGES.notFound }, { status: 404, headers: CORS_HEADERS });
   },
   websocket: {
     async open(ws: Bun.ServerWebSocket<undefined>) {
@@ -176,7 +202,7 @@ const handlers = {
   },
   error(e: Error) {
     console.error('[http]', e);
-    return Response.json({ error: `Server error: ${e.message}` }, { status: 500, headers: CORS_HEADERS });
+    return Response.json({ error: MESSAGES.serverError }, { status: 500 });
   },
 };
 
@@ -197,21 +223,21 @@ if (core.server) {
 if (firstBoot) {
   const proto = HTTPS ? 'https' : 'http';
   const lan = core.health.lanUrls();
-  console.log(`\nThirdWheel ${VERSION} ${PRODUCTION ? '(production)' : '(development, HMR)'}`);
+  console.log(`\nDéjà View ${VERSION} ${PRODUCTION ? '(production)' : '(development, HMR)'}`);
   console.log(`  Local:  ${proto}://localhost:${PORT}`);
   for (const u of lan) console.log(`  LAN:    ${u}`);
   if (HTTPS) console.log('  Quest 3S: open a LAN https URL above in the Quest Browser and accept the certificate once.');
   else console.log('  Quest 3S needs HTTPS for WebXR over the LAN: bun run cert, then bun run https');
   console.log(`  Data:   ${SCENES_DIR}`);
 
-  const resumed = await core.runner.recover();
+  const resumed = core.readOnly ? [] : await core.runner.recover();
   if (resumed.length) console.log(`  Resuming ${resumed.length} job(s): ${resumed.join(', ')}`);
 
   void core.health.info().then((h) => {
     core.lastHealth = JSON.stringify(h);
     const parts = [
       h.hpg.online ? `HiPerGator online${h.hpg.worker.alive ? ` (worker on ${h.hpg.worker.host ?? '?'})` : ''}` : 'HiPerGator offline',
-      h.space.available ? 'FlashWorld Space reachable' : 'FlashWorld Space unavailable',
+      h.space.available ? 'cloud GPU reachable' : 'cloud GPU unavailable',
       h.local.python ? 'local pipeline ready' : 'local pipeline not installed',
     ];
     console.log(`  Backends: ${parts.join(' · ')}\n`);
@@ -221,6 +247,7 @@ if (firstBoot) {
 
   const shutdown = () => {
     core.server?.stop(true);
+    core.lock?.release();
     process.exit(0);
   };
   process.on('SIGINT', shutdown);

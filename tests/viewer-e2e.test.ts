@@ -187,7 +187,7 @@ describe.skipIf(!ENABLED || !HAS_SAMPLES)('viewer in headless Chrome', () => {
     await page.close();
   }, T);
 
-  test('Third Wheel scene: play button starts the video layer', async () => {
+  test('video scene: play button starts the video layer', async () => {
     if (!existsSync(join(ROOT, 'data', 'scenes', 'test-thirdwheel', 'scene.json'))) return;
     const page = await open('test-thirdwheel');
     expect(await page.isVisible('#tw-transport')).toBe(true);
@@ -200,6 +200,45 @@ describe.skipIf(!ENABLED || !HAS_SAMPLES)('viewer in headless Chrome', () => {
     expect(playing.playing).toBe(true);
     expect(playing.t).toBeGreaterThan(0.3);
     await page.screenshot({ path: join(OUT, 'e2e-thirdwheel.png') });
+    await page.close();
+  }, T);
+
+  test('product name and mode labels: Déjà View, Photo / Video, no old names anywhere', async () => {
+    const page = await open('sample-painted-bedroom');
+    const ui = await page.evaluate(() => ({ title: document.title, brand: document.querySelector('.tw-brand')?.textContent, text: document.body.innerText }));
+    expect(ui.title).toContain('Déjà View');
+    expect(ui.brand).toBe('Déjà View');
+    expect(ui.text).not.toMatch(/third ?wheel|rent free/i);
+    await page.close();
+    if (!existsSync(join(ROOT, 'data', 'scenes', 'test-thirdwheel', 'scene.json'))) return;
+    const video = await open('test-thirdwheel');
+    expect(await video.textContent('#tw-mode')).toBe('Video');
+    expect(await video.evaluate(() => document.body.innerText)).not.toMatch(/third ?wheel|rent free/i);
+    await video.close();
+  }, T);
+
+  test('room lifted from one camera: shown from the camera, walking stays near it, the hidden box is repaired', async () => {
+    if (!existsSync(join(ROOT, 'data', 'scenes', 'test-tw-local', 'scene.json'))) return;
+    const page = await open('test-tw-local');
+    const v = await viewer(page);
+    expect(v.error).toBeNull();
+    // the camera stood 1.25 m above the floor: the view starts exactly there
+    expect(v.info.eyeHeight).toBeCloseTo(1.25, 2);
+    expect(v.info.hiddenRepaired).toBeGreaterThan(1000);
+    const wb = v.info.walkBounds;
+    expect(wb.max[0] - wb.min[0]).toBeLessThan(1.2);
+    expect(wb.max[2] - wb.min[2]).toBeLessThan(1.6);
+    // hold W and D: the walker stops within the area plus its margin
+    await page.mouse.click(640, 400);
+    await page.keyboard.down('KeyW');
+    await page.keyboard.down('KeyD');
+    await page.waitForTimeout(3500);
+    await page.keyboard.up('KeyW');
+    await page.keyboard.up('KeyD');
+    const p = (await viewer(page)).player;
+    expect(p.x).toBeLessThan(wb.max[0] + 0.31);
+    expect(p.z).toBeGreaterThan(wb.min[2] - 0.31);
+    await page.screenshot({ path: join(OUT, 'e2e-camera-room.png') });
     await page.close();
   }, T);
 });
