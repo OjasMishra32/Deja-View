@@ -148,12 +148,12 @@ the server with `THIRDWHEEL_ALLOWED_ORIGINS=<that url>`.
 | Turn | Mouse | Drag the right half | Right stick left/right snaps 30 degrees |
 | Jump somewhere | | | Right stick forward aims a teleport arc, release to land |
 | Fly | `F`, then `Q` / `E` down / up | | |
-| Video | `Space` play/pause, `M` mute | Play button | `A` play/pause |
+| Video | `Space` play/pause, `M` mute | Play button | `A` play/pause, or look down for the bar: play/pause, drag the scrubber with the ray, 0.5x / 1x |
 | Back to the start | `R` | | `B` |
 | Ask the room | Hold `T` (or `Space` in a world with no video), or hold the mic button | Hold the mic button | Hold `X` or the left trigger, then release. Point at a label and pull the right trigger to hear about it |
 | Leave a note | `N`, or the note button | The note button | Hold the right grip to aim, release, pick a phrase with the trigger (or grip again for "I was here") |
 | Reality check | `C`, or the reality button | The reality button | `Y` |
-| Help and menu | `H` for the controls card | The controls button | Wrist panel above the left controller (play, restart, start point, exit VR): point and pull the right trigger |
+| Help and menu | `H` for the controls card | The controls button | Turn the left palm up (or click the left stick) for the wrist menu: other worlds, Recenter, Labels, People, Ask the room, Exit. Point and pull the right trigger, or pinch |
 
 Viewer URL options: `?follow=1` obeys host cues and opens each new world as soon as it is ready (the headset leaves VR
 and you press Enter VR again, about 5 s), `?name=` sets the name others see, and `?xremu=1` runs the headset code in

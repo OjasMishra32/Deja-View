@@ -56,6 +56,13 @@ export function originAllowed(origin: string, req: Request, opts: GuardOptions):
   return sameHost(o, req) || !!opts.allowedOrigins?.includes(o);
 }
 
+/** True when a token is configured and the request carries it (X-DejaView-Token or Authorization: Bearer). */
+export function hasApiToken(req: Request, opts: GuardOptions): boolean {
+  if (!opts.token) return false;
+  const given = req.headers.get('x-dejaview-token') ?? bearer(req.headers.get('authorization'));
+  return !!given && safeEqual(given, opts.token);
+}
+
 /**
  * Why a state-changing request is refused (for the server log), or null when it may go ahead.
  *  - a valid token always passes;
@@ -64,10 +71,7 @@ export function originAllowed(origin: string, req: Request, opts: GuardOptions):
  *    it passes unless a token is configured, in which case it must carry the token.
  */
 export function mutationBlocked(req: Request, opts: GuardOptions): string | null {
-  if (opts.token) {
-    const given = req.headers.get('x-dejaview-token') ?? bearer(req.headers.get('authorization'));
-    if (given && safeEqual(given, opts.token)) return null;
-  }
+  if (hasApiToken(req, opts)) return null;
   const origin = req.headers.get('origin');
   if (origin !== null) {
     if (originAllowed(origin, req, opts)) return null;

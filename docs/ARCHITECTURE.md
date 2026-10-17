@@ -254,8 +254,15 @@ Desktop: click to look (pointer lock), WASD walk, Shift run, Space play/pause th
 Live layer: T (Space too in Photo worlds) or the mic button: hold and ask the guide; N leave a note; C reality check
 (also a top-bar button). Click a label to ask about it.
 
-Headset buttons are split so nothing collides: right hand A play/pause, B back to spawn, trigger on the wrist panel
-or a label (ask about it), grip hold to aim a note; left hand X or trigger hold to ask the guide, Y reality check.
+Headset buttons are split so nothing collides: right hand A play/pause, B back to spawn, trigger (or a pinch) on a
+headset panel or a label (ask about it), grip hold to aim a note; left hand X or trigger hold to ask the guide, Y
+reality check, stick click opens or closes the wrist menu (it also opens when the left palm turns up).
+
+The headset interface (`web/src/viewer/xr-overlay.ts`) is three glass panels drawn from canvases at 2x, redrawn only when
+their content changes: the wrist menu above the left hand (the world, other worlds with thumbnails, Recenter, Labels,
+People in a Video memory, Ask the room, Exit), the Video memory transport below eye level (play/pause, a scrubber you
+drag with the ray, the time, 0.5x/1x; it shows when you look down at it or pause) and the arrival card with the world's
+name for 3 s after you step in. A hovered item lifts a few millimetres off the glass with a short haptic tick.
 
 Quest 3S (WebXR, `local-floor`): left stick walks relative to the head direction, right stick left/right snaps 30 degrees,
 right stick forward aims a teleport arc and releasing teleports onto a valid floor, A play/pause, B back to spawn,

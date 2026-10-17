@@ -124,6 +124,22 @@ export async function signOut(): Promise<void> {
 }
 
 /**
+ * A page's small sign-in control: finishes a sign-in that just came back, then shows `button` only when sign-in is
+ * on, as "Sign in" or the signed-in name (a click signs out). Returns the error sentence of a failed sign-in.
+ */
+export async function mountSignIn(button: HTMLElement | null): Promise<string | null> {
+  const { error } = await ready().catch(() => ({ error: null }));
+  const cfg = await authConfig();
+  if (!button || !cfg.enabled) return error;
+  const s = current();
+  button.textContent = s ? s.name : 'Sign in';
+  button.title = s ? 'Sign out' : 'Sign in to add memories and drive the headset';
+  button.hidden = false;
+  button.addEventListener('click', () => void (current() ? signOut() : signIn()));
+  return error;
+}
+
+/**
  * Finishes a sign-in that just came back from Auth0, if this page load is one. Returns the sign-in (or null) and an
  * error sentence when the exchange failed.
  */

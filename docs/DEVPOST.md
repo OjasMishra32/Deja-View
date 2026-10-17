@@ -52,6 +52,51 @@ separates what was captured from what was imagined. **Roblox** lets friends with
 **DeepSpace** remembers who was there and what they said, with live presence and notes that persist. [Confirm before
 submitting: a free **GoDaddy Registry** domain gives Roblox, the headset and every phone one link that never changes.]
 
+### Sponsor challenges: what each one does and where to see it
+
+- **DeepSpace:** "Add a memory" keeps the photo or clip in DeepSpace storage and sends it to our server; the card
+  comes back with the world, Roblox and map links. The live map shows everyone (headset, Roblox, browser) moving with
+  trails, and a note typed on the map appears in the headset within a couple of seconds. *See it:* Seb's DeepSpace
+  app on the table laptop, and the sticky note in the headset.
+- **Gemini (MLH):** writes the caption the world model imagines from, pins labels on things in the room, greets you,
+  and answers spoken questions out loud. *See it:* in the headset or at `/view`: the labels, then hold the button
+  and ask "who won?".
+- **HiPerGator, with Vultr as the planned second GPU:** a warm worker turns a photo into a finished world in about 10
+  seconds. *See it:* the live build at the table and the GPU tile on `/host`.
+- **Vobile (reality check):** one toggle tints every part of the world the AI imagined. *See it:* "Reality check" on
+  `/host`, in the headset.
+- **Roblox:** each Photo world is also a textured Roblox room; friends join from the Roblox app and play tag with the
+  person in the headset, who sees them as ghosts. *See it:* the Roblox app on a laptop or phone, next to the headset.
+- **Solana (devnet):** when a Roblox match ends and the game reports it (`game.result`), the server writes it to
+  Solana devnet as one signed Memo transaction: world, game, round, winner, loser, score, time, and whether it was a
+  draw. A retry from Roblox never writes a second memo, the transaction signature is saved before it is sent, and the
+  server checks the cluster's genesis hash before signing anything, so it only writes to devnet. No real money. On with
+  `SOLANA_SCOREBOARD=1`. *See it:* `/scores` lists the latest 50 matches across all worlds, each with a Solana
+  Explorer link to its transaction, plus a link to the account that signs them all and a leaderboard (draws and
+  games against the computer don't count). JSON at `/api/scores`. [Confirm before submitting: the devnet account
+  has SOL from the faucet, and the Roblox games send `game.result`.]
+- **Capital One Nessie:** every memory of a night out gets a tab. A purchase at the place is booked as a Nessie
+  purchase on the payer's checking account (each friend gets a Nessie customer and checking account the first time),
+  split evenly; the page shows who owes whom and the fewest transfers that even it out, and "Settle up" makes them as
+  Nessie transfers between the friends' accounts. With "loser covers the table" on, a Roblox match result moves the
+  table fee onto the loser (a draw or a game against the computer moves nothing). Mock money only; no account number
+  is stored. Needs `NESSIE_API_KEY` (without it the same page runs on a built-in demo bank). *See it:*
+  `/tab?scene=the-courts`, seeded with `bun scripts/nessie-seed.ts`.
+- **Tiger Data:** with `TIGER_DATA_URL` set, every presence update (headset, Roblox and browser, up to 5 a second per
+  world) is stored as one row per person in a TimescaleDB hypertable, with a one-second continuous aggregate and
+  compression of older data; Roblox moments (tags, rounds, match results) go in a moments table next to it. The
+  server answers replay questions from it: each visit to a memory (when, how long, who), everyone's path over a time
+  range with the Roblox moments in it, and a heatmap of person-seconds per 0.5 m floor cell. *See it:* the JSON at
+  `/api/replay/status`, `/api/replay/<world>/sessions`, `/api/replay/<world>` and `/api/replay/<world>/heat`, and
+  the tables in the Tiger Cloud console. There is no replay page yet.
+- **Auth0 (MLH):** with `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID` and `AUTH0_AUDIENCE` set, anyone with the public link can
+  still walk into a memory, but adding one, rebuilding or deleting one, sending headset cues from `/host` and
+  changing a tab need a signed-in person. The pages use Auth0 Universal Login (authorization code with PKCE, no
+  client secret), and the server checks the access token's RS256 signature against the tenant's key set, plus its
+  issuer, audience and expiry, without an SDK. The host laptop itself, and scripts holding the API token or the
+  event key, are not asked. *See it:* the "Sign in" button on `/capture` and `/host` (and on `/tab` when a change
+  needs it); `/api/auth/config` says whether sign-in is on.
+
 ## How we built it
 
 **The hub** is a Bun + TypeScript server on a Mac. It stores scenes, runs jobs, pushes live updates over WebSocket,
@@ -137,12 +182,12 @@ guide and DeepSpace services so every hop could be tested before the real ones e
 
 bun, typescript, three.js, spark, webxr, python, pytorch, flashworld, wan2.2, anysplat, vggt, depth-anything-v2,
 deeplabv3, big-lama, gsplat, hugging-face, diffusers, opencv, ffmpeg, hipergator, slurm, cloudflare-tunnel, gemini,
-roblox, luau, deepspace, meta-quest-3s
+roblox, luau, deepspace, meta-quest-3s, solana, capital-one-nessie, tiger-data, timescaledb, postgresql, auth0
 
 ## Team
 
 - **Ojasva:** server, viewer, GPU pipelines on HiPerGator, Roblox map voxelizer, presence and notes relays, reality
-  check
+  check, the Solana scoreboard, the Nessie tab, Tiger Data replays, Auth0 sign-in
 - **Shivin:** the Roblox experience: room loader, room picker, VR ghost, tag rounds
 - **Brianna:** the Gemini guide: captions, labels, narration, spoken answers
 - **Seb:** the DeepSpace app ("Add a memory", live map, trails, notes, gallery), the Vultr GPU, the domain

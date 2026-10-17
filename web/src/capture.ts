@@ -3,6 +3,7 @@
 
 import { ApiError, createScene, errorText, getHealth, lanUrls, type UploadFile, type UploadHandle, type UploadMode } from './api.ts';
 import { qrSvg } from './gallery.ts';
+import { mountSignIn } from './auth.ts';
 
 export type MediaKind = 'image' | 'video';
 
@@ -425,6 +426,8 @@ function main() {
   // the last pick (skipped files, a long clip). Both clear when the selection or mode changes.
   let uploadError: FormMessage | null = null;
   let pickNotes: string[] = [];
+  // sign-in (only when the server has it on): uploads from other devices then need it
+  void mountSignIn(document.getElementById('sign-in')).then((err) => err && showError(err));
 
   const summary = (): SelectionSummary => ({
     images: items.filter((i) => i.kind === 'image').length,
