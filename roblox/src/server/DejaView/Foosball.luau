@@ -383,7 +383,9 @@ local function placeFromFeature(ft: any): boolean
 		extra.rodY = ft.rodHeight - ft.fieldHeight
 	end
 	-- the table's own frame: y = 0 is the pitch (corners and height are the field)
-	Foosball.place(centre, math.atan2(-long.X, -long.Z), long.Magnitude, short.Magnitude, false, extra)
+	local sceneId = workspace:GetAttribute("SceneId")
+	local sphere = type(sceneId) == "string" and Config.SPHERE_ROOMS[sceneId] == true
+	Foosball.place(centre, math.atan2(-long.X, -long.Z), long.Magnitude, short.Magnitude, sphere, extra)
 	return true
 end
 

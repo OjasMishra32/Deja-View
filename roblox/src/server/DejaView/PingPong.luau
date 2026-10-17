@@ -159,8 +159,23 @@ local function buildTable(tableCf: CFrame, length: number, width: number, visibl
 	folder.Parent = if root and root:IsA("Folder") then root else workspace
 
 	if visible then
-		local top = ensurePart("Top", Vector3.new(width, 0.12, length), Color3.fromRGB(28, 66, 54), folder)
+		-- a real table: blue top, white lines, dark apron and four steel legs down to the floor
+		local top = ensurePart("Top", Vector3.new(width, 0.12, length), Color3.fromRGB(26, 74, 150), folder)
 		top.CFrame = frame * CFrame.new(0, -0.06, 0)
+		local apron = ensurePart("Apron", Vector3.new(width - 0.3, 0.35, length - 0.3), Color3.fromRGB(28, 30, 36), folder)
+		apron.CFrame = frame * CFrame.new(0, -0.3, 0)
+		local legH = math.max(0.5, frame.Position.Y)
+		for _, sx in { -1, 1 } do
+			for _, sz in { -1, 1 } do
+				local leg = ensurePart("Leg", Vector3.new(0.18, legH, 0.18), Color3.fromRGB(60, 62, 70), folder)
+				leg.Material = Enum.Material.Metal
+				leg.CFrame = frame * CFrame.new(sx * (width / 2 - 0.4), -legH / 2, sz * (length / 2 - 0.7))
+			end
+		end
+		for _, x in { -width / 2, width / 2 } do
+			local side = ensurePart("Line", Vector3.new(0.06, 0.02, length), Color3.fromRGB(245, 245, 245), folder)
+			side.CFrame = frame * CFrame.new(x + (if x < 0 then 0.03 else -0.03), 0.01, 0)
+		end
 		for _, z in { -length / 2, length / 2 } do
 			local line = ensurePart("Line", Vector3.new(width, 0.02, 0.06), Color3.fromRGB(245, 245, 245), folder)
 			line.CFrame = frame * CFrame.new(0, 0.01, z)
@@ -250,7 +265,9 @@ local function placeForScene(host: Player?, features: any?, cameraLook: Vector3?
 	local ft = features and features.pingPongTable
 	local centre, yaw, l, w = Sim.fromCorners(ft and ft.corners or nil)
 	if centre and yaw and l and w then
-		buildTable(CFrame.new(centre) * CFrame.Angles(0, yaw, 0), l, w, false)
+		-- a photo-sphere room has no scanned table to play on, so the game builds the real one where it stands
+		local sphere = type(sceneId) == "string" and Config.SPHERE_ROOMS[sceneId] == true
+		buildTable(CFrame.new(centre) * CFrame.Angles(0, yaw, 0), l, w, sphere)
 		return
 	end
 	local tuned = type(sceneId) == "string" and Config.PINGPONG_TABLES[sceneId]

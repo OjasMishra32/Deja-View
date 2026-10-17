@@ -509,7 +509,16 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 			return -- cancelled by a newer switch
 		end
 		if visual then
-			MapBuilder.attachModel(visual, box, stored ~= nil)
+			local placed = MapBuilder.attachModel(visual, box, stored ~= nil)
+			if placed and Config.SPHERE_ROOMS[sceneId] then
+				-- photo-sphere room: the sky shows the place; the thin scan would only cut through it
+				for _, d in placed:GetDescendants() do
+					if d:IsA("BasePart") then
+						d.Transparency = 1
+						d.CanCollide, d.CanQuery, d.CanTouch = false, false, false
+					end
+				end
+			end
 			local e = cache[sceneId]
 			MapBuilder.addGround(e and e.map and groundColour(e.map) or nil)
 		end

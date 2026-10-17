@@ -2688,7 +2688,7 @@ def sky_c2w(face: str, eye: np.ndarray) -> np.ndarray:
 
 
 def render_skybox(room: Room, lo: np.ndarray, hi: np.ndarray, eye: np.ndarray, size: int, out_dir: Path,
-                  device: Any, log: Callable[[str], None]) -> dict:
+                  device: Any, log: Callable[[str], None], everything: bool = False) -> dict:
     """Six cube faces (Roblox's Sky convention, SKY_FACES) from `eye` (room frame), of the splats OUTSIDE the mesh box
     [lo, hi] only: the near room is geometry, everything farther is drawn at infinity. Where no far splat covers a
     pixel, the sky is the colour the far splats have at that elevation (a seamless fill). Writes sky-<face>.png."""
@@ -2703,6 +2703,9 @@ def render_skybox(room: Room, lo: np.ndarray, hi: np.ndarray, eye: np.ndarray, s
     # beyond the walkable box sideways: what lies above it (glare a splat world puts behind its ceiling lights, tree
     # tops overhead) or below it (mirror images in a glossy floor) is either hidden by the mesh or not real
     far = ~((P[:, 0] >= lo[0]) & (P[:, 0] <= hi[0]) & (P[:, 2] >= lo[2]) & (P[:, 2] <= hi[2]))
+    if everything:
+        # a photo sphere: the whole place as seen from `eye`, for a room shown as a backdrop instead of geometry
+        far = np.ones(len(P), bool)
     sub = s.subset(np.nonzero(far)[0])
     renderer = Renderer(dataclasses.replace(room, splats=sub), device)
     names = list(SKY_FACES)
@@ -2821,7 +2824,8 @@ def build_model_v2(scene_dir: Path | str, out_dir: Path | str | None = None, pho
                    sky: bool = True, sky_size: int = SKY_SIZE, power: float = PHOTO_POWER, device: str | None = None,
                    workers: int = 8, key: str | None = None, hole_edges: int = HOLE_EDGES,
                    log: Callable[[str], None] = _log_noop, max_cams: int = 0, jpeg_quality: int = 88,
-                   max_parts: int = 0, flat_ceiling: float = 0.0) -> dict:
+                   max_parts: int = 0, flat_ceiling: float = 0.0, sky_all: bool = False,
+                   sky_eye: tuple[float, float] | None = None) -> dict:
     t0 = time.time()
     timings: dict[str, float] = {}
 
@@ -3002,13 +3006,13 @@ def build_model_v2(scene_dir: Path | str, out_dir: Path | str | None = None, pho
     t = lap("bake", t)
 
     S = STUDS_PER_METER
-    eye = np.array([room.spawn[0], SKY_EYE_M, room.spawn[2]])
+    eye = np.array([room.spawn[0], SKY_EYE_M, room.spawn[2]]) if sky_eye is None else np.array([sky_eye[0], SKY_EYE_M, sky_eye[1]])
     sky_info = None
     if sky:
         del shots, cube_shots, photo_shots
         if dev.type == "cuda":
             torch.cuda.empty_cache()
-        sky_info = render_skybox(room, lo, hi, eye, sky_size, out_dir, dev, log)
+        sky_info = render_skybox(room, lo, hi, eye, sky_size, out_dir, dev, log, everything=sky_all)
         t = lap("sky", t)
 
     centres, chunk_meta = [], []
@@ -3175,6 +3179,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--near-margin", type=float, default=NEAR_MARGIN_M, help="v2: metres of geometry around world.bounds")
     ap.add_argument("--no-sky", action="store_true", help="v2: no skybox")
     ap.add_argument("--sky-size", type=int, default=SKY_SIZE, help="v2: skybox face size (px)")
+    ap.add_argument("--sky-all", action="store_true", help="v2: the skybox is a photo sphere of the whole place from the eye")
+    ap.add_argument("--sky-eye", default=None, help="v2: where the sky is seen from, 'x,z' in metres in the room frame (default: the spawn)")
     ap.add_argument("--power", type=float, default=PHOTO_POWER, help="v2: photo blend sharpness")
     ap.add_argument("--max-cams", type=int, default=0, help="v2: use at most this many training cameras (smoke tests)")
     ap.add_argument("--jpeg-quality", type=int, default=88, help="v2: texture JPEG quality")
@@ -3191,7 +3197,8 @@ def main(argv: list[str] | None = None) -> int:
             r = build_model_v2(args.scene, args.out, args.photos, tri, args.texture, args.voxel, args.near_margin, pos,
                                args.face_res, not args.no_sky, args.sky_size, args.power, args.device, args.workers,
                                args.key, args.hole_edges, log, max_cams=args.max_cams, jpeg_quality=args.jpeg_quality,
-                               max_parts=args.max_parts, flat_ceiling=args.flat_ceiling)
+                               max_parts=args.max_parts, flat_ceiling=args.flat_ceiling, sky_all=args.sky_all,
+                               sky_eye=tuple(float(v) for v in args.sky_eye.split(',')) if args.sky_eye else None)
         else:
             r = build_model(args.scene, args.out, args.triangles, args.texture, args.voxel, args.positions,
                             args.face_res, not args.no_texture, args.device, args.workers, args.key, args.sheet,

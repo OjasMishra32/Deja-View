@@ -31,7 +31,10 @@ local Config = {
 	FALL_Y = -4, -- root part height; the room floor is at y = 0 and its safety floor 8 studs under it
 
 	-- Scene the server builds on boot if it is ready (falls back to the newest ready room).
-	DEFAULT_SCENE = "the-courts", -- Update 8: the court is the best demo moment; boot there
+	DEFAULT_SCENE = "the-courts",
+	-- Rooms shown as a photo sphere: the sky is the whole place seen from the middle, the scanned mesh is hidden, and
+	-- the game builds its own solid tables where the real ones stand (the scan is too thin outdoors to stand in).
+	SPHERE_ROOMS = { ["the-courts"] = true } :: { [string]: boolean }, -- Update 8: the court is the best demo moment; boot there
 	-- Rooms always listed first on the picker, in this order (Update 8: "the-courts loads first in your picker").
 	PINNED_SCENES = { "the-courts" } :: { string },
 	-- Auto-join on boot. Set false for the skit (everyone waits in the lobby until JOIN).
