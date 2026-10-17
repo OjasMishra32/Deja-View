@@ -22,12 +22,14 @@ which parts it made up?
 
 Déjà View has two modes.
 
-- **Photo:** one photo, a game screenshot, or just a sentence becomes a walkable world. The model generates everything
-  the camera missed. We built three worlds from single OG Tilted Towers screenshots, and only 14%, 21.7% and 22.9% of
-  each world's million splats were actually in the screenshot. The model imagined the rest, including everything
-  behind the camera.
-- **Video:** prop a phone and record. Whatever stays still becomes the room, and the real footage stands inside it in
-  3D with the original sound. You can walk around your friends mid-celebration.
+- **Photo:** walk around a real place from the photos you took there. We rebuilt the Infinity Hall Game Lawn, a
+  giant chess room and a kitchen from phone photos and clips: each one is levelled, set to real scale with the floor
+  at zero, and you can walk wherever the camera went. A single photo, a game screenshot or just a sentence also
+  works: the model generates everything the camera missed. We built three worlds from single OG Tilted Towers
+  screenshots, and only 14%, 21.7% and 22.9% of each world's million splats were actually in the screenshot.
+- **Video:** the people in a clip become full 3D people standing in the rebuilt room, moving in time with the
+  footage and its sound. Walk all the way around your friends at the foosball table, pause mid-game and look at
+  them from behind, or step back to where the phone was and see the original video line up with them.
 
 Then the room becomes social:
 
@@ -65,8 +67,11 @@ submitting: a free **GoDaddy Registry** domain gives Roblox, the headset and eve
   seconds. *See it:* the live build at the table and the GPU tile on `/host`.
 - **Vobile (reality check):** one toggle tints every part of the world the AI imagined. *See it:* "Reality check" on
   `/host`, in the headset.
-- **Roblox:** each Photo world is also a textured Roblox room; friends join from the Roblox app and play tag with the
-  person in the headset, who sees them as ghosts. *See it:* the Roblox app on a laptop or phone, next to the headset.
+- **Roblox:** each real place is also a Roblox room built from the same photos: flat floors and walls with the real
+  textures projected onto them, proper collisions, centred and at life size (3.57 studs per metre). The server also
+  tells the game where the real ping-pong table, foosball table and chessboard are, so the games are played on the
+  real furniture. Friends join from the Roblox app and play tag with the person in the headset, who sees them as
+  ghosts. *See it:* the Roblox app on a laptop or phone, next to the headset.
 - **Solana (devnet):** when a Roblox match ends and the game reports it (`game.result`), the server writes it to
   Solana devnet as one signed Memo transaction: world, game, round, winner, loser, score, time, and whether it was a
   draw. A retry from Roblox never writes a second memo, the transaction signature is saved before it is sent, and the
@@ -90,8 +95,8 @@ submitting: a free **GoDaddy Registry** domain gives Roblox, the headset and eve
   `/api/replay/status`, `/api/replay/<world>/sessions`, `/api/replay/<world>` and `/api/replay/<world>/heat`, and
   the tables in the Tiger Cloud console. There is no replay page yet.
 - **Auth0 (MLH):** with `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID` and `AUTH0_AUDIENCE` set, anyone with the public link can
-  still walk into a memory, but adding one, rebuilding or deleting one, sending headset cues from `/host` and
-  changing a tab need a signed-in person. The pages use Auth0 Universal Login (authorization code with PKCE, no
+  still walk into a memory, but adding or rebuilding one, sending headset cues from `/host` and changing a tab need
+  a signed-in person. Nobody can delete a memory through the website at all. The pages use Auth0 Universal Login (authorization code with PKCE, no
   client secret), and the server checks the access token's RS256 signature against the tenant's key set, plus its
   issuer, audience and expiry, without an SDK. The host laptop itself, and scripts holding the API token or the
   event key, are not asked. *See it:* the "Sign in" button on `/capture` and `/host` (and on `/tab` when a change
@@ -111,6 +116,23 @@ level each world, scale it, find the floor, put the spawn at the input camera, a
 to 1,000,000 (15 to 17 MB as SPZ). For many photos of one place there is an AnySplat path (3 s inference). With no warm
 worker, jobs fall back to a batch Slurm job, then the public FlashWorld Space, then the Mac.
 
+**Real places** go through our own reconstruction pipeline on HiPerGator. We keep the sharpest frame in each window of
+a clip and mask people out, COLMAP 3.11 solves the cameras, and our own gsplat training loop (MCMC densification, a
+depth term, per-clip colour, pose refinement for video frames) trains the splats in about 12 minutes on one RTX PRO
+6000. Then we measure the floor and the real scale on the splats themselves, put the floor at zero, crop to the room,
+and let you walk only where the camera actually went, so you never step into a part nobody photographed. The surprise
+was symmetric furniture: a ping-pong table looks the same from either end, and COLMAP put whole stretches of video on
+a mirrored copy of the room until we limited matching to nearby frames.
+
+**People in 3D:** Multi-HMR 2 estimates every person's body in every frame. We track each person, nudge the bodies to
+match their outlines, and fit them to the Anny body model. The texture is then fitted to the footage itself, with the
+parts the camera never saw filled from the clothes' colours, and each person is exported as a skinned glTF (163
+joints) whose animation is keyed to the video's clock. The viewer plays it with the video's current time, so the
+people stay in sync when you pause, seek or play. A last pass keeps people out of measured furniture: from one moving
+phone, a body's distance is its least certain coordinate, so a foosball player could end up inside the table. We push
+them back along the camera's ray until they clear it. On frames of the clip held out from fitting, the final people
+overlap the real outlines by 84 to 87% (IoU), up from 72%.
+
 **Video rooms** run a five-pass pipeline. It samples frames to build an empty-room background plate (Big LaMa fills
 the spots nobody ever moved out of), runs Depth Anything V2 on every frame, unites a DeepLabV3 person mask with
 change-from-plate detection, aligns each frame's depth to the plate and smooths it over time, and packs RGB, depth and
@@ -124,8 +146,10 @@ had couldn't do it.
 collider so you can't walk through walls, and adds smooth locomotion, snap turn, a teleport arc, a comfort vignette,
 72 Hz with a performance step-down on the Quest, and a desktop and phone fallback.
 
-**The social layer:** a Roblox voxelizer turns the splats into greedy-merged, colour-quantised boxes. Our maps have
-about 2,000 to 6,000 parts and build in under 2 s, at 3.57 studs per metre so the room is life size. A presence relay
+**The social layer:** a real place becomes a Roblox room by fusing depth from every camera into one surface, snapping
+the floor and walls to flat planes, and projecting the photos onto them as textures, with a sky beyond the open
+sides. It is one textured mesh plus simple collision boxes, centred, at 3.57 studs per metre so the room is life size.
+(Generated worlds use a faster voxelizer: greedy-merged, colour-quantised boxes, 2,000 to 6,000 parts in under 2 s.) A presence relay
 moves everyone at 4 Hz in metres or studs, and the headset draws other people about 0.3 s in the past so nobody
 teleports. Notes live in DeepSpace; the server polls them every 2 s and pushes new ones to the headset over a
 WebSocket, so a note typed on the map shows up within a couple of seconds. The reality check reprojects every splat
@@ -158,7 +182,8 @@ guide and DeepSpace services so every hop could be tested before the real ones e
 
 - A walkable world from one screenshot in about 10 seconds, with roughly 80% of it imagined, and a toggle that shows
   you exactly which 80%.
-- Real people from a phone video standing in a room in VR, with sound.
+- Real places rebuilt from phone photos at real scale, and the people from a phone clip standing in them as full 3D
+  people you can walk around, in sync with the video and its sound.
 - One room, three ways in: a headset, a browser, Roblox.
 - More than 700 automated tests across TypeScript and Python, written during the event.
 
@@ -181,7 +206,7 @@ guide and DeepSpace services so every hop could be tested before the real ones e
 ## Built with
 
 bun, typescript, three.js, spark, webxr, python, pytorch, flashworld, wan2.2, anysplat, vggt, depth-anything-v2,
-deeplabv3, big-lama, gsplat, hugging-face, diffusers, opencv, ffmpeg, hipergator, slurm, cloudflare-tunnel, gemini,
+deeplabv3, big-lama, gsplat, colmap, multi-hmr, anny, gltf, hugging-face, diffusers, opencv, ffmpeg, hipergator, slurm, cloudflare-tunnel, gemini,
 roblox, luau, deepspace, meta-quest-3s, solana, capital-one-nessie, tiger-data, timescaledb, postgresql, auth0
 
 ## Team
@@ -190,4 +215,5 @@ roblox, luau, deepspace, meta-quest-3s, solana, capital-one-nessie, tiger-data, 
   check, the Solana scoreboard, the Nessie tab, Tiger Data replays, Auth0 sign-in
 - **Shivin:** the Roblox experience: room loader, room picker, VR ghost, tag rounds
 - **Brianna:** the Gemini guide: captions, labels, narration, spoken answers
-- **Seb:** the DeepSpace app ("Add a memory", live map, trails, notes, gallery), the Vultr GPU, the domain
+- **Seb:** the DeepSpace app ("Add a memory", live map, trails, notes, gallery), the Roblox games on the real
+  furniture, the Vultr GPU, the domain
