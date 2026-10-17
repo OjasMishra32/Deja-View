@@ -9,12 +9,9 @@ Everything below was checked against the live Gemini docs and SDK on Fri Oct 16,
 checked, it says so and tells you how to check it. If something here turns out to be wrong on the night, tell Ojasva
 right away and use the fallback listed for it.
 
-> **Update after your first push (Sat ~2 AM):** your service is merged into `main` (`integrations/guide/`), thanks.
-> Two gaps against the contract, both needed for the 0:40 beat:
-> 1. `/ask` must accept `audio` (the headset sends the spoken question as a webm data URL, no text): send it to Gemini
->    with the image, and return what was heard as `question` next to the `answer`.
-> 2. `/ask` and `/narrate` must return `speech`: the answer as Gemini text-to-speech, a WAV data URL. Until then the
->    headset shows the answer as a caption only.
+> **Update after your pushes (Sat ~2 AM):** your service is merged into `main` (`integrations/guide/`). `/ask` now hears
+> the spoken `audio` and both `/ask` and `/narrate` return `speech`, so the contract is complete. Next: tune answers on
+> real headset views with Ojasva on Saturday (the 0:40 beat: labels on entry, "who won?" answered within 2.5 s).
 
 > **Update (Sat early morning):** the Photon group-chat bot is dropped (not a Devpost prize, and it did not work).
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group

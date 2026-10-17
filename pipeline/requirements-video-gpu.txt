@@ -6,6 +6,10 @@
 #   python -m pip install -r pipeline/requirements-video-gpu.txt
 # picks the cu128 wheels through the extra index.
 # Weights: python pipeline/common/models.py --prefetch (into HF_HOME / TORCH_HOME).
+# Plate inpainting: Big LaMa (Apache-2.0) runs as TorchScript on torch alone, no extra package
+# (simple-lama-inpainting pins numpy<2, pillow<10, opencv-python<5). Its weights, big-lama.pt (206 MB,
+# sha256 7ba7aa7a...), go to TORCH_HOME/hub/checkpoints with pipeline/common/models.py --prefetch;
+# scipy below solves the plate depth fill.
 --extra-index-url https://download.pytorch.org/whl/cu128
 torch>=2.7
 torchvision>=0.22
