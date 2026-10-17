@@ -21,6 +21,8 @@ local vrId = "quest-1"
 local vrName = "Judge"
 local endsAt = 0
 local roundId = 0
+local resultRound = ""
+local startedClock = 0
 
 local function now()
 	return workspace:GetServerTimeNow()
@@ -124,6 +126,21 @@ function TagGame.finish(winner: string?)
 	if wasPlaying and winner == "roblox" and mvp then
 		Stats.win(mvp.player, "tag") -- the MVP of a surviving team takes the tag win
 	end
+	if wasPlaying then
+		local judge = { id = vrId, name = string.sub(vrName, 1, 40) }
+		local robloxSide = mvp and mvp.player or nil
+		local tags, lives = vrTags, 0
+		for _, r in runners do
+			lives += math.max(r.lives, 0)
+		end
+		if winner == "vr" then
+			Backend.gameResult({ game = "tag", round = resultRound, startedAt = startedClock, winnerId = judge.id,
+				winnerName = judge.name, loser = robloxSide, score = string.format("%d-%d", tags, lives) })
+		else
+			Backend.gameResult({ game = "tag", round = resultRound, startedAt = startedClock, winner = robloxSide,
+				loserId = judge.id, loserName = judge.name, score = string.format("%d-%d", lives, tags) })
+		end
+	end
 	local sceneId = workspace:GetAttribute("SceneId")
 	if wasPlaying and type(sceneId) == "string" then
 		Backend.sendEvent(sceneId, { type = "round", state = "end", scores = scores(), winner = winner,
@@ -203,6 +220,7 @@ function TagGame.start(by: Player?): boolean
 			shield(r.player, Config.IMMUNITY)
 		end
 		setState("playing")
+		resultRound, startedClock = Backend.newRound("tag"), os.clock()
 		for _, r in runners do
 			Stats.badge(r.player, "judge")
 		end

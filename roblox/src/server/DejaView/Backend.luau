@@ -75,4 +75,34 @@ function Backend.sendEvent(sceneId: string, body: any)
 	end
 end
 
+-- A finished match in the game.result contract (contracts.md 6.5): winner/loser as "rbx-<id>" or "bot",
+-- the winner's score first, a round id made once at the match start.
+function Backend.newRound(gameKey: string): string
+	return gameKey .. "-" .. game:GetService("HttpService"):GenerateGUID(false)
+end
+
+function Backend.gameResult(r: { game: string, round: string, winner: Player?, loser: Player?, score: string,
+	startedAt: number, draw: boolean?, winnerId: string?, winnerName: string?, loserId: string?, loserName: string? })
+	local sceneId = workspace:GetAttribute("SceneId")
+	if type(sceneId) ~= "string" or sceneId == "" then
+		return
+	end
+	local function id(p: Player?): string
+		return if p then "rbx-" .. p.UserId else "bot"
+	end
+	local function name(p: Player?): string
+		return if p then string.sub(p.DisplayName, 1, 40) else "Bot"
+	end
+	local body: { [string]: any } = {
+		type = "game.result", game = r.game, round = r.round,
+		winner = r.winnerId or id(r.winner), winnerName = r.winnerName or name(r.winner),
+		loser = r.loserId or id(r.loser), loserName = r.loserName or name(r.loser),
+		score = if r.draw then "draw" else r.score, durationS = math.max(0, math.floor(os.clock() - r.startedAt)),
+	}
+	if r.draw then
+		body.draw = true
+	end
+	Backend.sendEvent(sceneId, body)
+end
+
 return Backend
