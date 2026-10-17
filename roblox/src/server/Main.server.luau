@@ -122,6 +122,26 @@ end)
 
 TagGame.start10Hz()
 Extras.start()
+
+-- The judge's avatar (Update 4 item 4): one plain R15 rig for every client to clone and drive locally.
+task.spawn(function()
+	local ok, rig = pcall(function()
+		local desc = Instance.new("HumanoidDescription")
+		local dark = Color3.fromRGB(44, 44, 52)
+		desc.HeadColor, desc.TorsoColor = dark, dark
+		desc.LeftArmColor, desc.RightArmColor, desc.LeftLegColor, desc.RightLegColor = dark, dark, dark, dark
+		return Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15)
+	end)
+	if not ok or not rig then
+		warn("[DejaView] judge rig unavailable, using the floating ghost:", rig)
+		return
+	end
+	rig.Name = "JudgeRig"
+	local assets = ReplicatedStorage:FindFirstChild("Assets") or Instance.new("Folder")
+	assets.Name = "Assets"
+	assets.Parent = ReplicatedStorage
+	rig.Parent = assets
+end)
 -- First requests wait for the live config so they go to dejaview_base, not the built-in fallback.
 -- (Unpublished places take ~30 s to fail; 10 s is the cap.)
 Config.waitLoaded(10)

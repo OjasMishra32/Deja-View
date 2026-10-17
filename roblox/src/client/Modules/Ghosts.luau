@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Theme = require(Shared.Theme)
 local Interp = require(Shared.Interp)
+local Avatar = require(script.Parent.Avatar)
 
 local Ghosts = {}
 
@@ -22,6 +23,7 @@ type Ghost = {
 	fade: number, -- 1 visible -> 0 gone
 	gone: boolean,
 	base: { [BasePart]: number },
+	rig: Avatar.Rig?,
 }
 
 local ghosts: { [string]: Ghost } = {}
@@ -128,6 +130,23 @@ local function create(id: string, kind: string, name: string): Ghost
 			g.base[d] = d.Transparency
 		end
 	end
+	if kind == "vr" then
+		-- A real person when the rig is available: hide the floating head and body, keep the lime hands and outline.
+		local rig = Avatar.create(model)
+		if rig then
+			g.rig = rig
+			g.base[g.head] = 1
+			g.base[g.visor] = 1
+			if g.body then
+				g.base[g.body] = 1
+			end
+			for _, hand in { g.hl, g.hr } do
+				if hand then
+					hand.Size = Vector3.new(0.5, 0.5, 0.5)
+				end
+			end
+		end
+	end
 	model.Parent = folder
 	ghosts[id] = g
 	return g
@@ -211,6 +230,10 @@ function Ghosts.update(dt: number)
 			end
 			if g.itChip then
 				g.itChip.Visible = playing
+			end
+			if g.rig then
+				Avatar.update(g.rig, s, dt)
+				Avatar.setTransparency(g.rig, 1 - g.fade)
 			end
 		elseif g.kind == "web" then
 			g.head.CFrame = CFrame.new((s.head or s.pos) + Vector3.new(0, 0, 0))
