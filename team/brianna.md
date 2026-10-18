@@ -5,7 +5,7 @@ team; where this page and `contracts.md` disagree, `contracts.md` wins.
 
 > **Update (Sat ~10:30 PM): your last job is the Tiger Data sign-up (about 10 minutes).** Gemini is done.
 > 1. tigerdata.com, free account, create a **Tiger Cloud** service (the free tier is fine).
-> 2. Copy its connection string (`postgres://...?sslmode=require`): that is `TIGER_DATA_URL`. Send the values to Ojasva **in a DM only**: never in the repo, the team chat or a screenshot. He adds them to the
+> 2. Copy its connection string (`postgres://...?sslmode=require`): that is `TIGER_DATA_URL`. Send the values to Ojasva **in a DM only**: never in the repo, the team chat or a screenshot. Ojasva adds them to the
 > server's `.env` and restarts it (`scripts/serve-demo.sh restart`).
 > 3. That's all: the server makes its own tables (a TimescaleDB hypertable for presence and a moments table for Roblox
 >    tags, rounds and results). After the restart, `https://deja-view.photo/api/replay/status` should say it is

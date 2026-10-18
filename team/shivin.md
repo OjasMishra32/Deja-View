@@ -12,7 +12,7 @@ they win: say so in the team chat.
 >    **Allowed Web Origins:** `https://deja-view.photo`. Save.
 > 3. Applications → APIs → Create API, identifier `https://dejaview/api` (signing RS256, the default).
 > 4. Three values: `AUTH0_DOMAIN` (the tenant, like `dejaview.us.auth0.com`), `AUTH0_CLIENT_ID` (the SPA's client id)
->    and `AUTH0_AUDIENCE` (`https://dejaview/api`). Send the values to Ojasva **in a DM only**: never in the repo, the team chat or a screenshot. He adds them to the
+>    and `AUTH0_AUDIENCE` (`https://dejaview/api`). Send the values to Ojasva **in a DM only**: never in the repo, the team chat or a screenshot. Ojasva adds them to the
 > server's `.env` and restarts it (`scripts/serve-demo.sh restart`).
 > 5. Check with Ojasva after the restart: on `https://deja-view.photo/capture`, "Sign in" opens Auth0's login and
 >    comes back signed in. What it protects: adding a memory, `/host` cues and the tab (docs/DEVPOST.md, Auth0).
