@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root { --lime: #C6FF3D; --ink: #F5F5F7; --dim: rgba(245, 245, 247, 0.55); --faint: rgba(245, 245, 247, 0.18); --bg: #060607; --sky: #64D2FF; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, "SF Pro Display", Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  #gl, #overlay { position: absolute; inset: 0; }
+  #overlay > * { position: absolute; white-space: nowrap; }
+  .label { font-size: 22px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lime); font-weight: 600; }
+  .title { font-size: 56px; font-weight: 600; letter-spacing: -0.02em; }
+  .big { font-size: 104px; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1; }
+  .mid { font-size: 44px; font-weight: 500; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+  .unit { font-size: 28px; color: var(--dim); font-weight: 500; }
+  .note { font-size: 24px; color: var(--dim); }
+  .mono { font-family: "SF Mono", ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
+  .chip { font-size: 22px; color: var(--ink); padding: 8px 16px; border: 1.5px solid var(--faint); border-radius: 999px; }
+</style>
+</head>
+<body>
+<div id="gl"></div>
+<div id="shade" style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(6,6,7,.85) 0%,rgba(6,6,7,0) 22%,rgba(6,6,7,0) 64%,rgba(6,6,7,.92) 100%)"></div>
+<div id="overlay"></div>
+<script type="module">
+  const shot = new URLSearchParams(location.search).get("shot");
+  const m = await import(`/film/kit/dist/${shot}.js`);
+  window.SHOT = m.default;
+  await window.SHOT.setup();
+  window.READY = true;
+</script>
+</body>
+</html>

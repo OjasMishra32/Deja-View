@@ -15,3 +15,8 @@ graphify-out/
 # model weights are downloaded at setup, never committed
 pipeline/models/
 web/public/avatars/
+
+# film renders and pulled data
+film/assets/
+film/out/
+film/kit/dist/
