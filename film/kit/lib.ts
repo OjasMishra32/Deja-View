@@ -5,10 +5,16 @@ import * as THREE from 'three';
 
 export const W = 1920;
 export const H = 1080;
-export const LIME = '#C6FF3D';
+// The site's palette, dark story-section variant
 export const INK = '#F5F5F7';
-export const SKY = '#64D2FF';
-export const BG = '#060607';
+export const GREY = '#86868B';
+export const GREY_3 = '#6E6E73';
+export const HAIR = '#424245';
+export const BLUE = '#2997FF';
+export const BG = '#000000';
+// kept so older shots still build; new work uses BLUE
+export const LIME = BLUE;
+export const SKY = '#6E6E73';
 
 export interface Shot {
   duration: number;
@@ -20,7 +26,26 @@ export const clamp = (x: number, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 /** 0 before a, 1 after b, linear between. */
 export const seg = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
 export const lerp = (a: number, b: number, x: number) => a + (b - a) * x;
+/** The site's easing, cubic-bezier(.25, .1, .25, 1). */
+function bezier(x1: number, y1: number, x2: number, y2: number) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+  const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const sx = (t: number) => ((ax * t + bx) * t + cx) * t;
+  const sy = (t: number) => ((ay * t + by) * t + cy) * t;
+  return (x: number) => {
+    let t = x;
+    for (let i = 0; i < 6; i++) {
+      const d = (3 * ax * t + 2 * bx) * t + cx;
+      if (Math.abs(d) < 1e-6) break;
+      t -= (sx(t) - x) / d;
+    }
+    return sy(clamp(t));
+  };
+}
+const siteEase = bezier(0.25, 0.1, 0.25, 1);
+
 export const ease = {
+  site: siteEase,
   out: (x: number) => 1 - Math.pow(1 - x, 3),
   inOut: (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2),
   expo: (x: number) => (x >= 1 ? 1 : 1 - Math.pow(2, -10 * x)),
@@ -51,9 +76,9 @@ export function el(cls: string, x: number, y: number, html = '', parent: HTMLEle
   return e;
 }
 
-/** Fade and lift an element in over [a, b]. */
-export function reveal(e: HTMLElement, t: number, a: number, b: number, lift = 16) {
-  const k = ease.out(seg(t, a, b));
+/** Fade and lift an element in over [a, b], with the site's easing. */
+export function reveal(e: HTMLElement, t: number, a: number, b: number, lift = 24) {
+  const k = ease.site(seg(t, a, b));
   e.style.opacity = String(k);
   e.style.transform = `translateY(${(1 - k) * lift}px)`;
 }
@@ -136,4 +161,26 @@ export function pointsMaterial(size: number) {
         gl_FragColor = vec4(vColor, vAlpha * uFade * (1.0 - r * r));
       }`,
   });
+}
+
+/** The site's story block: a grey label, a big headline, one grey line. Bottom left. */
+export function story(eyebrow: string, headline: string, body: string) {
+  const box = el('story', 0, 0, '');
+  box.style.left = '';
+  box.style.top = '';
+  const parts = [['eyebrow', eyebrow], ['headline', headline], ['body', body]].map(([cls, html]) => {
+    const d = document.createElement('div');
+    d.className = cls;
+    d.innerHTML = html;
+    box.appendChild(d);
+    return d;
+  });
+  return {
+    box,
+    /** Reveal from `at`, staggered like the site; fade out over [outA, outB]. */
+    show(t: number, at: number, outA = 1e9, outB = 1e9) {
+      parts.forEach((d, i) => reveal(d, t, at + i * 0.14, at + i * 0.14 + 0.9));
+      box.style.opacity = String(1 - seg(t, outA, outB));
+    },
+  };
 }

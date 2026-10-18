@@ -1,36 +1,35 @@
 // Shot 32a: structure from motion on the Game Lawn, from the real solve.
-// 163 photos and clip frames fly to the exact spots they were taken from, lime threads link each camera to the
-// points it sees, and the 57,048 triangulated points appear in their real colours, strongest tracks first.
+// 163 photos and clip frames fly to the exact spots they were taken from, faint sight-lines link cameras to points
+// they see, and the 57,048 triangulated points appear in their real colours, strongest tracks first.
 import * as THREE from 'three';
-import { ease, el, fmt, json, lerp, loadTexture, orbit, pointsMaterial, reveal, rng, seg, stage, type Shot, LIME, INK, SKY } from '../lib';
+import { ease, json, lerp, loadTexture, orbit, pointsMaterial, rng, seg, stage, story, type Shot, BLUE, INK, GREY_3 } from '../lib';
 
 const DUR = 7.5;
-const GROUP_COLOUR: Record<string, string> = { photo: INK, walk: LIME, play: SKY };
+const FRAME_COLOUR: Record<string, string> = { photo: INK, walk: GREY_3, play: GREY_3 };
 
 let S: ReturnType<typeof stage>;
 let pointsMat: THREE.ShaderMaterial;
 const cams: { group: THREE.Group; from: THREE.Vector3; to: THREE.Vector3; delay: number; mats: THREE.Material[] }[] = [];
 let threads: THREE.LineSegments;
-let threadData: { a: THREE.Vector3; b: THREE.Vector3; delay: number }[] = [];
-const ui: Record<string, HTMLElement> = {};
-let totals = { cams: 0, points: 0, error: 0 };
+const threadData: { a: THREE.Vector3; b: THREE.Vector3; delay: number }[] = [];
 const target = new THREE.Vector3();
+let words: ReturnType<typeof story>;
 
 const shot: Shot = {
   duration: DUR,
   async setup() {
     S = stage();
+    // keep the picture in the upper part of the frame, above the story text
+    S.camera.setViewOffset(1920, 1080, 0, 250, 1920, 1080);
     const data = await json('/film/assets/kit/courts.json');
     const buf = await (await fetch('/film/assets/kit/points.bin')).arrayBuffer();
     const n: number = data.points;
     const xyz = new Float32Array(buf, 0, n * 3);
     const rgb = new Uint8Array(buf, n * 12, n * 3);
     const track = new Uint8Array(buf, n * 15, n);
-    totals = { cams: data.cameras.length, points: n, error: data.stats.meanReprojError };
     for (const c of data.cameras) target.add(new THREE.Vector3(...c.centre));
     target.divideScalar(data.cameras.length).add(new THREE.Vector3(0, 0.6, 0));
 
-    // Points, strongest (longest tracks) first
     const order = Array.from({ length: n }, (_, i) => i).sort((a, b) => track[b] - track[a]);
     const pos = new Float32Array(n * 3);
     const col = new Float32Array(n * 3);
@@ -48,7 +47,6 @@ const shot: Shot = {
     pointsMat = pointsMaterial(1.1);
     S.scene.add(new THREE.Points(g, pointsMat));
 
-    // Cameras: the photo on its image plane, and the frustum
     const rand = rng(7);
     const groups = ['photo', 'walk', 'play'];
     const sorted = [...data.cameras].sort((a: any, b: any) => groups.indexOf(a.group) - groups.indexOf(b.group));
@@ -65,15 +63,14 @@ const shot: Shot = {
       group.add(new THREE.Mesh(plane, photoMat));
       const o = new THREE.Vector3();
       const lines = [o, corners[0], o, corners[1], o, corners[2], o, corners[3], corners[0], corners[1], corners[1], corners[2], corners[2], corners[3], corners[3], corners[0]];
-      const lineMat = new THREE.LineBasicMaterial({ color: GROUP_COLOUR[c.group], transparent: true, opacity: 0 });
+      const lineMat = new THREE.LineBasicMaterial({ color: FRAME_COLOUR[c.group], transparent: true, opacity: 0 });
       group.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(lines), lineMat));
       const fwd = new THREE.Vector3(...c.forward);
       const from = centre.clone().addScaledVector(fwd, -26 - rand() * 14).add(new THREE.Vector3(0, 6 + rand() * 6, 0));
-      cams.push({ group, from, to: centre, delay: 0.15 + 2.3 * (i / sorted.length) + rand() * 0.12, mats: [photoMat, lineMat] });
+      cams.push({ group, from, to: centre, delay: 0.3 + 2.3 * (i / sorted.length) + rand() * 0.12, mats: [photoMat, lineMat] });
       S.scene.add(group);
     });
 
-    // Threads: from a sample of cameras to points inside their view
     const sample = sorted.filter((_: any, i: number) => i % 5 === 0);
     const cosMax = Math.cos((26 * Math.PI) / 180);
     const p = new THREE.Vector3();
@@ -82,45 +79,32 @@ const shot: Shot = {
       const centre = new THREE.Vector3(...c.centre);
       const fwd = new THREE.Vector3(...c.forward);
       let taken = 0;
-      for (let k = (ci * 97) % 211; k < n && taken < 26; k += 211) {
+      for (let k = (ci * 97) % 211; k < n && taken < 22; k += 211) {
         p.set(xyz[k * 3], xyz[k * 3 + 1], xyz[k * 3 + 2]);
         d.copy(p).sub(centre);
-        const dist = d.length();
-        if (dist < 16 && d.normalize().dot(fwd) > cosMax) {
-          threadData.push({ a: centre, b: p.clone(), delay: 2.5 + 1.4 * (ci / sample.length) + (taken % 5) * 0.04 });
+        if (d.length() < 16 && d.normalize().dot(fwd) > cosMax) {
+          threadData.push({ a: centre, b: p.clone(), delay: 2.6 + 1.4 * (ci / sample.length) + (taken % 5) * 0.04 });
           taken++;
         }
       }
     });
     const tg = new THREE.BufferGeometry();
     tg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(threadData.length * 6), 3));
-    threads = new THREE.LineSegments(tg, new THREE.LineBasicMaterial({ color: LIME, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false }));
+    threads = new THREE.LineSegments(tg, new THREE.LineBasicMaterial({ color: BLUE, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }));
     S.scene.add(threads);
 
-    // Type
-    ui.label = el('label', 120, 104, 'Structure from motion');
-    ui.sub = el('note', 120, 144, 'Where every photo was taken, solved from the photos alone');
-    ui.legend = el('note', 1380, 104,
-      `<div style="display:grid;grid-template-columns:18px auto;gap:10px 14px;align-items:center">` +
-      `<span style="width:14px;height:14px;border:2px solid ${INK}"></span><span>25 photos</span>` +
-      `<span style="width:14px;height:14px;border:2px solid ${LIME}"></span><span>80 frames, walking clip</span>` +
-      `<span style="width:14px;height:14px;border:2px solid ${SKY}"></span><span>58 frames, ping pong clip</span></div>`);
-    ui.camN = el('big', 120, 800, '0');
-    ui.camU = el('unit', 124, 916, 'cameras solved');
-    ui.ptN = el('big', 560, 800, '0');
-    ui.ptU = el('unit', 564, 916, 'points triangulated');
-    ui.errN = el('big', 1120, 800, `${totals.error.toFixed(1)}<span class="unit" style="position:static;margin-left:10px">px</span>`);
-    ui.errU = el('unit', 1124, 916, 'mean reprojection error');
+    words = story('Cameras', 'Every photo, placed where it was taken.',
+      `<b>163</b> photos and video frames, located from the pictures alone. <b>57,048</b> points triangulated between them, to within a pixel.`);
   },
 
   frame(t) {
-    orbit(S.camera, target, lerp(21, 14.5, ease.inOut(seg(t, 0, DUR))), lerp(28, 66, ease.sine(seg(t, 0, DUR))), lerp(30, 21, ease.inOut(seg(t, 0, DUR))));
+    orbit(S.camera, target, lerp(21, 15.5, ease.site(seg(t, 0, DUR))), lerp(28, 62, ease.sine(seg(t, 0, DUR))), lerp(30, 22, ease.site(seg(t, 0, DUR))));
 
     for (const c of cams) {
       const k = ease.expo(seg(t, c.delay, c.delay + 1.0));
       c.group.position.lerpVectors(c.from, c.to, k);
-      (c.mats[0] as THREE.MeshBasicMaterial).opacity = 0.92 * k * (1 - 0.55 * seg(t, 4.6, 6.0));
-      (c.mats[1] as THREE.LineBasicMaterial).opacity = 0.85 * k;
+      (c.mats[0] as THREE.MeshBasicMaterial).opacity = 0.95 * k * (1 - 0.5 * seg(t, 4.8, 6.2));
+      (c.mats[1] as THREE.LineBasicMaterial).opacity = 0.7 * k;
     }
 
     const pos = threads.geometry.getAttribute('position') as THREE.BufferAttribute;
@@ -132,22 +116,10 @@ const shot: Shot = {
       pos.setXYZ(i * 2 + 1, v.x, v.y, v.z);
     });
     pos.needsUpdate = true;
-    (threads.material as THREE.LineBasicMaterial).opacity = 0.32 * (1 - seg(t, 4.9, 5.8));
+    (threads.material as THREE.LineBasicMaterial).opacity = 0.22 * (1 - seg(t, 5.0, 6.0));
+    pointsMat.uniforms.uReveal.value = ease.out(seg(t, 2.7, 5.0)) * 1.06;
 
-    pointsMat.uniforms.uReveal.value = ease.out(seg(t, 2.6, 4.9)) * 1.06;
-
-    reveal(ui.label, t, 0.1, 0.6);
-    reveal(ui.sub, t, 0.25, 0.8);
-    reveal(ui.legend, t, 0.6, 1.2);
-    reveal(ui.camN, t, 0.2, 0.7);
-    reveal(ui.camU, t, 0.3, 0.8);
-    ui.camN.textContent = fmt(totals.cams * ease.out(seg(t, 0.2, 2.8)));
-    reveal(ui.ptN, t, 2.5, 3.0);
-    reveal(ui.ptU, t, 2.6, 3.1);
-    ui.ptN.textContent = fmt(totals.points * ease.out(seg(t, 2.6, 4.9)));
-    reveal(ui.errN, t, 5.0, 5.5);
-    reveal(ui.errU, t, 5.1, 5.6);
-
+    words.show(t, 0.6);
     S.renderer.render(S.scene, S.camera);
   },
 };

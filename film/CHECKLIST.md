@@ -1,75 +1,62 @@
-# What you film
+# Footage
 
-Everything here is yours to shoot. Everything else (the diagrams, the splat shots, the transitions, the type, the
-sponsor logos, the end card) Claude renders from our real data. Shot numbers match `docs/VIDEO.md`.
+You film only what needs a person, the headset, the live game or a login. Claude makes everything else and puts each
+finished clip on your CapCut timeline. Drop files in Downloads (or `film/in/`) and say which number they are.
 
-Drop every file into `film/in/` named by its code, for example `A3-take2.mov`.
+**Done:** the Quest POV of Shivin's dad's memory, Shivin taking the headset off, the crying clip.
 
-**Before you start:** the site is up, the GPU worker is warm (for B7), Roblox version 16 is live, the guide is on,
-Do Not Disturb on every device, Quest Camera → Record video works.
+## Quest POV (Quest: Camera → Record video; move slowly; hold still 2 s at the start and the end; ~20 s each)
 
-## 1 · The intro and the ending (do these first)
+| # | World | What to do | Shot |
+|---|---|---|---|
+| Q1 | `the-courts` (Game Lawn) | Spawn, walk slowly to the ping pong table, then look straight up into the palms | 13, 33 |
+| Q2 | `the-courts` | Ping pong against Shivin in Roblox (clap first) | 15–17 |
+| Q3 | `chess-match` | Walk a full circle round the two players mid-game | 21 |
+| Q4 | `courts-foosball` | Step up beside the table while they spin the rods | 22 |
+| Q5 | `kitchen-cooking` | Walk up behind Seb at the stove, then round to his side | 19 |
+| Q6 | `chess-room` | Stand on the giant board and turn slowly | montage |
+| Q7 | `old-house-kitchen` | Walk through, then press left Y (reality check) on, wait 2 s, off | 23, 28 |
+| Q8 | `tilted-towers` | Walk between the towers, then teleport up onto a roof | 20 |
+| Q9 | `brick-apartment` | One slow 360° turn | 25 |
+| Q10 | `chess-match` | Hold the button and ask "Who won?"; record with audio | 26 |
+| Q11 | your new world | After the live build (P6): turn round, then the reality check | 27–28 |
 
-- [ ] **A1 · Quest · Ojasva in `alzheimers-memory`** (shots 1, 41). Start at the spawn, look round slowly, let both
-      moments play. **End by pressing B (back to the start) and holding still 2 s.** 2 takes.
-- [ ] **D1 · Phone on a stand · Shivin alone, headset off** (shot 3). Dark room, one warm lamp low on one side,
-      nobody else in frame. Headset on, still 5 s, then off in one slow motion. 3 takes.
-- [ ] **D1b · same setup · headset back on** (shot 40). 3 takes.
-- [ ] **The crying clip** (shot 4). Already recorded: save it from QuickTime (File → Save) to Downloads.
+## Roblox, the live game (https://www.roblox.com/games/2942475849), full-screen recording, 30 s each
 
-## 2 · Ping pong cross-play (Ojasva in the Quest, Shivin in Roblox)
+| # | What | Shot |
+|---|---|---|
+| R1 | From the spawn, walk slowly round the Game Lawn patio to the ping pong and foosball tables, eye level | 35 |
+| R2 | Walk into the giant chess room, circle the board slowly, then make one move against the bot | 37 |
+| R3 | Shivin's screen during the ping pong rally with you in the headset (same rally as Q2) | 15 |
+| R4 (optional) | Roblox Studio: fly round the Game Lawn room for 20 s (Studio eye candy) | 37 |
 
-- [ ] **D2 · Phone, wide** (shots 14, 16). Both of you in one frame. Clap once, then play until a real celebration.
-- [ ] **A3 · Quest** (shots 15, 17). The same rallies, 2 minutes.
-- [ ] **B3 · Laptop screen** (shots 13, 15). Shivin's Roblox view of the same rallies, plus 5 s looking at the
-      table from the angle in B2.
-- [ ] **B2 · Laptop screen** (shot 13). `the-courts` in the browser: fly to the ping pong table and stop. 10 s.
-- [ ] **D3 · Phone** (shot 13). The real Infinity Hall ping pong table from the same angle as B2. 5 s.
+## Phone
 
-## 3 · The website (laptop, 60 fps)
+| # | What | Shot |
+|---|---|---|
+| P1 | Wide shot of both of you playing cross-play ping pong (Ojasva in the Quest, Shivin at the laptop), clap first | 14, 16 |
+| P2 | The real Infinity Hall ping pong table from where the Roblox spawn is, 8 s | 13 |
+| P3 | The real giant chess corner, 8 s | 35 |
+| P4 | The real kitchen, 8 s | 24 |
+| P5 | A hand scanning the QR on the laptop's landing page, plus that phone's screen recording | 18 |
+| P6 | A world made live: photo of your table → `/capture` → Walk in (screen recording, nothing cut) + over the shoulder | 27 |
+| P7 | DeepSpace app: Add a memory → the card → Walk in (phone screen recording) | 29 |
+| P8 | Memory Keys: phone knocks, laptop clicks "Let in", phone walks in (record both screens) | 38 |
+| P9 | Half-second inserts: a face in the headset, hands on the keyboard, a thumb on a phone | 18–28 |
+| P10 | The four of you laughing together, 10 s | 42 |
+| P11 | Shivin putting the headset back on (same setup as the take-off clip), for the ending | 40 |
 
-- [ ] **B1** (shots 5–12). deja-view.photo: one slow scroll from Photos to Games, then Game Lawn → Walk in.
-      Cursor hidden until Games. 3 takes.
+## Voice-over
 
-## 4 · Every way in
+Quiet room, phone about 15 cm away, 3 takes per line. Lines are in `docs/VIDEO.md`.
 
-- [ ] **C1 · Phone screen** + **D4 · Phone filming the hand** (shot 18). Scan the landing page's QR; the site opens.
-- [ ] **C2 · Phone screen** (shot 19). `kitchen-cooking`: drag to walk and look, tap for sound. 20 s.
-- [ ] **B4 · Laptop screen** (shot 20). `tilted-towers`: WASD between the towers, then F straight up. 15 s.
-- [ ] **A4 · Quest** (shot 21). `chess-match`: drop onto the board, walk a full circle round the players. 20 s.
-- [ ] **A5 · Quest** (shot 22). `courts-foosball`: step beside the table as they play. 15 s.
-- [ ] **B5 · Laptop screen** (shot 23). `old-house-kitchen`: a slow walk. 15 s.
-- [ ] **B6 · Laptop screen** (shot 24). `kitchen` with the measurements showing (or the site's Robotics section). 15 s.
-- [ ] **A6 · Quest** (shot 25). `brick-apartment`: a slow turn. 15 s.
-- [ ] **A7 · Quest, audio on** (shot 26). `chess-match`: hold the button, ask "Who won?", wait for the answer.
-- [ ] **D5 · Phone** (all of section 4). Half-second inserts: a face in the headset, hands on WASD, a thumb on the
-      phone. Several of each.
+## From Seb
 
-## 5 · Make one live
+The kitchen objects (views with detections, the fridge model, its score sheet, the texture scan) and a capture of the
+agent's run on HiPerGator with Roblox Studio building (shots 36–37).
 
-- [ ] **B7 · Laptop screen** + **D6 · Phone over the shoulder** (shot 27). Take a photo of our table, drop it into
-      `/capture`, keep recording until it's ready, click Walk in. Nothing cut. 30 s.
-- [ ] **A8 · Quest** (shot 28). That new world: turn round, then the reality check on and off (left Y). 20 s.
-- [ ] **C3 · Phone screen** (shot 29). DeepSpace app: Add a memory → the card → Walk in. 20 s.
+## Claude makes
 
-## 6 · Roblox chess and the agent
-
-- [ ] **B9 · Laptop screen** (shot 37). Shivin in the Roblox giant chess room plays the bot to a capture or a win.
-      60 s.
-- [ ] **From Seb, E1** (shot 36). The kitchen objects: views with detections, the fridge model, its score sheet and
-      texture scan.
-- [ ] **From Seb, E2** (shot 37). A capture of the agent's run on HiPerGator and Roblox Studio while it builds.
-
-## 7 · The family
-
-- [ ] **C4 · Phone screen** + **B8 · Laptop screen** + **D7 · Phone filming both** (shot 38). A private memory:
-      the phone knocks, the laptop clicks "Let in", the phone walks in.
-- [ ] **D8 · Phone** (shot 42). All four of you laughing, in the headset and at the laptop. 10 s.
-
-## 8 · Voice-over
-
-- [ ] Quiet room (a closet works), phone about 15 cm from your mouth, 3 takes per line, slow. Every line is in
-      `docs/VIDEO.md`. Shivin records lines 4 and 41.
-
-**Count:** 8 Quest recordings, 9 laptop recordings, 4 phone screen recordings, 8 phone shots of you, 2 from Seb, the
-crying clip and the voice-over.
+The intro, the website scroll, every technical shot, six world fly-throughs, the reality check, the visit heatmap
+(from the real visits your Quest filming records in Tiger Data), the real → splat → Roblox comparisons (once R1 and
+P2 are in), the ending transition, and the end card with every sponsor logo.

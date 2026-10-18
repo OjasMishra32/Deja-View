@@ -3,24 +3,38 @@
 <head>
 <meta charset="utf-8">
 <style>
-  :root { --lime: #C6FF3D; --ink: #F5F5F7; --dim: rgba(245, 245, 247, 0.55); --faint: rgba(245, 245, 247, 0.18); --bg: #060607; --sky: #64D2FF; }
-  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); color: var(--ink);
-    font-family: -apple-system, "SF Pro Display", Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  /* The site's own tokens (web: --text, --text-2, --text-3, --blue, --ease), in the dark story-section variant */
+  :root {
+    --bg: #000; --text: #f5f5f7; --text-2: #86868b; --text-3: #6e6e73; --hair: #424245; --hair-2: #2a2a2d;
+    --blue: #2997ff; --blue-site: #0071e3; --card: #1d1d1f; --ease: cubic-bezier(.25, .1, .25, 1);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+  }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); color: var(--text);
+    font-family: var(--font); -webkit-font-smoothing: antialiased; }
   #gl, #overlay { position: absolute; inset: 0; }
-  #overlay > * { position: absolute; white-space: nowrap; }
-  .label { font-size: 22px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lime); font-weight: 600; }
-  .title { font-size: 56px; font-weight: 600; letter-spacing: -0.02em; }
-  .big { font-size: 104px; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1; }
-  .mid { font-size: 44px; font-weight: 500; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
-  .unit { font-size: 28px; color: var(--dim); font-weight: 500; }
-  .note { font-size: 24px; color: var(--dim); }
-  .mono { font-family: "SF Mono", ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
-  .chip { font-size: 22px; color: var(--ink); padding: 8px 16px; border: 1.5px solid var(--faint); border-radius: 999px; }
+  #overlay > * { position: absolute; }
+  #shade { position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, rgba(0,0,0,0) 50%, rgba(0,0,0,.9) 66%, #000 74%); }
+
+  /* The story block: bottom left, like the site's scroll story */
+  .story { left: 240px; bottom: 96px; width: 1500px; }
+  .story > div { will-change: transform, opacity; }
+  .eyebrow { font-size: 26px; font-weight: 600; color: var(--text-2); letter-spacing: -0.01em; margin-bottom: 12px; }
+  .headline { font-size: 72px; font-weight: 700; line-height: 1.05; letter-spacing: -0.025em; color: var(--text); }
+  .body { font-size: 28px; line-height: 1.4; color: var(--text-2); margin-top: 18px; letter-spacing: -0.012em; max-width: 1240px; }
+  .body b { color: var(--text); font-weight: 600; }
+
+  /* Small type inside visuals */
+  .callout { font-size: 24px; font-weight: 500; color: var(--text); letter-spacing: -0.01em; white-space: nowrap; }
+  .callout span { color: var(--text-2); font-weight: 400; }
+  .axis { font-size: 20px; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .value { font-size: 26px; font-weight: 600; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .card { border-radius: 22px; overflow: hidden; background: var(--card); }
 </style>
 </head>
 <body>
 <div id="gl"></div>
-<div id="shade" style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(6,6,7,.85) 0%,rgba(6,6,7,0) 22%,rgba(6,6,7,0) 64%,rgba(6,6,7,.92) 100%)"></div>
+<div id="shade"></div>
 <div id="overlay"></div>
 <script type="module">
   const shot = new URLSearchParams(location.search).get("shot");

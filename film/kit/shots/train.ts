@@ -1,19 +1,23 @@
 // Shot 32b: training the Game Lawn, from the real log of the run that made it.
-// Left: a photo and our render of the same view, a wipe between them; at the end it switches to a photo the model
-// never trained on. Right: PSNR and the splat count climbing step by step, and the camera poses being corrected.
-import { ease, el, fmt, json, lerp, reveal, seg, type Shot, LIME, INK } from '../lib';
+// A photo and our render of the same view with a slider between them, and the real PSNR curve drawing itself step by
+// step. At the end the card switches to a photo the model never trained on.
+import { ease, el, json, lerp, seg, story, type Shot, BLUE, INK } from '../lib';
 
 const DUR = 7.5;
 const STEPS = 30000;
-const ui: Record<string, HTMLElement> = {};
 let rows: any[] = [];
 let ema: number[] = [];
 let meta: any;
 let pick: { train: string; test: string };
+const ui: Record<string, HTMLElement> = {};
+let words: ReturnType<typeof story>;
 
-const CX = 1190, CY = 330, CW = 610, CH = 300; // PSNR chart
-const SY = 700, SH = 110; // splat chart
+// layout: card on the left, chart on the right, story text below
+const CARD = { x: 240, y: 92, w: 900, h: 540 };
+const CH = { x: 1290, y: 150, w: 390, h: 400 };
 const P0 = 8, P1 = 34;
+const px = (step: number) => CH.x + (step / STEPS) * CH.w;
+const py = (v: number) => CH.y + CH.h - ((v - P0) / (P1 - P0)) * CH.h;
 
 const shot: Shot = {
   duration: DUR,
@@ -22,140 +26,99 @@ const shot: Shot = {
     pick = await json('/film/assets/kit/compare/pick.json');
     rows = meta.training;
     let e = rows[0].psnr;
-    ema = rows.map((r) => (e = e * 0.7 + r.psnr * 0.3));
+    ema = rows.map((r) => (e = e * 0.65 + r.psnr * 0.35));
 
-    // The comparison: photo underneath, render on top, clipped by the wipe
-    const frame = el('', 120, 230, '');
-    frame.style.cssText += 'width:960px;height:720px;overflow:hidden;border-radius:18px;background:#111';
-    const img = (src: string, half: 0 | 1) => {
+    const card = el('card', CARD.x, CARD.y, '');
+    card.style.width = `${CARD.w}px`;
+    card.style.height = `${CARD.h}px`;
+    const layer = (src: string, half: 0 | 1) => {
       const d = document.createElement('div');
-      d.style.cssText = `position:absolute;inset:0;background:url(${src}) ${half ? '100%' : '0%'} 0/200% 100% no-repeat`;
-      frame.appendChild(d);
+      d.style.cssText = `position:absolute;inset:0;background:url(${src}) ${half ? '100%' : '0%'} 50%/200% auto no-repeat`;
+      card.appendChild(d);
       return d;
     };
-    ui.trainPhoto = img(`/film/assets/kit/compare/${pick.train}`, 0);
-    ui.trainRender = img(`/film/assets/kit/compare/${pick.train}`, 1);
-    ui.testPhoto = img(`/film/assets/kit/compare/${pick.test}`, 0);
-    ui.testRender = img(`/film/assets/kit/compare/${pick.test}`, 1);
-    ui.wipe = document.createElement('div');
-    ui.wipe.style.cssText = `position:absolute;top:0;bottom:0;width:3px;background:${LIME};box-shadow:0 0 18px ${LIME}`;
-    frame.appendChild(ui.wipe);
-    ui.frame = frame;
-    ui.lPhoto = el('chip', 144, 254, 'photo');
-    ui.lRender = el('chip', 0, 254, 'our render');
-    ui.lHeld = el('chip', 144, 254, 'a photo it never trained on');
+    ui.trainPhoto = layer(`/film/assets/kit/compare/${pick.train}`, 0);
+    ui.trainRender = layer(`/film/assets/kit/compare/${pick.train}`, 1);
+    ui.testPhoto = layer(`/film/assets/kit/compare/${pick.test}`, 0);
+    ui.testRender = layer(`/film/assets/kit/compare/${pick.test}`, 1);
+    ui.line = document.createElement('div');
+    ui.line.style.cssText = 'position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#fff';
+    ui.knob = document.createElement('div');
+    ui.knob.style.cssText = 'position:absolute;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;border-radius:50%;background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;color:#1d1d1f;font-size:22px;font-weight:600;letter-spacing:4px';
+    ui.knob.textContent = '‹›';
+    card.append(ui.line, ui.knob);
+    ui.card = card;
+    ui.lPhoto = el('axis', CARD.x, CARD.y - 40, 'Photo');
+    ui.lHeld = el('axis', CARD.x, CARD.y - 40, 'A photo it never trained on');
+    ui.lRender = el('axis', CARD.x + CARD.w - 74, CARD.y - 40, 'Render');
 
-    ui.label = el('label', 120, 104, 'Training');
-    ui.sub = el('note', 120, 144, 'Every splat nudged by gradient descent until our renders match the photos');
-
-    // Charts
-    const svgNS = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(svgNS, 'svg');
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('width', '1920');
     svg.setAttribute('height', '1080');
     svg.style.cssText = 'position:absolute;left:0;top:0;overflow:visible';
     svg.innerHTML = `
-      <g stroke="rgba(245,245,247,.14)" stroke-width="1">
-        ${[10, 15, 20, 25, 30].map((v) => `<line x1="${CX}" x2="${CX + CW}" y1="${py(v)}" y2="${py(v)}"/>`).join('')}
-        <line x1="${CX}" x2="${CX + CW}" y1="${SY + SH}" y2="${SY + SH}"/>
+      <defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${BLUE}" stop-opacity=".38"/><stop offset="1" stop-color="${BLUE}" stop-opacity="0"/></linearGradient>
+        <clipPath id="clip"><rect id="clipRect" x="${CH.x}" y="${CH.y - 30}" width="0" height="${CH.h + 30}"/></clipPath></defs>
+      <g stroke="#2a2a2d" stroke-width="1.5">${[10, 20, 30].map((v) => `<line x1="${CH.x}" x2="${CH.x + CH.w}" y1="${py(v)}" y2="${py(v)}"/>`).join('')}</g>
+      <g fill="#6e6e73" font-size="20" font-family="-apple-system,system-ui">
+        ${[10, 20, 30].map((v) => `<text x="${CH.x - 14}" y="${py(v) + 7}" text-anchor="end">${v}</text>`).join('')}
+        <text x="${CH.x}" y="${CH.y - 44}" fill="#86868b" font-size="22" font-weight="600">PSNR, dB</text>
+        <text x="${CH.x}" y="${CH.y + CH.h + 36}">0</text>
+        <text x="${CH.x + CH.w}" y="${CH.y + CH.h + 36}" text-anchor="end">30,000 steps</text>
       </g>
-      <g fill="rgba(245,245,247,.45)" font-size="18" font-family="-apple-system,system-ui">
-        ${[10, 20, 30].map((v) => `<text x="${CX - 12}" y="${py(v) + 6}" text-anchor="end">${v}</text>`).join('')}
-        <text x="${CX}" y="${CY - 18}">PSNR, dB</text>
-        <text x="${CX + CW}" y="${CY + CH + 32}" text-anchor="end">step 30,000</text>
-        <text x="${CX}" y="${SY - 16}">splats</text>
+      <g clip-path="url(#clip)">
+        <path id="area" fill="url(#fill)"/>
+        <path id="curve" fill="none" stroke="${INK}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
       </g>
-      <g id="raw" fill="rgba(245,245,247,.35)"></g>
-      <path id="psnr" fill="none" stroke="${LIME}" stroke-width="3.5" stroke-linejoin="round"/>
-      <path id="splats" fill="none" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/>
-      <circle id="head" r="7" fill="${LIME}"/>`;
+      <circle id="head" r="7" fill="${INK}"/>`;
     document.getElementById('overlay')!.appendChild(svg);
     ui.svg = svg as unknown as HTMLElement;
-    const raw = svg.querySelector('#raw')!;
-    rows.forEach((r, i) => {
-      const c = document.createElementNS(svgNS, 'circle');
-      c.setAttribute('cx', String(px(r.step)));
-      c.setAttribute('cy', String(py(r.psnr)));
-      c.setAttribute('r', '3');
-      c.setAttribute('data-i', String(i));
-      raw.appendChild(c);
-    });
+    const pts = rows.map((r, i) => `${px(r.step)},${py(ema[i])}`);
+    svg.querySelector('#curve')!.setAttribute('d', 'M' + pts.join(' L'));
+    svg.querySelector('#area')!.setAttribute('d', `M${px(0)},${py(P0)} L` + pts.join(' L') + ` L${px(STEPS)},${py(P0)} Z`);
+    ui.val = el('value', 0, 0, '');
 
-    ui.step = el('mid', CX, 860, '');
-    ui.stepU = el('unit', CX, 914, 'step');
-    ui.splatN = el('mid', CX + 230, 860, '');
-    ui.splatU = el('unit', CX + 230, 914, 'splats');
-    ui.pose = el('mid', CX + 480, 860, '');
-    ui.poseU = el('unit', CX + 480, 914, 'pose correction');
-
-    ui.chips = el('', 120, 984, ['metric depth guidance', 'per-photo exposure', 'camera poses refined', 'colour per viewing direction']
-      .map((c) => `<span class="chip" style="position:static;display:inline-block;margin-right:12px">${c}</span>`).join(''));
-    ui.foot = el('note', 1190, 990, `30,000 steps · ${(meta.metrics.trainSeconds / 60).toFixed(1)} min · RTX PRO 6000 Blackwell, HiPerGator`);
-
-    ui.held = el('', 120, 230, `<div class="big" style="position:static">${meta.heldOut.psnr.toFixed(1)}<span class="unit" style="margin-left:12px">dB PSNR</span></div>` +
-      `<div class="unit" style="position:static;margin-top:10px">${meta.heldOut.ssim.toFixed(2)} SSIM on the 4 photos held out of training</div>`);
-    ui.held.style.cssText += `left:${CX}px;top:846px;`;
+    words = story('Training', 'Thirty thousand steps, until it matches.',
+      `Gradient descent moves <b>1.3 million</b> splats until each render matches its photo: about <b>30 dB</b> on photos it learned from, <b>18.6 dB</b> on ones it never saw. Eleven minutes on one GPU.`);
   },
 
   frame(t) {
-    const k = ease.inOut(seg(t, 0.4, 5.2));
+    // chart draws itself
+    const k = ease.site(seg(t, 0.6, 5.0));
     const step = STEPS * k;
+    (ui.svg.querySelector('#clipRect') as SVGRectElement).setAttribute('width', String((step / STEPS) * CH.w + 2));
     let i = 0;
     while (i < rows.length - 1 && rows[i + 1].step <= step) i++;
     const j = Math.min(i + 1, rows.length - 1);
     const f = rows[j].step > rows[i].step ? (step - rows[i].step) / (rows[j].step - rows[i].step) : 0;
-    const at = (key: string) => lerp(rows[i][key], rows[j][key], f);
-    const emaAt = lerp(ema[i], ema[j], f);
-
-    // PSNR curve and raw points up to the current step
-    const pts = rows.slice(0, i + 1).map((r, n) => `${px(r.step)},${py(ema[n])}`);
-    pts.push(`${px(step)},${py(emaAt)}`);
-    ui.svg.querySelector('#psnr')!.setAttribute('d', 'M' + pts.join(' L'));
-    ui.svg.querySelectorAll<SVGCircleElement>('#raw circle').forEach((c) => (c.style.opacity = Number(c.dataset.i) <= i ? '1' : '0'));
+    const v = lerp(ema[i], ema[j], f);
     const head = ui.svg.querySelector('#head')!;
     head.setAttribute('cx', String(px(step)));
-    head.setAttribute('cy', String(py(emaAt)));
-    const maxSplats = 1.3e6;
-    const sp = rows.slice(0, i + 1).map((r) => `${px(r.step)},${SY + SH - (r.splats / maxSplats) * SH}`);
-    sp.push(`${px(step)},${SY + SH - (at('splats') / maxSplats) * SH}`);
-    ui.svg.querySelector('#splats')!.setAttribute('d', 'M' + sp.join(' L'));
-    ui.svg.style.opacity = String(ease.out(seg(t, 0.2, 0.8)));
+    head.setAttribute('cy', String(py(v)));
+    ui.svg.style.opacity = String(ease.site(seg(t, 0.3, 1.0)));
+    ui.val.textContent = `${v.toFixed(1)} dB`;
+    ui.val.style.left = `${px(step) + 16}px`;
+    ui.val.style.top = `${py(v) - 46}px`;
+    ui.val.style.opacity = ui.svg.style.opacity;
 
-    ui.step.textContent = fmt(step);
-    ui.splatN.textContent = fmt(at('splats'));
-    ui.pose.innerHTML = `${at('poseDeg').toFixed(2)}°<span class="unit" style="position:static;margin-left:8px">${at('poseCm').toFixed(1)} cm</span>`;
-    for (const key of ['step', 'stepU', 'splatN', 'splatU', 'pose', 'poseU']) {
-      reveal(ui[key], t, 0.3, 0.9);
-      ui[key].style.opacity = String(Number(ui[key].style.opacity) * (1 - seg(t, 5.3, 5.7)));
-    }
-
-    // The comparison: wipe across the training view, then switch to a held-out photo
-    const w = t < 5.2 ? 0.5 + 0.42 * Math.sin((seg(t, 0.6, 5.0) * 2 - 0.5) * Math.PI) : 0.5;
-    const held = ease.inOut(seg(t, 5.3, 5.9));
+    // the slider sweeps the card, then switches to a held-out photo
+    const w = t < 5.4 ? 0.5 + 0.36 * Math.sin((seg(t, 0.8, 5.0) * 2 - 0.5) * Math.PI) : 0.5 + 0.12 * Math.sin(seg(t, 5.4, 7.5) * Math.PI);
+    const held = ease.site(seg(t, 5.4, 6.1));
     const clip = `inset(0 0 0 ${(w * 100).toFixed(2)}%)`;
     ui.trainRender.style.clipPath = clip;
     ui.testRender.style.clipPath = clip;
     ui.testPhoto.style.opacity = ui.testRender.style.opacity = String(held);
-    ui.wipe.style.left = `${w * 960 - 1.5}px`;
-    reveal(ui.frame, t, 0, 0.6, 24);
-    ui.lPhoto.style.opacity = String(ease.out(seg(t, 0.6, 1.0)) * (1 - held));
+    ui.line.style.left = ui.knob.style.left = `${w * 100}%`;
+    const cardIn = ease.site(seg(t, 0, 0.9));
+    ui.card.style.opacity = String(cardIn);
+    ui.card.style.transform = `translateY(${(1 - cardIn) * 24}px) scale(${lerp(0.985, 1, cardIn) * (1 + 0.025 * seg(t, 5.4, 7.5))})`;
+    ui.lPhoto.style.opacity = String(cardIn * (1 - held));
     ui.lHeld.style.opacity = String(held);
-    ui.lRender.style.left = `${120 + 960 - 24 - ui.lRender.offsetWidth}px`;
-    ui.lRender.style.opacity = String(ease.out(seg(t, 0.6, 1.0)));
+    ui.lRender.style.opacity = String(cardIn);
 
-    reveal(ui.label, t, 0.1, 0.6);
-    reveal(ui.sub, t, 0.25, 0.8);
-    reveal(ui.chips, t, 1.0, 1.6);
-    reveal(ui.foot, t, 1.2, 1.8);
-    reveal(ui.held, t, 5.6, 6.2);
+    words.show(t, 0.9);
   },
 };
-
-function px(step: number) {
-  return CX + (step / STEPS) * CW;
-}
-function py(psnr: number) {
-  return CY + CH - ((psnr - P0) / (P1 - P0)) * CH;
-}
 
 export default shot;

@@ -6,7 +6,7 @@
 //   E  9.2–10 s   back to the real place, wide, with the splat count
 import * as THREE from 'three';
 import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
-import { ease, el, fmt, lerp, reveal, seg, stage, type Shot, LIME, INK } from '../lib';
+import { ease, el, fmt, lerp, seg, stage, story, type Shot, LIME, INK } from '../lib';
 
 const DUR = 10;
 const CROP = 2.4; // metres round the crown that come apart
@@ -31,6 +31,7 @@ let ray: THREE.Line;
 let rayCam: THREE.LineSegments;
 const ui: Record<string, HTMLElement> = {};
 let svg: SVGSVGElement;
+let words: ReturnType<typeof story>;
 const m4 = new THREE.Matrix4();
 const v3 = new THREE.Vector3();
 const sc = new THREE.Vector3();
@@ -43,6 +44,7 @@ const shot: Shot = {
   duration: DUR,
   async setup() {
     S = stage();
+    S.camera.setViewOffset(1920, 1080, 0, 170, 1920, 1080); // the picture sits above the story text
     S.renderer.toneMapping = THREE.NoToneMapping;
     spark = new SparkRenderer({ renderer: S.renderer, maxStdDev: Math.sqrt(8) });
     S.scene.add(spark);
@@ -162,29 +164,27 @@ const shot: Shot = {
     S.scene.add(rayCam);
 
     // Type
-    ui.label = el('label', 120, 104, 'What a world is made of');
-    ui.sub = el('note', 120, 144, 'Gaussian splats, from our Game Lawn');
-    ui.mu = el('mid', 0, 0, 'μ <span class="unit" style="position:static">position</span>');
-    ui.sigma = el('mid', 0, 0, 'Σ = R S Sᵀ Rᵀ <span class="unit" style="position:static">shape and rotation</span>');
-    ui.alpha = el('mid', 0, 0, 'α <span class="unit" style="position:static">opacity, falling off as a Gaussian</span>');
-    ui.colour = el('mid', 0, 0, 'c(d) <span class="unit" style="position:static">colour by viewing direction</span>');
-    ui.panel = el('', 1140, 200, '');
-    ui.panel.style.cssText += 'width:660px;height:640px;border-radius:24px;background:rgba(6,6,7,.72);backdrop-filter:blur(14px)';
-    ui.eq = el('mid', 1180, 230, 'C = Σ<sub>i</sub> c<sub>i</sub> α<sub>i</sub> T<sub>i</sub>, &nbsp; T<sub>i</sub> = Π<sub>j&lt;i</sub>(1 − α<sub>j</sub>)');
-    ui.eqSub = el('unit', 1182, 300, 'one pixel: splats along its ray, front to back');
-    ui.bar = el('', 1180, 380, '');
-    ui.bar.style.cssText += 'width:24px;height:420px;border:1.5px solid rgba(245,245,247,.3);border-radius:6px;overflow:hidden';
+    ui.mu = el('callout', 0, 0, 'μ <span>position</span>');
+    ui.sigma = el('callout', 0, 0, 'Σ = R S Sᵀ Rᵀ <span>shape and rotation</span>');
+    ui.alpha = el('callout', 0, 0, 'α <span>opacity, falling off as a Gaussian</span>');
+    ui.colour = el('callout', 0, 0, 'c(d) <span>colour by viewing direction</span>');
+    ui.panel = el('', 1150, 110, '');
+    ui.panel.style.cssText += 'width:620px;height:560px;border-radius:24px;background:rgba(29,29,31,.72);backdrop-filter:blur(18px)';
+    ui.eq = el('callout', 1190, 146, 'C = Σ<sub>i</sub> c<sub>i</sub> α<sub>i</sub> T<sub>i</sub>, &nbsp; T<sub>i</sub> = Π<sub>j&lt;i</sub>(1 − α<sub>j</sub>)');
+    ui.eqSub = el('axis', 1190, 196, 'One pixel: the splats on its ray, front to back');
+    ui.bar = el('', 1190, 262, '');
+    ui.bar.style.cssText += 'width:24px;height:260px;border:1.5px solid rgba(245,245,247,.3);border-radius:6px;overflow:hidden';
     ui.barFill = document.createElement('div');
     ui.barFill.style.cssText = `position:absolute;left:0;right:0;bottom:0;background:${LIME}`;
     ui.bar.appendChild(ui.barFill);
-    ui.barL = el('unit', 1220, 380, 'light remaining, T');
-    ui.barN = el('big', 1220, 420, '100%');
-    ui.swatch = el('', 1220, 600, '');
+    ui.barL = el('axis', 1236, 262, 'Light remaining, T');
+    ui.barN = el('value', 1236, 292, '100%');
+    ui.barN.style.fontSize = '72px';
+    ui.swatch = el('', 1236, 420, '');
     ui.swatch.style.cssText += 'width:120px;height:120px;border-radius:14px;border:1.5px solid rgba(245,245,247,.3)';
-    ui.swatchL = el('unit', 1360, 640, 'the pixel, so far');
-    ui.hitsN = el('unit', 1220, 760, '');
-    ui.count = el('big', 120, 820, fmt(total));
-    ui.countU = el('unit', 124, 936, 'splats in this one world');
+    ui.swatchL = el('axis', 1360, 456, 'The pixel, so far');
+    ui.hitsN = el('axis', 1236, 560, '');
+    words = story('Splats', 'Made of soft 3D brushstrokes.', `Each one is a 3D Gaussian: a position, a shape, an opacity and a colour that changes with the angle. A pixel blends them front to back until the light runs out. This lawn is <b>${fmt(total)}</b> of them.`);
     svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('width', '1920');
     svg.setAttribute('height', '1080');
@@ -301,14 +301,11 @@ const shot: Shot = {
       e.style.left = `${Math.min(1860 - e.offsetWidth, Math.max(60, x + (dx < 0 ? -e.offsetWidth : 0)))}px`;
       e.style.top = `${y - 26}px`;
       e.style.opacity = String(k);
-      if (k > 0) lines += `<line x1="${a.x}" y1="${a.y}" x2="${x}" y2="${y}" stroke="${LIME}" stroke-width="2" opacity="${k}"/><circle cx="${a.x}" cy="${a.y}" r="5" fill="${LIME}" opacity="${k}"/>`;
+      if (k > 0) lines += `<line x1="${a.x}" y1="${a.y}" x2="${x}" y2="${y}" stroke="#86868b" stroke-width="1.5" opacity="${k}"/><circle cx="${a.x}" cy="${a.y}" r="4" fill="${INK}" opacity="${k}"/>`;
     }
     svg.innerHTML = lines;
 
-    reveal(ui.label, t, 0.1, 0.6);
-    reveal(ui.sub, t, 0.25, 0.8);
-    reveal(ui.count, t, 9.4, 9.8);
-    reveal(ui.countU, t, 9.5, 9.9);
+    words.show(t, 0.4);
 
     // Render, and let Spark finish sorting for this view before the frame is taken
     for (let k = 0; k < 40; k++) {

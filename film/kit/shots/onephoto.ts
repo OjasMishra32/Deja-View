@@ -3,7 +3,7 @@
 // was imagined (74%).
 import * as THREE from 'three';
 import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
-import { ease, el, fmt, json, lerp, reveal, seg, stage, type Shot, LIME, INK } from '../lib';
+import { ease, el, json, lerp, reveal, seg, stage, story, type Shot, LIME, INK } from '../lib';
 
 const DUR = 9.5;
 const SCENE = '/data/scenes/old-house-kitchen';
@@ -14,6 +14,7 @@ let seen: SplatMesh;
 let imagined: SplatMesh;
 let caption = '';
 let reality: any;
+let words: ReturnType<typeof story>;
 const camPos = new THREE.Vector3();
 const camQ = new THREE.Quaternion();
 const ui: Record<string, HTMLElement> = {};
@@ -49,40 +50,36 @@ const shot: Shot = {
     S.camera.fov = (2 * Math.atan(cam.height / 2 / cam.fy) * 180) / Math.PI;
     S.camera.updateProjectionMatrix();
 
-    ui.label = el('label', 120, 104, 'One photo → a whole place');
-    ui.sub = el('note', 120, 144, 'An old real-estate listing photo of a kitchen in Pennsylvania');
-    ui.photo = el('', 120, 230, '');
-    ui.photo.style.cssText += 'width:880px;height:660px;border-radius:18px;background:url(/data/inputs/old-house-kitchen/01.jpg) center/cover;box-shadow:0 30px 80px rgba(0,0,0,.6)';
-    ui.capL = el('label', 1080, 236, 'Gemini describes it');
-    ui.cap = el('', 1080, 284, '');
-    ui.cap.style.cssText += 'width:700px;white-space:normal;font-size:32px;line-height:1.38;font-weight:500;color:#F5F5F7';
-    ui.ring = el('', 1500, 150, '');
-    ui.ringN = el('big', 120, 800, '');
-    ui.ringU = el('unit', 124, 916, '');
-    ui.model = el('note', 120, 966, 'The rest: a video diffusion model generated the views nobody filmed, decoded straight into splats');
-    ui.gpu = el('', 1250, 830, `<div class="chip" style="position:static;display:inline-block;margin-right:12px">HiPerGator · RTX PRO 6000 Blackwell</div><div class="chip" style="position:static;display:inline-block">Vultr · cloud GPU</div>` +
-      `<div class="unit" style="position:static;margin-top:16px">about 10 s from photo to world on a warm GPU</div>`);
+    ui.photo = el('', 240, 150, '');
+    ui.photo.style.cssText += 'width:760px;height:570px;border-radius:22px;background:url(/data/inputs/old-house-kitchen/01.jpg) center/cover;box-shadow:0 1px 2px rgba(0,0,0,.04),0 18px 60px rgba(0,0,0,.5)';
+    ui.photoL = el('axis', 240, 110, 'A photo from an old real-estate listing');
+    ui.capL = el('callout', 1080, 150, '<img src="/film/assets/logos/gemini-sparkle.svg" style="height:28px;vertical-align:-5px;margin-right:12px">Gemini <span>describes it</span>');
+    ui.cap = el('', 1080, 210, '');
+    ui.cap.style.cssText += 'width:600px;white-space:normal;font-size:30px;line-height:1.42;font-weight:500;letter-spacing:-0.01em;color:#F5F5F7';
+    ui.ring = el('', 1500, 120, '');
+    ui.gpu = el('axis', 1236, 470, 'Made in about 10 s on <img src="/film/assets/logos/vultr-white.svg" style="height:20px;vertical-align:-4px;margin:0 8px"> and UF HiPerGator');
+    words = story('One photo', 'The rest is imagined.',
+      'Gemini describes the photo; a video diffusion model generates the views nobody filmed and decodes them straight into 3D. <b>74%</b> of this kitchen was never in the picture.');
   },
 
   async frame(t) {
     // Caption types out, then the photo grows into the world
     const typed = Math.floor(caption.length * seg(t, 0.9, 3.0));
     ui.cap.textContent = caption.slice(0, typed);
-    reveal(ui.label, t, 0.1, 0.6);
-    reveal(ui.sub, t, 0.25, 0.8);
+    reveal(ui.photoL, t, 0.2, 0.8);
+    ui.photoL.style.opacity = String(Number(ui.photoL.style.opacity) * (1 - seg(t, 3.0, 3.3)));
     reveal(ui.capL, t, 0.7, 1.1);
     ui.cap.style.opacity = String(1 - seg(t, 3.3, 3.7));
     ui.capL.style.opacity = String(Number(ui.capL.style.opacity) * (1 - seg(t, 3.3, 3.7)));
     const grow = ease.inOut(seg(t, 3.1, 3.9));
-    ui.photo.style.left = `${lerp(120, 0, grow)}px`;
-    ui.photo.style.top = `${lerp(230, 0, grow)}px`;
-    ui.photo.style.width = `${lerp(880, 1920, grow)}px`;
-    ui.photo.style.height = `${lerp(660, 1080, grow)}px`;
-    ui.photo.style.borderRadius = `${lerp(18, 0, grow)}px`;
-    ui.photo.style.opacity = String(ease.out(seg(t, 0, 0.5)) * (1 - seg(t, 3.7, 4.2)));
-    ui.sub.style.opacity = String(Number(ui.sub.style.opacity) * (1 - seg(t, 3.3, 3.6)));
+    ui.photo.style.left = `${lerp(240, 0, grow)}px`;
+    ui.photo.style.top = `${lerp(150, 0, grow)}px`;
+    ui.photo.style.width = `${lerp(760, 1920, grow)}px`;
+    ui.photo.style.height = `${lerp(570, 1080, grow)}px`;
+    ui.photo.style.borderRadius = `${lerp(22, 0, grow)}px`;
+    ui.photo.style.opacity = String(ease.out(seg(t, 0, 0.5)) * (1 - seg(t, 3.75, 3.95)));
 
-    (document.getElementById('gl') as HTMLElement).style.opacity = String(seg(t, 3.45, 3.95));
+    (document.getElementById('gl') as HTMLElement).style.opacity = String(seg(t, 3.7, 3.9));
     // Camera: starts in the photo's own view, then turns round into what the photo never showed
     const turn = ease.inOut(seg(t, 4.2, 8.6));
     const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (turn * 200 * Math.PI) / 180);
@@ -106,12 +103,8 @@ const shot: Shot = {
       <text y="-6" text-anchor="middle" fill="${LIME}" font-size="56" font-weight="600" font-family="-apple-system,system-ui">${Math.round((1 - frac) * 100 * k)}%</text>
       <text y="36" text-anchor="middle" fill="rgba(245,245,247,.6)" font-size="22" font-family="-apple-system,system-ui">imagined</text></svg>`;
     ui.ring.style.opacity = String(k);
-    ui.ringN.innerHTML = `${fmt(reality.seen.count * k)}<span class="unit" style="position:static;margin:0 18px">seen</span>${fmt(reality.imagined.count * k)}<span class="unit" style="position:static;margin-left:18px">imagined</span>`;
-    ui.ringU.textContent = 'splats in this world: only 26% of it was in the photo';
-    reveal(ui.ringN, t, 5.0, 5.5);
-    reveal(ui.ringU, t, 5.2, 5.7);
-    reveal(ui.model, t, 5.8, 6.4);
-    reveal(ui.gpu, t, 7.0, 7.6);
+    words.show(t, 4.4);
+    reveal(ui.gpu, t, 6.4, 7.0);
 
     for (let n = 0; n < 40; n++) {
       S.renderer.render(S.scene, S.camera);
