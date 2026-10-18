@@ -65,6 +65,10 @@ Then the room becomes social:
 - **A visit, not a game:** for someone who is forgetting, the same world becomes a place to sit with family. Put the
   old listing photos of the house and the birthday clips on one board, then walk in together: Grandpa in the headset
   or at the laptop, the grandkids beside him in Roblox, and the room answering "whose birthday was this?" out loud.
+- **Memories have keys:** a family's kitchen is theirs. The owner can make a memory private, and then anyone
+  else meets a closed door and has to sign in and knock. The owner sees the knock and lets them in, or doesn't. Even the
+  guide keeps the family's secrets: it tells family about the people and the stories, and a stranger only about the
+  room.
 - **It starts on the memory board:** add a photo or clip with "Add a memory" in the DeepSpace app, and the card comes
   back with the world link, the Roblox link and the map link.
 
@@ -125,6 +129,17 @@ separates what was captured from what was imagined. **Roblox** lets friends with
   issuer, audience and expiry, without an SDK. The host laptop itself, and scripts holding the API token or the
   event key, are not asked. *See it:* the "Sign in" button on `/capture` and `/host` (and on `/tab` when a change
   needs it); `/api/auth/config` says whether sign-in is on.
+
+  **Memory Keys** is where Auth0 decides who gets to walk into whose memory, not just who can upload. The person a memory
+  belongs to claims it, and can make it private. A visitor to a private memory sees a closed door, signs in with
+  Auth0, and knocks; the owner gets the knock on `/capture` with the person's name and taps "Let in" or "Not now". A
+  guest gets a memory pass, an HttpOnly cookie signed by the server and checked against the guest list on every
+  request, so the world's files themselves (the splats, the photos, the 3D people) answer 403 to anyone who isn't
+  family, and taking someone off the list locks them out at once. The Gemini guide is told by the server, from the
+  verified token, whether it is talking to family or a visitor (the page can't claim to be family): family hear who is
+  in the photos and what happened that day, and a visitor about the room only. *See it:* make the kitchen private on
+  `/capture`, open `/view?scene=old-house-kitchen` on a phone, knock, and let yourself in from the laptop. The details
+  are in `docs/memory-keys.md`.
 
 ## How we built it
 
@@ -201,6 +216,9 @@ in our credits fill in what the camera never saw.
   insists on the art style.
 - **Video in 3D is mostly edge cases.** An arm in front of a torso, a blender in front of a cook, flickering depth.
   Each one made a rubber sheet until we handled it.
+- **Privacy that holds all the way down.** Hiding a private memory's page isn't enough when its world is a set of
+  plain files a viewer has to download. We gate the files themselves, with a pass the server signs and checks against
+  the current guest list, and the guide's answers too, so a stranger can't learn a family's stories by asking.
 - **Networking at a hackathon.** WebXR needs HTTPS, the Quest needs to reach the laptop, campus Wi-Fi can block
   device-to-device traffic, and Roblox servers can't reach a LAN at all. We ended up with self-signed certificates,
   `adb reverse` and a Cloudflare tunnel that watches itself.
@@ -212,6 +230,7 @@ in our credits fill in what the camera never saw.
 - Real places rebuilt from phone photos at real scale, and the people from a phone clip standing in them as full 3D
   people you can walk around, in sync with the video and its sound.
 - One room, three ways in: a headset, a browser, Roblox.
+- Private memories with a door you knock on, where the AI guide itself knows who it may tell what.
 - More than 1,300 automated tests across TypeScript and Python, written during the event.
 
 ## What we learned
@@ -264,7 +283,8 @@ Meta Quest, Roblox and Fortnite are trademarks of their owners; Déjà View is n
 - **Ojasva:** server, viewer, GPU pipelines on HiPerGator, Roblox map voxelizer, presence and notes relays, reality
   check, the Solana scoreboard, the Nessie tab, Tiger Data replays, Auth0 sign-in, the deja-view.photo domain
 - **Shivin:** the Roblox experience (room loader, room picker, VR ghost, tag rounds), automatic walk zones,
-  listing photos to a home, and the one-command video memory chain
+  listing photos to a home, the one-command video memory chain, and Memory Keys (private memories, knock-to-enter,
+  the family-or-visitor guide)
 - **Brianna:** the Gemini guide: captions, labels, narration, spoken answers
 - **Seb:** the DeepSpace app ("Add a memory": a photo or clip into our pipeline), the Roblox games on the real
   furniture, the object maker and its censor gate for Roblox uploads, the Vultr GPU
