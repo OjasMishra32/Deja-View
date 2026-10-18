@@ -39,7 +39,7 @@ to. Every connection is specified in [`team/contracts.md`](team/contracts.md).
 | Public link (`bun run tunnel`) | **Built and unit-tested**, first live run against Cloudflare still to do |
 | Teammate services (DeepSpace app with "Add a memory", Gemini guide, Roblox experience) and a fixed domain for the public link | **In progress** in the teammates' projects; mocks stand in for the guide and DeepSpace |
 | `/host` status page and cues (`web/host.html`, `server/host.ts`), `topdown.jpg` map bake (floor plan + floor + bounds into `scene.json`), plain-HTTP `:8788` listener next to https `:8787`, Roblox room model routes (`/api/roblox/:id/model`, `model.glb`) | **Wired in** |
-| Vultr A40 worker scripts (`vultr/`, not run on a box yet) | **In progress** |
+| Vultr GPU worker (`vultr/`), used in parallel with HiPerGator | **Done** |
 
 ## How it works
 
@@ -184,7 +184,7 @@ worker). AnySplat inference takes 3 s.
 | `web/src/viewer/social/`, `web/src/viewer/guide/` | Ghosts, notes, tag, reality check; labels, voice ask, narration |
 | `pipeline/` | Python: `run_job.py` (entry point), `flashworld_run.py`, `anysplat_run.py`, `tw/` (video to packed RGBD), `plate_room.py`, `roblox_map.py`, `reality_split.py` |
 | `hpg/` | HiPerGator setup, Slurm templates, warm worker, `tw.sh` control script |
-| `vultr/` | Setup, code push and worker scripts for a rented Vultr A40 (in progress) |
+| `vultr/` | Setup, code push and worker scripts for the rented Vultr GPU, used alongside HiPerGator |
 | `scripts/` | `setup-local.sh`, `fetch-samples.ts`, `make-cert.ts`, `tunnel.ts`, `demo-mocks.ts`, test-media helpers |
 | `shared/types.ts` | The data contract between server, pipelines and viewer |
 | `tests/` | `bun test` suites, `gpu/` and `pipeline/` pytest suites, `harness/` (test servers, mock guide, mock DeepSpace) |

@@ -72,7 +72,7 @@ Then the room becomes social:
 Each sponsor makes the next moment possible. **DeepSpace** brings the memory in: "Add a memory" keeps the clip in
 DeepSpace storage and hands it to our server, and the card it shows puts everyone one tap from the room. **Gemini**
 writes the caption the world model uses to imagine what the camera never saw, then makes the room interactive with
-labels and spoken answers. **HiPerGator** (with a **Vultr** A40 as the planned second GPU) builds a world in seconds,
+labels and spoken answers. **HiPerGator** and a **Vultr** cloud GPU, working in parallel, build a world in seconds,
 which is the only reason a judge can make one live at the table. The **reality check**, built for **Vobile**,
 separates what was captured from what was imagined. **Roblox** lets friends without a headset be there, and
 **DeepSpace** remembers who was there and what they said, with live presence and notes that persist. Our own domain,
@@ -87,8 +87,8 @@ separates what was captured from what was imagined. **Roblox** lets friends with
 - **Gemini (MLH):** writes the caption the world model imagines from, pins labels on things in the room, greets you,
   and answers spoken questions out loud. *See it:* in the headset or at `/view`: the labels, then hold the button
   and ask "who won?".
-- **HiPerGator, with Vultr as the planned second GPU:** a warm worker turns a photo into a finished world in about 10
-  seconds. *See it:* the live build at the table and the GPU tile on `/host`.
+- **HiPerGator and Vultr, in parallel:** GPU work ran on both at once, on HiPerGator's GPUs and a rented Vultr cloud GPU,
+  with the same worker code on each. A warm worker turns a photo into a finished world in about 10 seconds. *See it:* the live build at the table and the GPU tile on `/host`.
 - **Vobile (reality check):** one toggle tints every part of the world the AI imagined. *See it:* "Reality check" on
   `/host`, in the headset.
 - **Roblox:** each real place is also a Roblox room built from the same scan: a block map of the place at life size
@@ -233,7 +233,7 @@ in our credits fill in what the camera never saw.
   a way to keep each visit. We've tried it with our teammate's grandfather (it's in our video); the next step is to
   build it with caregivers and memory-care staff, not on our own.
 - Live Video builds in under a minute, so the "now do it" moment works for clips too.
-- A Vultr GPU worker next to HiPerGator, so we're not borrowing a class's GPUs.
+- More of the GPU work on Vultr, so we're not borrowing a class's GPUs.
 - Several clips of one night stitched into one room.
 - A permanent host instead of a laptop and a tunnel.
 
@@ -257,7 +257,7 @@ https://deja-view.photo/credits.html. The main pieces:
 - **Media:** the "Quest 3S with controllers" 3D model by OG_MATTER (CC BY 4.0); "Tilted Towers Tour | Fortnite OG S2"
   free-camera footage by woodinjake (the Tilted Towers and Brick House worlds); a public greyscale demo room. The
   Game Lawn, the giant chess board, the kitchen and the fire video are our own photos and clips.
-- **Services:** UF HiPerGator, Hugging Face, Google Gemini, Cloudflare Tunnel, DeepSpace, Roblox, Auth0, Solana,
+- **Services:** UF HiPerGator, Vultr, Hugging Face, Google Gemini, Cloudflare Tunnel, DeepSpace, Roblox, Auth0, Solana,
   Capital One Nessie and Tiger Data.
 
 Meta Quest, Roblox and Fortnite are trademarks of their owners; Déjà View is not affiliated with or endorsed by them.
