@@ -442,6 +442,27 @@ Points are `[x, y, z]` arrays. Example (a table tennis table and an 8 ft pool ta
 
 ---
 
+### 6.7 Cross-play ping pong (the headset plays the Roblox table)
+
+The Roblox server stays the referee (`PingPong.luau`); `server/social/pingpong.ts` relays. Everything about the ball is
+in the table frame in studs (`PingPongSim`: long axis Z, net at z = 0, top at y = 0); times are Roblox server time
+(`workspace:GetServerTimeNow()`, Unix seconds). The headset flies the ball with a line-for-line port of the physics
+(`web/src/viewer/social/pingpong-sim.ts`, checked against the Luau numbers in `tests/pingpong-sim.test.ts`).
+
+- `POST BASE/api/roblox/:sceneId/pingpong` (Roblox, on every change, at most every 0.3 s; every 0.34 s while a headset
+  plays): `{after, active, table: {c, yaw, len, wid}, board: {A, B, scoreA, scoreB, serve, over, sides}, ball: {p, v, w,
+  t, to, live, serving, shot}, headset: {id, side}?, paddles: [{side, p, n, f}], now}`. Sent on to the scene's viewers
+  as a Roblox event `{type: "pingpong", ...}`. Answers `{seq, events, paddle}`: headset events after `after` and the
+  headset's paddle (fresh within 1.5 s).
+- `GET BASE/api/roblox/:sceneId/pingpong/wait?after=<seq>` (Roblox long-poll): answers as soon as a headset joins,
+  leaves or hits, else after about 15 s, with the same `{seq, events, paddle}`.
+- `POST BASE/api/pingpong/:sceneId` (headset): `{kind: join | leave | shot | paddle, id, name, side?, shot?: {t, p, aim,
+  flight, serve}, p?, n?, f?}`. `GET` returns the latest Roblox post.
+- The headset holds a side as a stand-in player (`UserId = -2`). Its hit is an aimed return (`Sim.assistReturn`) that
+  counts if the ball was coming to it, bounced on its half before the hit and was within 3 studs of `p` at `t`; a point
+  against it waits 0.8 s for such a hit. A headset that sends nothing for 15 s gives its side back.
+- HTTP budget per Roblox server: presence 4/s + ping pong at most ~3/s + the long-poll stays under Roblox's 500 a minute.
+
 ## 7. DeepSpace
 
 ### 7.1 Presence push: `POST <DS_URL>/api/ingest` (Déjà View server → Seb)

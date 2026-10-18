@@ -7,6 +7,7 @@
 //                                         (features.json in studs, contracts 6.6; features.ts) when it has that
 //   POST /api/roblox/:sceneId/presence    a Roblox game server's players (4 Hz, studs) -> everyone else in studs
 //   POST /api/roblox/:sceneId/event       a Roblox moment (tag, round) -> onEvent subscribers (the /ws layer)
+//   /api/roblox/:sceneId/pingpong[/wait], /api/pingpong/:sceneId   cross-play ping pong (pingpong.ts)
 //
 // Every handler answers OPTIONS (CORS *), returns JSON errors as {error: "<sentence>"} and never throws: a broken
 // request, a slow disk or a failing subscriber becomes a 4xx/5xx for that request only.
@@ -41,6 +42,7 @@ import {
   RobloxMapService,
   type MapServiceOptions,
 } from './roblox.ts';
+import { PingPongRelay, pingPongRoutes } from './pingpong.ts';
 
 export type SocialHandler = (req: Request, server?: RequestIpSource) => Promise<Response>;
 export type SocialRoutes = Record<string, SocialHandler>;
@@ -284,7 +286,12 @@ export function createSocialRoutes(deps: SocialRouteDeps): SocialRoutes {
     return new Response(req.method === 'HEAD' ? null : (bytes as Uint8Array<ArrayBuffer>), { status: 200, headers });
   };
 
+  // cross-play ping pong (pingpong.ts): the relay sends Roblox's table on to the scene's viewers like any Roblox moment
+  const pingpong = new PingPongRelay((sceneId, ev) => presence.publishEvent(sceneId, ev));
+  const pp = pingPongRoutes({ relay: pingpong, sceneExists: async (id) => !!(id && (await sceneFor(id))), dvKey: deps.dvKey });
+
   return {
+    ...Object.fromEntries(Object.entries(pp).map(([k, h]) => [k, safe('pingpong', h)])),
     '/api/presence/:sceneId': safe('presence', presenceRoute),
     '/api/roblox/:sceneId/map': safe('roblox map', mapRoute),
     '/api/roblox/:sceneId/presence': safe('roblox presence', robloxPresenceRoute),

@@ -146,6 +146,16 @@ function Api.event(sceneId: string, body: any)
 	return request("POST", "/api/roblox/" .. enc(sceneId) .. "/event", body)
 end
 
+-- Cross-play ping pong (server/social/pingpong.ts): the table for the headsets, and the headsets' events back.
+function Api.pingpong(sceneId: string, body: any)
+	return request("POST", "/api/roblox/" .. enc(sceneId) .. "/pingpong", body)
+end
+
+-- Long-poll: returns as soon as a headset joins, leaves or hits (or after about 15 s).
+function Api.pingpongWait(sceneId: string, after: number)
+	return request("GET", "/api/roblox/" .. enc(sceneId) .. "/pingpong/wait?after=" .. tostring(after), nil, 25)
+end
+
 -- Metres; use only the count and kind (Follow).
 function Api.people(sceneId: string)
 	return request("GET", "/api/presence/" .. enc(sceneId))

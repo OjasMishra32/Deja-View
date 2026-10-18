@@ -16,6 +16,7 @@ import { NoteComposer, NotesClient, NotesLayer, SocialSounds, parseNote, parseNo
 import { ClockSync, PresenceClient, SocialSocket, localNow, questId, validSceneId, webId, type LocalPose, type V3 } from './presence-client.ts';
 import { RealityCheck, RealityLegend, type SplatFxLike } from './reality.ts';
 import { TagHud } from './tag.ts';
+import { PingPongLayer } from './pingpong.ts';
 
 export type ToastKind = 'info' | 'error' | 'ok';
 
@@ -89,6 +90,8 @@ export interface XrBinding {
 export interface SocialOptions {
   /** Shown above your ghost elsewhere and signed under your notes. Default ?name=, else "Judge" in VR / "Visitor". */
   name?: string;
+  /** Cross-play ping pong at the room's Roblox table (pingpong.ts). Default on. */
+  pingpong?: boolean;
   /** Browser viewer id (default a stable web-xxxxxxxx). */
   webId?: string;
   /** Headset id (quest-1 on the demo headset: ?follow=1 or ?quest=1; quest-<n> with ?quest=n; else a guest id). */
@@ -330,6 +333,7 @@ export function createSocial(ctx: ViewerContext, opts: SocialOptions = {}): Soci
 
   // ---- toasts (DOM + headset), rate limited per title ----
   let tag: TagHud | null = null;
+  let pingpong: PingPongLayer | null = null;
   const lastToast = new Map<string, number>();
   const notify = (title: string, body = '', kind: ToastKind = 'info') => {
     const now = localNow();
@@ -410,6 +414,22 @@ export function createSocial(ctx: ViewerContext, opts: SocialOptions = {}): Soci
     notify,
     releasePointer: ctx.releasePointerLock ?? (() => document.exitPointerLock?.()),
   });
+
+  // ---- cross-play ping pong (pingpong.ts): the Roblox game's table, played from here ----
+  if (okScene && opts.pingpong !== false) {
+    pingpong = new PingPongLayer({
+      sceneId,
+      baseUrl,
+      scene: ctx.scene,
+      myId: () => (presenting() ? myQuestId : myWebId),
+      myName: () => nameFor(presenting()),
+      presenting,
+      grip: () => xr.slot('right')?.grip ?? null,
+      togglePressed: () => !!xr.pointer('right')?.pressed(3),
+      camera: ctx.camera,
+      toast: (title, body) => toastDom(title, body),
+    });
+  }
 
   // ---- tag ----
   if (enabled.tag) {
@@ -497,6 +517,7 @@ export function createSocial(ctx: ViewerContext, opts: SocialOptions = {}): Soci
         break;
       case 'roblox':
         if (tag) guard('tag', () => tag!.handle(m));
+        if (pingpong) guard('pingpong', () => pingpong!.handle(m));
         break;
       case 'presence':
         if (enabled.presence) presence.ingest(m);
@@ -581,6 +602,7 @@ export function createSocial(ctx: ViewerContext, opts: SocialOptions = {}): Soci
         if (p?.pressed(realityBind.button)) void reality.toggle();
       }
       if (tag) guard('tag', () => tag!.update(d));
+      if (pingpong) guard('pingpong', () => pingpong!.update(d));
       if (reality) guard('reality', () => reality!.update(d));
       debug.people = ghosts.count;
       debug.notes = notesLayer.count;
@@ -607,6 +629,7 @@ export function createSocial(ctx: ViewerContext, opts: SocialOptions = {}): Soci
       ghosts.dispose();
       notesLayer.dispose();
       tag?.dispose();
+      pingpong?.dispose();
       reality?.dispose();
       legend?.dispose();
       sounds.dispose();

@@ -45,6 +45,21 @@ function Backend.event(sceneId: string, body: any)
 	return impl().event(sceneId, body)
 end
 
+-- Cross-play ping pong: real server only (the mock has no headsets).
+function Backend.pingpong(sceneId: string, body: any)
+	if Config.useMock() then
+		return false, "mock", 0
+	end
+	return Api.pingpong(sceneId, body)
+end
+
+function Backend.pingpongWait(sceneId: string, after: number)
+	if Config.useMock() then
+		return false, "mock", 0
+	end
+	return Api.pingpongWait(sceneId, after)
+end
+
 function Backend.people(sceneId: string)
 	return impl().people(sceneId)
 end

@@ -40,6 +40,27 @@ local lastHitter: string? = nil
 local lastBounce: string? = nil
 local botBusy = false
 
+-- Cross-play: a headset in the Déjà View viewer can hold a side (server/social/pingpong.ts relays it). It sits in
+-- `sides` as a plain table with the few Player fields this file reads (UserId, DisplayName, Parent); `remote` marks it.
+-- Its hits arrive a moment late, so a point against it waits GRACE for a hit from before the point.
+local REMOTE_ID = -2
+local GRACE = 0.8
+local remote: any = nil
+local pending: any = nil -- { winner, why, at }: a point against the headset, waiting out GRACE
+local hist: { any } = {} -- the ball's last two seconds { t, p }, to check the headset's late hits
+local remoteBounceAt: number? = nil -- when the ball last bounced on the headset's half
+local relaySeq = 0 -- the last headset event applied
+local relayDirty = false -- something the headsets should see changed
+local lastPaddle: { [number]: CFrame } = {} -- each Roblox player's latest paddle (world), for the headsets
+
+local function isRemote(p: any): boolean
+	return type(p) == "table" and p.remote == true
+end
+
+local function isPlayer(p: any): boolean
+	return typeof(p) == "Instance" and p:IsA("Player")
+end
+
 local Remotes: Folder
 local PPHit: RemoteEvent
 local PPPaddle: UnreliableRemoteEvent
@@ -87,6 +108,7 @@ local function updateBoard()
 		)
 	end
 	workspace:SetAttribute("PPActive", folder ~= nil and not over)
+	relayDirty = true
 	if PPState then
 		PPState:FireAllClients({
 			active = folder ~= nil,
@@ -109,6 +131,7 @@ local function updateBoard()
 end
 
 local function broadcastState()
+	relayDirty = true
 	if PPState then
 		PPState:FireAllClients({
 			state = state and {
@@ -140,6 +163,8 @@ local function ensurePart(name: string, size: Vector3, colour: Color3, parent: I
 end
 
 local function destroyTable()
+	remote, pending, remoteBounceAt = nil, nil, nil
+	hist = {}
 	if folder then
 		folder:Destroy()
 	end
@@ -388,8 +413,17 @@ local function serve(wait: boolean)
 	ball.CFrame = frame * CFrame.new(p)
 	updateBoard()
 	broadcastState()
-	if wait and sides[serverSide] then
+	if wait and isPlayer(sides[serverSide]) then
 		World.toast("Your serve, " .. nameOf(serverSide), sides[serverSide])
+	end
+	if isRemote(sides[serverSide]) then
+		local shotNow = state.shot
+		task.delay(8, function()
+			if folder and state and state.serving and not over and state.shot == shotNow and isRemote(sides[serverSide]) then
+				state.serveInFlight = true
+				launch(other(serverSide), state.p, 0.8, 0)
+			end
+		end)
 	end
 	if not sides[serverSide] then
 		-- the bot serves after a moment
@@ -406,8 +440,8 @@ local function finish(winnerSide: string)
 	over = true
 	local winner, loser = sides[winnerSide], sides[other(winnerSide)]
 	local duration = math.max(0, math.floor(now() - matchStart))
-	local wId = winner and `rbx-{winner.UserId}` or "bot"
-	local lId = loser and `rbx-{loser.UserId}` or "bot"
+	local wId = if isRemote(winner) then `headset-{winner.id}` elseif winner then `rbx-{winner.UserId}` else "bot"
+	local lId = if isRemote(loser) then `headset-{loser.id}` elseif loser then `rbx-{loser.UserId}` else "bot"
 	local wName = winner and winner.DisplayName or "Bot"
 	local lName = loser and loser.DisplayName or "Bot"
 	Backend.sendEvent(workspace:GetAttribute("SceneId"), {
@@ -421,7 +455,9 @@ local function finish(winnerSide: string)
 		score = string.format("%d-%d", score[winnerSide], score[other(winnerSide)]),
 		durationS = duration,
 	})
-	Stats.win(winner, "pingpong")
+	if isPlayer(winner) then
+		Stats.win(winner, "pingpong")
+	end
 	World.toast(string.format("%s wins %d-%d", wName, score[winnerSide], score[other(winnerSide)]))
 	updateBoard()
 	task.delay(6, function()
@@ -435,6 +471,9 @@ local function finish(winnerSide: string)
 		local loserSide = other(winnerSide)
 		local nextPlayer = table.remove(queue, 1)
 		if nextPlayer and nextPlayer.Parent then
+			if isRemote(sides[loserSide]) then
+				remote = nil
+			end
 			sides[loserSide] = nextPlayer
 			if PPSide then
 				PPSide:FireClient(nextPlayer, loserSide)
@@ -497,12 +536,30 @@ local function botReturn()
 	end)
 end
 
+-- A point, unless it goes against the headset while the ball was on its way there: then it waits GRACE for a hit
+-- the headset made before it (its hits reach the server a moment late).
+local function decide(winnerSide: string, why: string)
+	if remote and state and state.to == remote.side and other(winnerSide) == remote.side then
+		pending = { winner = winnerSide, why = why, at = state.t }
+		state.live = false
+		return
+	end
+	point(winnerSide, why)
+end
+
 local function step(dt: number)
 	-- a waiting serve floats; a let that starts a new serve mid-frame must not drop it
 	if not state or not state.live or state.serving or not ball then
 		return
 	end
 	local ev = Sim.step(state, dt, len, wid)
+	table.insert(hist, { t = state.t, p = state.p })
+	while #hist > 0 and hist[1].t < state.t - 2 do
+		table.remove(hist, 1)
+	end
+	if ev.table and remote and ev.table == remote.side then
+		remoteBounceAt = state.t
+	end
 	ball.CFrame = frame * CFrame.new(state.p)
 	if ev.table then
 		tock("table")
@@ -517,7 +574,7 @@ local function step(dt: number)
 		state.receiverBounces = (state.receiverBounces or 0) + 1
 		updateBoard()
 		if state.receiverBounces >= 2 then
-			point(hitter, "Double bounce")
+			decide(hitter, "Double bounce")
 			return
 		end
 		-- it landed on the receiver's half: the bot returns it when that end is empty
@@ -544,7 +601,7 @@ local function step(dt: number)
 		else
 			winner = state.to -- it never reached the far half: the hitter's fault
 		end
-		point(winner, "Out")
+		decide(winner, "Out")
 	end
 end
 
@@ -642,6 +699,11 @@ local stepAccum = 0
 local function onHeartbeat(dt: number)
 	if not folder or not state then
 		return
+	end
+	if pending and now() - pending.at > GRACE then
+		local p = pending
+		pending = nil
+		point(p.winner, p.why)
 	end
 	stepAccum = math.min(stepAccum + dt, 0.2)
 	local h = 1 / 60
@@ -745,6 +807,259 @@ function PingPong.stop()
 	over = false
 end
 
+-- ------------------------------------------------------------------------------------------------ cross-play
+
+local function histAt(t: number): Vector3?
+	local best, bestDt = nil, math.huge
+	for _, h in hist do
+		local d = math.abs(h.t - t)
+		if d < bestDt then
+			best, bestDt = h.p, d
+		end
+	end
+	return if bestDt < 0.1 then best else nil
+end
+
+local function remoteJoin(ev: any)
+	if not folder then
+		return
+	end
+	if remote then
+		if remote.id == ev.id then
+			remote.lastSeen = os.clock()
+		end
+		return -- one headset at a time
+	end
+	local want = if ev.side == "A" or ev.side == "B" then ev.side else nil
+	local side = if want and not sides[want] then want elseif not sides.A then "A" elseif not sides.B then "B" else nil
+	if not side then
+		return
+	end
+	remote = {
+		remote = true,
+		UserId = REMOTE_ID,
+		DisplayName = string.sub(tostring(ev.name or "Headset"), 1, 30),
+		Name = "Headset",
+		Parent = true,
+		id = tostring(ev.id),
+		side = side,
+		lastSeen = os.clock(),
+	}
+	local firstJoin = sides.A == nil and sides.B == nil
+	if firstJoin and (state == nil or not state.live) then
+		serverSide = side
+	end
+	sides[side] = remote
+	World.toast(remote.DisplayName .. " joins ping pong from the headset")
+	if not over and (state == nil or not state.live) then
+		serve(true)
+	end
+	updateBoard()
+end
+
+local function remoteLeave()
+	if not remote then
+		return
+	end
+	if sides[remote.side] == remote then
+		sides[remote.side] = nil
+	end
+	World.toast(remote.DisplayName .. " left the table")
+	remote, pending = nil, nil
+	updateBoard()
+	if folder and state and state.serving then
+		serve(true)
+	end
+end
+
+-- The headset hit the ball at time t (Roblox server time) at p (table frame): a return the way the bot and the desktop
+-- assist play it, aimed by the swing. It counts if the ball was coming to the headset, bounced on its half before the
+-- hit and was near p then; the ball is then caught up to now.
+local function remoteShot(ev: any)
+	if not remote or not state or over or not folder or ev.id ~= remote.id then
+		return
+	end
+	local side = remote.side
+	local sh = ev.shot
+	if type(sh) ~= "table" or type(sh.p) ~= "table" then
+		return
+	end
+	local p = Vector3.new(tonumber(sh.p[1]) or 0, tonumber(sh.p[2]) or 0, tonumber(sh.p[3]) or 0)
+	local t = math.min(tonumber(sh.t) or now(), now())
+	local aim = math.clamp(tonumber(sh.aim) or 0, -1, 1)
+	local flight = math.clamp(tonumber(sh.flight) or 0.75, 0.5, 0.9)
+	local serveShot = false
+	if state.serving then
+		if serverSide ~= side then
+			return
+		end
+		serveShot = true
+		p, t = state.p, now()
+	else
+		if state.to ~= side or not (state.live or pending) then
+			return
+		end
+		if pending and t > pending.at + 0.05 then
+			return
+		end
+		if not remoteBounceAt or remoteBounceAt > t + 0.02 then
+			return
+		end
+		local was = histAt(t)
+		if not was or (was - p).Magnitude > 3 then
+			return
+		end
+		state.rally = (state.rally or 0) + 1
+		state.best = math.max(state.best or 0, state.rally)
+	end
+	pending = nil
+	tock("paddle")
+	state.serving = false
+	state.serveInFlight = serveShot
+	state.to = other(side)
+	state.p, state.v, state.w = p, Sim.assistReturn(p, state.to, aim, flight, len, wid), Vector3.zero
+	state.t, state.lastTouch = t, t
+	state.live = true
+	state.bounces, state.receiverBounces = 0, 0
+	state.shot += 1
+	lastHitter, lastBounce, remoteBounceAt = side, nil, nil
+	broadcastState()
+	updateBoard()
+	local guard = 0
+	while state and state.live and state.t < now() and guard < 400 do
+		step(math.min(1 / 240, now() - state.t))
+		guard += 1
+	end
+	if ball and state then
+		ball.CFrame = frame * CFrame.new(state.p)
+	end
+end
+
+local function vec(v: Vector3): { number }
+	return { math.round(v.X * 1000) / 1000, math.round(v.Y * 1000) / 1000, math.round(v.Z * 1000) / 1000 }
+end
+
+local function sideTag(p: any): any
+	return if isRemote(p) then "headset" elseif isPlayer(p) then p.DisplayName else nil
+end
+
+-- What the headsets see: the table (world studs), the board, the ball's flight (table frame) and Roblox paddles.
+local function relayPayload(): any
+	local paddles = {}
+	for s, p in sides do
+		local cf = isPlayer(p) and lastPaddle[p.UserId]
+		if cf then
+			local l = frame:ToObjectSpace(cf)
+			table.insert(paddles, { side = s, p = vec(l.Position), n = vec(l.UpVector), f = vec(-l.LookVector) })
+		end
+	end
+	return {
+		after = relaySeq,
+		active = folder ~= nil and not over,
+		table = { c = vec(frame.Position), yaw = tableYaw, len = len, wid = wid },
+		board = {
+			A = nameOf("A"),
+			B = nameOf("B"),
+			scoreA = score.A,
+			scoreB = score.B,
+			serve = serverSide,
+			over = over,
+			sides = { A = sideTag(sides.A), B = sideTag(sides.B) },
+		},
+		ball = if state
+			then {
+				p = vec(state.p),
+				v = vec(state.v),
+				w = vec(state.w or Vector3.zero),
+				t = state.t,
+				to = state.to,
+				live = state.live == true,
+				serving = state.serving == true,
+				shot = state.shot,
+			}
+			else nil,
+		headset = if remote then { id = remote.id, side = remote.side } else nil,
+		paddles = paddles,
+		now = now(),
+	}
+end
+
+-- The headset's events and paddle, from either the relay post's answer or the long-poll.
+local function applyRelay(data: any)
+	if type(data.events) == "table" then
+		for _, ev in data.events do
+			if type(ev) == "table" and type(ev.seq) == "number" and ev.seq > relaySeq then
+				relaySeq = ev.seq
+				if ev.kind == "join" then
+					remoteJoin(ev)
+				elseif ev.kind == "leave" then
+					if remote and ev.id == remote.id then
+						remoteLeave()
+					end
+				elseif ev.kind == "shot" then
+					remoteShot(ev)
+				end
+			end
+		end
+	end
+	local pd = data.paddle
+	if remote and type(pd) == "table" and pd.id == remote.id and type(pd.p) == "table" and type(pd.n) == "table" and type(pd.f) == "table" then
+		remote.lastSeen = os.clock()
+		local pos = Vector3.new(pd.p[1], pd.p[2], pd.p[3])
+		local up = Vector3.new(pd.n[1], pd.n[2], pd.n[3])
+		local back = Vector3.new(pd.f[1], pd.f[2], pd.f[3])
+		if up.Magnitude > 0.01 and back.Magnitude > 0.01 then
+			up = up.Unit
+			back = (back - up * back:Dot(up))
+			if back.Magnitude > 0.01 then
+				back = back.Unit
+				PPPaddle:FireAllClients(REMOTE_ID, frame * CFrame.fromMatrix(pos, up:Cross(back), up, back))
+			end
+		end
+	end
+end
+
+local function startRelay()
+	-- post the table when it changes (at most ~3 a second), and every third of a second while a headset plays
+	task.spawn(function()
+		local lastPost = 0
+		while true do
+			task.wait(0.1)
+			local sceneId = workspace:GetAttribute("SceneId")
+			if folder and type(sceneId) == "string" then
+				if remote and os.clock() - remote.lastSeen > 15 then
+					remoteLeave()
+				end
+				local since = os.clock() - lastPost
+				if (relayDirty and since >= 0.3) or (remote and since >= 0.34) then
+					relayDirty = false
+					lastPost = os.clock()
+					local ok, data = Backend.pingpong(sceneId, relayPayload())
+					if ok and type(data) == "table" then
+						applyRelay(data)
+					end
+				end
+			end
+		end
+	end)
+	-- wait for the headsets' joins and hits
+	task.spawn(function()
+		while true do
+			local sceneId = workspace:GetAttribute("SceneId")
+			if folder and type(sceneId) == "string" then
+				local ok, data = Backend.pingpongWait(sceneId, relaySeq)
+				if ok and type(data) == "table" then
+					applyRelay(data)
+				else
+					task.wait(2)
+				end
+			else
+				task.wait(1)
+			end
+		end
+	end)
+end
+
 function PingPong.start()
 	local RemotesFolder = ReplicatedStorage:WaitForChild("Remotes")
 	Remotes = RemotesFolder :: Folder
@@ -780,10 +1095,12 @@ function PingPong.start()
 
 	PPPaddle.OnServerEvent:Connect(function(player, cf)
 		if typeof(cf) == "CFrame" then
+			lastPaddle[player.UserId] = cf
 			-- fan the pose out to everyone so every client draws the other paddles
 			PPPaddle:FireAllClients(player.UserId, cf)
 		end
 	end)
+	startRelay()
 
 	Players.PlayerRemoving:Connect(function(p)
 		for s, q in sides do

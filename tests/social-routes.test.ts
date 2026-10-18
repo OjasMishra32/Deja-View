@@ -98,7 +98,8 @@ const judge = { id: 'quest-1', name: 'Judge', kind: 'vr', x: 0.42, y: 0, z: -1.1
 describe('route table', () => {
   test('exports exactly the contract paths', async () => {
     const r = await rig();
-    expect(Object.keys(r.routes).sort()).toEqual([PRESENCE, RMAP, RPRES, REVENT].sort());
+    const PP = ['/api/roblox/:sceneId/pingpong', '/api/roblox/:sceneId/pingpong/wait', '/api/pingpong/:sceneId'];
+    expect(Object.keys(r.routes).sort()).toEqual([PRESENCE, RMAP, RPRES, REVENT, ...PP].sort());
   });
 
   test('OPTIONS answers with CORS for posts', async () => {
