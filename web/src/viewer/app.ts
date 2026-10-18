@@ -3,6 +3,7 @@
 // layer starts on one /ws connection: social (presence ghosts, sticky notes, tag moments, reality check)
 // and the guide (labels, hold-to-ask, narration). ?follow=1 obeys host cues and opens new worlds.
 
+import { memoryDoor } from '../memory-keys.ts';
 import * as THREE from 'three';
 import { SparkRenderer, isMobile, isOculus, type SplatMesh } from '@sparkjsdev/spark';
 import type { Scene, VideoLayer } from '../../../shared/types.ts';
@@ -1203,6 +1204,8 @@ async function boot(): Promise<void> {
     return;
   }
   hud.setLoaderTitle(scene.name, scene.mode);
+  // Memory Keys: a private memory opens for its owner and guests; everyone else meets its door and can knock
+  await memoryDoor(id, scene.name);
   let viewer: Viewer | null = null;
   try {
     viewer = new Viewer(scene);
