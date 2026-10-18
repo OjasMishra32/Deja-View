@@ -36,10 +36,20 @@ export async function loadNotes(sceneId) {
   catch (error) { const key = `${file}:${error.message}`; if (!warned.has(key)) { warned.add(key); console.warn(`notes: skipping ${sceneId}.json (${error.message})`); } return null; }
 }
 
-// The scene's own notes, then the notes of the place a video memory happened in.
+// The scene's own notes, then the notes of the place a video memory happened in. A visitor in a private memory
+// (scene.viewer.access === 'visitor', set by the server from the sign-in: server/auth/memory-keys.ts) gets only what
+// the place is and what is in it: who is who, what they said, how the moment ended stay with the family.
 export async function sceneNotes(scene) {
   const ids = [...new Set([scene?.id, MEMORY_PLACES[scene?.id]].filter((id) => typeof id === 'string' && id))];
-  return (await Promise.all(ids.map(loadNotes))).filter(Boolean);
+  const notes = (await Promise.all(ids.map(loadNotes))).filter(Boolean);
+  return isVisitor(scene) ? notes.map(placeOnly) : notes;
+}
+
+export const isVisitor = (scene) => scene?.viewer?.access === 'visitor';
+
+/** A note with only the place in it: the activity and the objects, nothing about the people or the outcome. */
+export function placeOnly(item) {
+  return { ...item, oneLine: '', people: [], outcome: '', moments: [], funnyDetail: '' };
 }
 
 export function notesContext(notes = []) {

@@ -80,10 +80,12 @@ export const server = createServer(async (req, res) => {
     return result;
   });
   if (req.url === '/narrate') return endpoint(req, res, async ({ image: rawImage, scene = {} }) => {
-    const cached = scene.id && (narrateCache.get(scene.id) || await loadCache('narrate', scene.id));
+    // the greeting a visitor of a private memory hears is not the family's (Memory Keys): cache them apart
+    const narrateKey = scene.id && (scene.viewer?.access === 'visitor' ? `${scene.id}~visitor` : scene.id);
+    const cached = narrateKey && (narrateCache.get(narrateKey) || await loadCache('narrate', narrateKey));
     if (cached && cached.expires > Date.now()) return { ...cached.value, cached: true, ms: { understand: 0, tts: 0, total: 0 } };
     const validImage = image(rawImage); const result = { ...(await narrate(validImage, scene)), cached: false };
-    if (!result.degraded && scene.id) { const entry = { value: result, expires: Date.now() + 30 * 60_000 }; narrateCache.set(scene.id, entry); await saveCache('narrate', scene.id, entry); }
+    if (!result.degraded && narrateKey) { const entry = { value: result, expires: Date.now() + 30 * 60_000 }; narrateCache.set(narrateKey, entry); await saveCache('narrate', narrateKey, entry); }
     return result;
   });
   if (req.url === '/ask') return endpoint(req, res, async ({ image: rawImage, audio: rawAudio, question, scene = {}, history = [] }) => {

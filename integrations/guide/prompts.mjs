@@ -8,6 +8,9 @@ export const ASK_SYSTEM = `You are the voice of the room. Return JSON with quest
 
 export const FRAMES_SYSTEM = `You see frames from one short clip of friends, in order, first to last. Return JSON with caption: two short sentences, at most 35 words. First who is playing what (people by clothing or position, a name only if it is written, spoken or given in the notes), then who wins or is winning, from the score, a results screen or how people react. If they are cooking, say what they are making instead. Never mention frames, images, photos, cameras or video.`;
 
+// Memory Keys (server/auth/memory-keys.ts): the line every answer to a visitor of a private memory starts from.
+export const VISITOR_RULE = `This memory is private to its family, and the person asking is a visitor. Talk only about the place and the things in it. Never say who the people are, never use a name, and never say what they did or how the moment ended. If they ask, say warmly that that part of the memory belongs to its family, and that they can knock to be let in.`;
+
 export const VIDEO_PROMPT = `Watch this short video of friends playing a game or cooking. Return JSON: oneLine (max 20 words), activity, people (short neutral descriptions by clothing or position; add a name only if it is spoken in the video), objects (list), outcome (who won or how it ended, one line; for cooking, what they made), moments (up to 6, each {t: seconds, what}), funnyDetail (one line), confidence (high, medium or low that the outcome is right). Describe what happens, not how people look.`;
 
 export const VIDEO_SCHEMA = {
