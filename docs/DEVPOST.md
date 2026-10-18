@@ -48,7 +48,8 @@ Déjà View has two modes.
   them from behind, or step back to where the phone was and see the original video line up with them. In the
   kitchen, Seb opens the fridge and carries the milk out, and the door and the jug move with him. At the giant chess
   board, both players stand there mid-game. That's 4D reconstruction from one phone clip: the room in 3D, and the
-  people in it in 3D, moving through time.
+  people in it in 3D, moving through time. The video of our teammate's grandfather by the fire is two of these
+  memories now: you can sit beside the two of them while they talk.
 
 Then the room becomes social:
 
@@ -56,7 +57,8 @@ Then the room becomes social:
 - **Talk to the room:** Gemini pins floating labels on the interesting things. Hold a button, ask "who won?", and the
   room answers out loud.
 - **Roblox:** the same room becomes a life-size Roblox map. Friends without a headset join from a laptop and play tag
-  with the person in VR, who sees them as ghosts.
+  with the person in VR, who sees them as ghosts. The Infinity Hall Game Lawn is rebuilt by hand from its scan, at
+  real size, with its real ping pong and foosball tables to play on.
 - **Notes that stay:** click the room on the DeepSpace map and type a note. It pops up in the headset as a sticky note
   where you clicked and stays for the next visitor.
 - **A visit, not a game:** for someone who is forgetting, the same world becomes a place to sit with family. Put the
@@ -89,8 +91,8 @@ separates what was captured from what was imagined. **Roblox** lets friends with
   seconds. *See it:* the live build at the table and the GPU tile on `/host`.
 - **Vobile (reality check):** one toggle tints every part of the world the AI imagined. *See it:* "Reality check" on
   `/host`, in the headset.
-- **Roblox:** each real place is also a Roblox room built from the same photos: flat floors and walls with the real
-  textures projected onto them, proper collisions, centred and at life size (3.57 studs per metre). The server also
+- **Roblox:** each real place is also a Roblox room built from the same scan: a block map of the place at life size
+  (3.57 studs per metre) with proper collisions, and the Game Lawn rebuilt by hand from its measurements. The server also
   tells the game where the real ping-pong table, foosball table and chessboard are, so the games are played on the
   real furniture. Friends join from the Roblox app and play tag with the person in the headset, who sees them as
   ghosts. Nothing from a real place reaches Roblox unchecked: every texture is scanned for text, faces, logos and QR
