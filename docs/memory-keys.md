@@ -12,7 +12,7 @@ The server decides who is asking. The page can't say "I'm family"; the guide is 
 
 ## What the guide says
 
-On a public memory the guide talks the way it always has. On a private one, family (the owner and guests) hear about the people and stories as usual. Anyone asking about it who hasn't been let in is a visitor, and the guide it keeps to the place and the objects: no names, no family stories, no private notes. The opening greeting is cached separately for each kind of listener, so a visitor never gets family's greeting from the cache.
+On a public memory the guide talks the way it always has. On a private one, family (the owner and guests) hear about the people and stories as usual. Anyone asking about it who hasn't been let in is a visitor, and the guide keeps to the place and the objects: no names, no family stories, no private notes. The opening greeting is cached separately for each kind of listener, so a visitor never gets family's greeting from the cache.
 
 ## The flow
 
@@ -52,7 +52,7 @@ Owners, guests and knocks are kept in `data/memory-keys/<id>.json`.
 1. On the host laptop, open `/capture`, sign in, claim `old-house-kitchen`, and turn on Private.
 2. On a judge's phone, open `/view?scene=old-house-kitchen`. The door is closed. Sign in and knock.
 3. On the laptop, tap **Let in**. The phone's door opens.
-4. Ask the guide about the kitchen on the phone: now that it's a guest, it hears the family stories, the same as the owner.
+4. Ask the guide about the kitchen on the phone: now that the judge is a guest, they hear the family stories, the same as the owner.
 
 ## Limits
 
