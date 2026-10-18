@@ -1,6 +1,6 @@
 # Déjà View: the film (4:00)
 
-**Length:** 4:00 (the organizers OK'd it; the Devpost rules say 2 minutes, so keep that message handy).
+**Length:** 4:00 (the Devpost rules say 2 minutes, so keep that message handy).
 **Shape:** Shivin in VR with his dad → he takes the headset off and the world comes apart → the tear and why we built
 it → the website explains how it works → straight into cross-play ping pong → every way in and every world, always
 with one of us on camera → make a world live → the deep tech, with the ellipsoids front and centre → back to Shivin
