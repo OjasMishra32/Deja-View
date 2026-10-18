@@ -243,6 +243,25 @@ bun, typescript, three.js, spark, webxr, python, pytorch, flashworld, wan2.2, an
 deeplabv3, big-lama, gsplat, colmap, multi-hmr, anny, gltf, hugging-face, diffusers, opencv, ffmpeg, hipergator, slurm, cloudflare-tunnel, gemini,
 roblox, luau, deepspace, meta-quest-3s, solana, capital-one-nessie, tiger-data, timescaledb, postgresql, auth0
 
+## Credits
+
+All of our own code was written during the event. It stands on open-source work, credited in full, with licences, at
+https://deja-view.photo/credits.html. The main pieces:
+
+- **Models:** FlashWorld (imlixinyang) on Wan2.2-TI2V-5B (Wan-AI) for Photo mode; AnySplat (InternRobotics) with VGGT
+  (Meta) for many-photo worlds; Depth Anything V2; DeepLabV3 (torchvision); Big LaMa (advimman/lama); Qwen-Image-Edit
+  for painting what the photos never saw; Multi-HMR 2 and the Anny body model (NAVER) for the 3D people; SAM 2.1,
+  Grounding DINO and TRELLIS for objects.
+- **Libraries and tools:** three.js, Spark, three-mesh-bvh, gsplat (nerfstudio), spz (Niantic), COLMAP, PyTorch,
+  OpenCV, Open3D, Hugging Face transformers and diffusers, ffmpeg, Bun, rojo, lune, iwer and Playwright.
+- **Media:** the "Quest 3S with controllers" 3D model by OG_MATTER (CC BY 4.0); "Tilted Towers Tour | Fortnite OG S2"
+  free-camera footage by woodinjake (the Tilted Towers and Brick House worlds); a public greyscale demo room. The
+  Game Lawn, the giant chess board, the kitchen and the fire video are our own photos and clips.
+- **Services:** UF HiPerGator, Hugging Face, Google Gemini, Cloudflare Tunnel, DeepSpace, Roblox, Auth0, Solana,
+  Capital One Nessie and Tiger Data.
+
+Meta Quest, Roblox and Fortnite are trademarks of their owners; Déjà View is not affiliated with or endorsed by them.
+
 ## Team
 
 - **Ojasva:** server, viewer, GPU pipelines on HiPerGator, Roblox map voxelizer, presence and notes relays, reality
