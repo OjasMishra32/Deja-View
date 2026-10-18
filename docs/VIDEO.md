@@ -1,7 +1,7 @@
 # Déjà View: the film (4:00)
 
 **Length:** 4:00 (the organizers OK'd it; the Devpost rules say 2 minutes, so keep that message handy).
-**Shape:** Shivin in VR with his dad → he takes the headset off and we exit the metaverse → the tear and why we built
+**Shape:** Shivin in VR with his dad → he takes the headset off and the world comes apart → the tear and why we built
 it → the website explains how it works → straight into cross-play ping pong → every way in and every world, always
 with one of us on camera → make a world live → the deep tech, with the ellipsoids front and centre → back to Shivin
 and his dad.
@@ -71,10 +71,10 @@ This is the hook. It plays like a short film: no logo, no explaining, until the 
 |---|---|---|---|---|
 | 1 | 0:00–0:04 | Black. One small floating rectangle: the original phone video of Shivin's dad by the fire, flat, in darkness. (That's what the headset really shows at the spawn: the viewer blends into the original video near where the phone stood.) Slow push toward it. | **QUEST** (A1) | the fire crackling; his dad's real voice, subtitled |
 | 2 | 0:04–0:10 | Shivin steps through the frame. The flat video unfolds into a room, its edges reaching out in 3D. His dad sits by the fire in 3D, firelight moving on his face. Shivin walks slowly round to his side. | **QUEST** (A1) | the first notes of the song under the fire |
-| 3 | 0:10–0:13 | Close on his dad's face. Shivin's controller drifts into frame and stops just short of his shoulder. | **QUEST** (A1) | the fire |
-| 4 | 0:13–0:18 | **Exiting the metaverse**, made from the memory's own splats. **(a) 0.0–0.6 s:** the view freezes; every splat in the room inflates into a hard, glassy ellipsoid in its own colour. **(b) 0.6–1.8 s:** they peel away from the centre and stream past the camera like a jump to hyperspace, with long trails; the fire goes last. **(c) 1.8–2.6 s:** we pull backward out through two round Quest lenses, their rims catching the light. **(d) 2.6–3.2 s:** match cut on the motion: those lenses become the real headset's lenses as Shivin lifts it off his face. **(e) 3.2–5.0 s:** the real room; the last few ellipsoids drift across it and fade. | **RENDER** + **FILM** (D1) | the fire pulled backward into one low hit, then real room tone |
+| 3 | 0:10–0:13 | Close on his dad's face as he talks. Shivin stays still and listens. | **QUEST** (A1) | his dad's voice, the fire |
+| 4 | 0:13–0:18 | **Out of the headset**, made from the memory's own splats. **(a) 0.0–0.6 s:** the view freezes; every splat in the room inflates into a hard, glassy ellipsoid in its own colour. **(b) 0.6–1.8 s:** they peel away from the centre and stream past the camera like a jump to hyperspace, with long trails; the fire goes last. **(c) 1.8–2.6 s:** we pull backward out through two round Quest lenses, their rims catching the light. **(d) 2.6–3.2 s:** match cut on the motion: those lenses become the real headset's lenses as Shivin lifts it off his face. **(e) 3.2–5.0 s:** the real room; the last few ellipsoids drift across it and fade. | **RENDER** + **FILM** (D1) | the fire pulled backward into one low hit, then real room tone |
 | 5 | 0:18–0:26 | Shivin's face with the headset in his hands. The tear. One shot, no cuts. | **HAVE** (the clip you recorded) or **FILM** (D1) | **VO (Shivin):** "My father had problems with Alzheimer's, so I wanted to relive moments with him, with Déjà View." |
-| 6 | 0:26–0:30 | The ellipsoids that flew away drift back in from the black and lock together into the wordmark **Déjà View**, then soften into soft Gaussians. Under it: *You've seen this before. Now walk around in it.* | **RENDER** | the song's first full chord |
+| 6 | 0:26–0:30 | The ellipsoids that flew away drift back in from the black and lock together into the wordmark **Déjà View**, then soften into Gaussians. Nothing else on screen. | **RENDER** | the song's first full chord |
 
 ### ACT 2 · The website shows how it works (0:30–1:06)
 
@@ -89,7 +89,7 @@ own headings are the captions. Cursor hidden until shot 14.
 | 10 | 0:42–0:46 | **Splats** | The room resolves into its blobs; "844,875". | **SCREEN** (B1) | "…out of 844,875 soft 3D brushstrokes: Gaussian splats." | |
 | 11 | 0:46–0:50 | **Video**: "One phone video." | The foosball clip plays flat. | **SCREEN** (B1) | "Give it one phone video…" | |
 | 12 | 0:50–0:54 | **People**: "Both players, back in 3D." | Both players standing in 3D at the real table. | **SCREEN** (B1) | "…and the people come back too." | |
-| 13 | 0:54–0:58 | **What it's for** | A quick scroll past the six cards: a night out, the home you can't go back to, a listing, Tilted Towers, someone you've lost, the measured robot kitchen. | **SCREEN** (B1) | "Memories. Old homes. Listings. Even a game." | |
+| 13 | 0:54–0:58 | **What it's for** | A quick scroll past the six cards: a night out, the home you can't go back to, a listing, Tilted Towers, someone you've lost, the measured robot kitchen. | **SCREEN** (B1) | "It works for memories, old homes, listings, even game maps." | |
 | 14 | 0:58–1:02 | **Games**: "Play on the real furniture." | The cursor appears, finds the Game Lawn, clicks **Walk in**. | **SCREEN** (B1) | "And you can play on the real furniture." | **Roblox** |
 | 15 | 1:02–1:06 | the transition | The browser's `the-courts` flies to the ping pong table → **match cut** to the real Infinity Hall table at the same angle → the same angle in Roblox. About 1.3 s each. | **SCREEN** (B2) + **FILM** (D3) + **SCREEN** (B3) | the ball's sound on each cut | **Roblox** |
 
@@ -100,7 +100,7 @@ own headings are the captions. Cursor hidden until shot 14.
 | 16 | 1:06–1:09 | Wide, both in one frame: Ojasva in the Quest swinging, Shivin at the laptop in Roblox. | **FILM** (D2) | clap, then the song at its loudest | |
 | 17 | 1:09–1:19 | Split screen, Quest POV left, Roblox right: a real rally, the ball crossing the seam. Lime overlay: *same physics both sides · 240 Hz · drag + Magnus spin · late hits checked against the ball's path*. | **QUEST** (A3) + **SCREEN** (B3) + **RENDER** (overlay) | **O:** "Someone in a headset. Someone in Roblox on a laptop. One real table, one ball." | **Roblox** |
 | 18 | 1:19–1:22 | The point ends; both react for real. | **FILM** (D2) | | |
-| 19 | 1:22–1:26 | Slow-motion replay of the winning shot crossing the seam. | **QUEST** (A3, 60 fps) | "The same physics runs on both sides, so a hit is a hit." | |
+| 19 | 1:22–1:26 | Slow-motion replay of the winning shot crossing the seam. | **QUEST** (A3, 60 fps) | "Both sides run the same physics, 240 times a second." | |
 
 ### ACT 4 · Every way in, every world (1:26–2:08)
 
@@ -108,7 +108,7 @@ Each shot opens on 0.5 s of **FILM** (D5) of the person and the device, then cut
 
 | # | Time | World / page | Exactly what we see | Tag | VO / sound | Sponsor |
 |---|---|---|---|---|---|---|
-| 20 | 1:26–1:30 | site **"Open this link."** | A phone scans the QR on the laptop's landing page; deja-view.photo opens on the phone. | **FILM** (D4) + **PHONE** (C1) | "No app. Just a link." | **GoDaddy** |
+| 20 | 1:26–1:30 | site **"Open this link."** | A phone scans the QR on the laptop's landing page; deja-view.photo opens on the phone. | **FILM** (D4) + **PHONE** (C1) | "Nothing to install. It's a link." | **GoDaddy** |
 | 21 | 1:30–1:35 | `kitchen-cooking` | Phone: left half drags to walk, right half to look; tap to play with sound; Seb cooking in 3D. | **PHONE** (C2) | "On a phone…" | |
 | 22 | 1:35–1:40 | `tilted-towers` | Laptop: WASD between the towers, then **F** to fly up over them. | **SCREEN** (B4) | "…on a laptop…" | |
 | 23 | 1:40–1:45 | `chess-match` | Quest: walk round the two friends mid-game on the giant board. | **QUEST** (A4) | "…or standing right there." | |
@@ -143,16 +143,16 @@ Each shot opens on 0.5 s of **FILM** (D5) of the person and the device, then cut
 
 | # | Time | World / page | Exactly what we see | Tag | VO / sound | Sponsor |
 |---|---|---|---|---|---|---|
-| 40 | 3:16–3:22 | `alzheimers-memory`, private | Phone: a closed door, "Knock". Laptop: "Let in". The phone walks into the memory. | **FILM** (D7) + **PHONE** (C4) + **SCREEN** (B8) | "A family's memories stay with the family. They choose who walks in." | **Auth0** |
-| 41 | 3:22–3:28 | replay | A heatmap blooms on the floor plan around the fire; a visit timeline ticks beside it. | **RENDER** (`/api/replay/alzheimers-memory/heat`) | "Every visit is remembered: where you go back, where you linger." | **Tiger Data** |
+| 40 | 3:16–3:22 | `alzheimers-memory`, private | Phone: a closed door, "Knock". Laptop: "Let in". The phone walks into the memory. | **FILM** (D7) + **PHONE** (C4) + **SCREEN** (B8) | "A private memory stays locked. Family knocks, and the owner lets them in." | **Auth0** |
+| 41 | 3:22–3:28 | replay | A heatmap blooms on the floor plan around the fire; a visit timeline ticks beside it. | **RENDER** (`/api/replay/alzheimers-memory/heat`) | "Every visit is saved: when, how long, and where you stood." | **Tiger Data** |
 | 42 | 3:28–3:36 | `alzheimers-memory` | Quest: Shivin sits down next to his dad at the fire; the second moment plays. | **QUEST** (A2) | the fire; the song almost gone | |
-| 43 | 3:36–3:46 | the original clip | The real second moment. Let it breathe. | **HAVE** | **VO (Shivin):** "So I can go back. And sit there with him." | |
+| 43 | 3:36–3:46 | the original clip | The real second moment. Let it breathe. | **HAVE** | **VO (Shivin):** "Now I can go back there with him." | |
 
 ### END (3:46–4:00)
 
 | # | Time | Exactly what we see | Tag | VO | Sponsor |
 |---|---|---|---|---|---|
-| 44 | 3:46–4:00 | Numbers stamp in, 1 s each: 10 worlds · 844,875 ellipsoids · 305 views · ~10 s photo to world · 930+ tests. The four of us laughing in the headset and at the laptop (3 s). One row of sponsor logos (3 s). **Déjà View · deja-view.photo** (3 s), its letters made of ellipsoids. | **RENDER** + **FILM** (D8) | **O:** "Déjà View. Walk back in." | all |
+| 44 | 3:46–4:00 | Numbers stamp in, 1 s each: 10 worlds · 844,875 ellipsoids · 305 views · ~10 s photo to world · 930+ tests. The four of us laughing in the headset and at the laptop (3 s). One row of sponsor logos (3 s). **Déjà View · deja-view.photo** (3 s), its letters made of ellipsoids. | **RENDER** + **FILM** (D8) | no VO; the song's last note | all |
 
 **If it runs long:** cut 27, then 24, then trim 13.
 
@@ -165,8 +165,7 @@ Tick each one off. Times are what to record; the edit uses less.
 ### The intro (film this first, it matters most)
 
 - [ ] **A1 · QUEST · Shivin in `alzheimers-memory`:** start at the spawn facing the flat video and hold 3 s; walk
-  slowly forward through it; circle to his dad's side; hold on his face 3 s; reach the controller toward his
-  shoulder; then press **B** (back to the start) and hold perfectly still 3 s. That last frame is where the exit
+  slowly forward through it; circle to his dad's side; hold on his face 3 s; then press **B** (back to the start) and hold perfectly still 3 s. That last frame is where the exit
   render begins. 60 s, 3 takes. *Shots 1–3.*
 - [ ] **D1 · FILM · the headset coming off:** phone locked off (tripod or a stack of books) and in the same spot for
   every take; Shivin seated, three-quarters to the camera, headset on, one warm lamp from the side (like the fire),
@@ -227,7 +226,7 @@ Tick each one off. Times are what to record; the edit uses less.
 
 ### Claude renders (1080p/60, near-black, one visual system)
 
-- **The exit from the metaverse (4):** the memory's real splats from the spawn pose (A1's last frame) inflating into
+- **Out of the headset (4):** the memory's real splats from the spawn pose (A1's last frame) inflating into
   ellipsoids, streaming past the camera, the pull back through two lenses, lined up with the real lenses in D1.
 - **The title (6)** and **the end card (44)**, both built out of ellipsoids.
 - **The ellipsoid field (32):** the single ellipsoid with its axes and σ shells, the Game Lawn as 844,875 hard
