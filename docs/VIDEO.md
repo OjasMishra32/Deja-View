@@ -56,7 +56,7 @@ rather not record, Ojasva reads the alternate lines marked *alt*.
 | 11 | 0:34–0:38 | **Match cut, about 1.3 s each:** a real swing at the real Game Lawn ping pong table → the same swing, same angle, in our splat → the same angle in Roblox. | The ball's sound on each cut. | | **Roblox** | film + render + Roblox capture |
 | 12 | 0:38–0:55 | **Cross-play.** One wide shot with both real people in frame: one in the Quest swinging, one at a laptop (3 s). Split screen, headset left, Roblox right: a rally, the ball crossing the seam (8 s). A point; both laugh (3 s). Slow motion of the ball crossing the seam (3 s). | Song at its loudest. **O:** "A headset and a laptop. One real table. One ball. The same physics runs on both sides, so a hit is a hit." | lime overlay: *same physics both sides · 240 Hz · gravity, drag, Magnus spin · late hits checked against the ball's path* | **Roblox** | film (clap to sync) |
 
-### ACT 3 · The machine (0:55–2:15). The song ducks; the visuals talk.
+### ACT 3 · The machine (0:55–2:45). The song ducks; the visuals talk.
 
 | # | Time | Picture | Sound / VO | On screen | Sponsor | Source |
 |---|---|---|---|---|---|---|
@@ -69,34 +69,37 @@ rather not record, Ojasva reads the alternate lines marked *alt*.
 | 19 | 1:39–1:49 | **Filling the gaps.** A sphere of **189** direction bins around where people stand; the unseen ones light up. Holes and smears glow magenta on the palm crowns. A vision-language model (Qwen2.5-VL) describes what belongs there, an image-edit model (Qwen-Image-Edit) paints it, and depth (Depth Anything V2) lifts the paint back into 3D as new Gaussians. Inset: Gemini scoring a reconstruction sheet (shape · texture · scale · artifacts). | **O:** "Look up, and the photos run out. We check 189 directions from everywhere people stand, and Gemini works with our other models to fill the gaps." | sphere, model chain, score card | **Gemini** | render (genfill + judge outputs) |
 | 20 | 1:49–1:54 | **The reality check.** One toggle: everything imagined tints, everything captured stays clean. Inset: a splat reprojected into the input camera and depth-tested. | **O:** "One switch shows what was real, and what was imagined." | | **Vobile** | viewer capture + render |
 | 21 | 1:54–2:05 | **4D people.** A phone-video frame → people masked (DeepLabV3) and painted out (LaMa) to rebuild the empty room → per-frame metric depth aligned to it in inverse depth → the people as live depth meshes in the room. For bodies you can walk all the way around: Multi-HMR 2 on the Anny body model, tracked, grounded and textured from the real frames. Inset: the packed stream (colour · depth · mask). | **O:** "From one phone video, the people come back too: we lift them out, rebuild the empty room, find every body in every frame, and put them back in 3D." | pipeline strip | | render + viewer capture |
-| 22 | 2:05–2:15 | **Roblox from our splats.** Splats → coloured voxels (2,000–6,000 greedy-merged boxes in under 2 s) → the patio rebuilt from measurements (walls found at 41° from a splat histogram) → the real tables within 1% (3.57 studs per metre). Then the netcode: headset ⇄ our relay (long-poll) ⇄ the Roblox server as referee; 240 Hz on both sides; a 0.8 s grace for late hits. | **O:** "And every place becomes a life-size Roblox world built from our splats, real tables in the real spots. Roblox referees, and our relay carries the headset's hits in." | voxel counter, netcode diagram | **Roblox** | render + Roblox capture |
+| 22 | 2:05–2:14 | **Roblox from our splats.** Splats → coloured voxels (2,000–6,000 greedy-merged boxes in under 2 s) → the patio rebuilt from measurements (walls found at 41° from a splat histogram) → the real tables within 1% (3.57 studs per metre). Then the netcode: headset ⇄ our relay (long-poll) ⇄ the Roblox server as referee; 240 Hz on both sides; a 0.8 s grace for late hits. | **O:** "And every place becomes a life-size Roblox world built from our splats, real tables in the real spots. Roblox referees, and our relay carries the headset's hits in." | voxel counter, netcode diagram | **Roblox** | render + Roblox capture |
 
-### ACT 4 · Every world (2:15–2:50). The song comes back up.
+| 23 | 2:14–2:24 | **Objects out of the ellipsoids.** The kitchen splat. A ring of cameras renders it; Grounding DINO draws boxes and SAM 2.1 cuts masks on every view; the masks lift onto the splats wherever enough views agree, and clustering splits two cabinets into two objects. Then one object: its splats cropped, an orbit rendered, fused into a surface (TSDF), decimated, the captured colour baked on. The fridge turns on its own. | **O:** "Then we pull real objects out of the ellipsoids: find them in every view, lift them onto the splats, and fuse each one into its own mesh." | *10 objects from one kitchen* | | render (Seb's object outputs) |
+| 24 | 2:24–2:31 | **Scored against cameras it never saw.** Held-out views of the fridge, mesh against splat. The score card writes itself: 25 IoU + 15 SSIM + 10 PSNR + 10 depth + 10 Chamfer + 10 normals + 10 sharpness + 10 holes = 0–100, with hard gates. A search tries bake settings (voxel 5–15 mm, 12–48 views, 1024/2048 atlas), halves the field each rung, and keeps a Pareto front. Inset: Gemini's second opinion; a person still approves. | **O:** "An optimizer tunes every bake and scores each mesh against cameras it never saw." | score formula, Pareto front | **Gemini** | render (`eval.json`, `eval-sheet.jpg`, `loop.json`) |
+| 25 | 2:31–2:39 | **Preflight.** The fridge's texture atlas unpacks into a contact sheet; a scanner sweeps each tile; one test tile with a QR code lights red: **BLOCKED**. Then a lock: the approval is tied to that exact file's SHA1, and any change needs a new review. | **O:** "A teammate's Roblox place was once banned over a QR code in a texture. Now every texture is scanned before it ships." | *QR · barcode · text → blocked until a person approves* | **Roblox** | render (`preflight.json`, contact sheet) |
+| 26 | 2:39–2:45 | Left: the agent's run on HiPerGator, its steps ticking by (extract → score → preflight → build). Right: Roblox Studio as the place assembles. Then someone in Roblox walks up to the fridge from the kitchen. | **O:** "And an agent running on HiPerGator built it all in Roblox Studio." | | **Roblox** · HiPerGator | Seb's capture + Roblox capture |
 
-| # | Time | Picture | Sound / VO | On screen | Sponsor | Source |
-|---|---|---|---|---|---|---|
-| 23 | 2:15–2:27 | **Giant chess.** Someone in Roblox drags a piece taller than they are; it lands with a thud; the bot answers; the winning move; the player throws their hands up. | Real sounds, no VO. | | **Roblox** | film + Roblox capture |
-| 24 | 2:27–2:39 | Eight cuts on the beat, about 1.5 s each, a person in each: a foosball spin; someone ducking in Tilted Towers; Seb cooking as the fridge door opens; the old house kitchen; the courts; the grandfather's fire; a phone turning the Game Lawn; a laugh in the headset. | Real sounds on each cut. | world names, small | | film + viewer capture |
-| 25 | 2:39–2:50 | Someone in the headset holds the button and asks, "Who won?" Labels pop onto the room and it answers out loud. | Real audio. | | **Gemini** | Quest capture |
-
-### ACT 5 · What it's for (2:50–3:45)
+### ACT 4 · Every world (2:45–3:13). The song comes back up.
 
 | # | Time | Picture | Sound / VO | On screen | Sponsor | Source |
 |---|---|---|---|---|---|---|
-| 26 | 2:50–3:05 | **Reserved for Sebastian's asset piece** (15 s). Same rules: a real person using it on camera, one number on screen, one VO line. Fill in when he sends it; it may move once we see it. | TBD | TBD | TBD | Seb |
-| 27 | 3:05–3:12 | Three quick worlds: Seb's kitchen, the old house kitchen, the courts mid-game. | **O:** "Your kitchen. The house you grew up in. The game you won." | | | viewer capture |
-| 28 | 3:12–3:20 | **Memory Keys.** A private memory on a phone shows a closed door. "Knock." On the laptop, "Let in." The door opens. | **O:** "A family's memories stay with the family. They choose who walks in." | | **Auth0** | film (phone + laptop) |
-| 29 | 3:20–3:27 | A heatmap blooms on the floor plan around the fire; a visit timeline ticks beside it. | **O:** "Every visit is remembered: where he goes back, where he lingers." | | **Tiger Data** | render (`/api/replay/<id>/heat`) |
-| 30 | 3:27–3:35 | Headset POV: the grandchild sits down next to the grandfather in 3D by the fire. | Song down to almost nothing; the fire. | | | Quest capture |
-| 31 | 3:35–3:45 | The real phone video: the second moment. Let it breathe. | **G:** "So we can take him back. And sit there with him." *(alt, O)* | | | have it |
+| 27 | 2:45–2:55 | **Giant chess.** Someone in Roblox drags a piece taller than they are; it lands with a thud; the bot answers; the winning move; the player throws their hands up. | Real sounds, no VO. | | **Roblox** | film + Roblox capture |
+| 28 | 2:55–3:04 | Six cuts on the beat, 1.5 s each, a person in each: a foosball spin; someone ducking in Tilted Towers; Seb cooking as the fridge door opens; the old house kitchen; the courts mid-game; a phone turning the Game Lawn. | **O:** "Your kitchen. The house you grew up in. The game you won." | world names, small | | film + viewer capture |
+| 29 | 3:04–3:13 | Someone in the headset holds the button and asks, "Who won?" Labels pop onto the room and it answers out loud. | Real audio. | | **Gemini** | Quest capture |
+
+### ACT 5 · The family (3:13–3:45)
+
+| # | Time | Picture | Sound / VO | On screen | Sponsor | Source |
+|---|---|---|---|---|---|---|
+| 30 | 3:13–3:20 | **Memory Keys.** A private memory on a phone shows a closed door. "Knock." On the laptop, "Let in." The door opens. | **O:** "A family's memories stay with the family. They choose who walks in." | | **Auth0** | film (phone + laptop) |
+| 31 | 3:20–3:26 | A heatmap blooms on the floor plan around the fire; a visit timeline ticks beside it. | **O:** "Every visit is remembered: where he goes back, where he lingers." | | **Tiger Data** | render (`/api/replay/<id>/heat`) |
+| 32 | 3:26–3:34 | Headset POV: the grandchild sits down next to the grandfather in 3D by the fire. | Song down to almost nothing; the fire. | | | Quest capture |
+| 33 | 3:34–3:45 | The real phone video: the second moment. Let it breathe. | **G:** "So we can take him back. And sit there with him." *(alt, O)* | | | have it |
 
 ### END (3:45–4:00)
 
 | # | Time | Picture | Sound / VO | On screen | Sponsor | Source |
 |---|---|---|---|---|---|---|
-| 32 | 3:45–4:00 | Numbers stamp in, about 1 s each: 10 worlds · 1.3 M Gaussians · ~10 s photo to world · 305 cameras · 930+ tests (6 s). The four of us at the table, real (3 s). One row of sponsor logos (3 s). Last frame: **Déjà View**, *deja-view.photo* (3 s). | **O:** "Déjà View. Walk back in." The song's last note. | | all, small | film + render |
+| 34 | 3:45–4:00 | Numbers stamp in, about 1 s each: 10 worlds · 1.3 M Gaussians · ~10 s photo to world · 305 cameras · 930+ tests (6 s). The four of us at the table, real (3 s). One row of sponsor logos (3 s). Last frame: **Déjà View**, *deja-view.photo* (3 s). | **O:** "Déjà View. Walk back in." The song's last note. | | all, small | film + render |
 
-**If it runs long,** cut in this order: beat 15, beat 18, then trim beat 24 to five cuts.
+**If it runs long,** cut in this order: beat 15, beat 18, then trim beat 28 to four cuts.
 
 ---
 
@@ -106,11 +109,11 @@ rather not record, Ojasva reads the alternate lines marked *alt*.
 
 Shoot each one 3 times. Keep the phone still, light from the side, no notifications on any screen.
 
-1. **The grandfather clip (beats 1, 31):** we have it. Pick the 3 s with his face lit and his words, and the
+1. **The grandfather clip (beats 1, 33):** we have it. Pick the 3 s with his face lit and his words, and the
    second moment for the ending.
 2. **The grandchild with the Quest (beats 2, 5):** close-up, side light, shallow focus: putting it on, and taking
    it off with their real face after.
-3. **Headset POV of the Alzheimer's memory (beats 3–4, 30):** start exactly at the phone's spot, hold still 2 s,
+3. **Headset POV of the Alzheimer's memory (beats 3–4, 32):** start exactly at the phone's spot, hold still 2 s,
    then lean or drift about a metre; 20 s. A second take: sit down next to the grandfather. Quest: Camera → Record
    video, or cast to the laptop and screen-record.
 4. **The QR scan (beats 7–8):** a friend's phone scans the table card, the site loads, a thumb flicks the gallery
@@ -124,15 +127,19 @@ Shoot each one 3 times. Keep the phone still, light from the side, no notificati
    until you get a real celebration. Shoot the ball at 60 fps for the slow-motion.
 8. **Reactions (beats 15, 18):** a hacker's face lit by the laptop as a world loads; someone in the headset
    looking straight up at the palms.
-9. **Giant chess (beat 23):** a full short game in Roblox against the bot, ending on a win, with the player's
+9. **Giant chess (beat 27):** a full short game in Roblox against the bot, ending on a win, with the player's
    reaction on a second phone.
-10. **The montage (beat 24):** foosball, Tilted Towers, the kitchens, the courts. 5 s of each; we use about 1.5 s.
-11. **The guide (beat 25):** hold the button, ask "Who won?", and let it answer. Record with the Quest's audio.
-12. **Memory Keys (beat 28):** a phone and the laptop, hands only: knock, "Let in", the door opens.
+10. **The montage (beat 28):** foosball, Tilted Towers, the kitchens, the courts. 5 s of each; we use about 1.5 s.
+11. **The guide (beat 29):** hold the button, ask "Who won?", and let it answer. Record with the Quest's audio.
+12. **Memory Keys (beat 30):** a phone and the laptop, hands only: knock, "Let in", the door opens.
 13. **DeepSpace (beat 13):** hands on the phone: "Add a memory", a photo drops in.
-14. **The team (beat 32):** the four of you at the table, 3 s.
+14. **The team (beat 34):** the four of you at the table, 3 s.
 15. **Voice-over:** a quiet room (a closet works), phone about 15 cm from your mouth, 3 takes per line, slow.
-    The grandchild records lines 4 and 31 if they're willing.
+    The grandchild records lines 4 and 33 if they're willing.
+16. **From Seb (beats 23–26):** the kitchen's camera-ring views with the Grounding DINO boxes and SAM masks, the
+    object GLBs (the fridge at least), `eval.json` and `eval-sheet.jpg` per object, `loop.json` if the search has
+    run, the fridge's `preflight.json` and contact sheet, a capture of the agent's run on HiPerGator (job, GPU, its
+    steps), and a Roblox screen recording of someone walking up to the fridge (Studio if it isn't live).
 
 ### Claude renders (1080p/60 MP4 on near-black, one visual system)
 
@@ -146,7 +153,10 @@ Shoot each one 3 times. Keep the phone still, light from the side, no notificati
 7. Roblox: splats → voxels → rebuilt patio → tables, the netcode diagram, and the splat and Roblox halves of the
    match cut (11, 22).
 8. DeepSpace → pipeline → world (13), the physics overlay (12).
-9. The Tiger Data heatmap and visit timeline (29), the numbers and the end card (32).
+9. Seb's object sequence: views → boxes and masks → lift → TSDF → the fridge turning (23); the score card and the
+   search (24); the preflight scan with a QR test tile going red and the SHA1 lock (25); the agent timeline beside
+   Studio (26).
+10. The Tiger Data heatmap and visit timeline (31), the numbers and the end card (34).
 
 Same font, same lime, same easing (ease-out, 600 ms), no drop shadows, no gradients except the splats themselves.
 
@@ -179,3 +189,10 @@ Same font, same lime, same easing (ease-out, 600 ms), no drop shadows, no gradie
 **Keep it accurate:** Gemini flags problems and scores reconstructions; the holes themselves are located by our own
 gap finder (`pipeline/genfill/gaps.py`), and Qwen does the describing and painting. Say it that way and every word
 holds up if a judge reads the code.
+
+**Seb's part, said accurately:** the preflight decodes every texture in the GLB and scans it for QR codes and
+barcodes automatically (OpenCV); a person checks the contact sheet for text, and nothing uploads until that person's
+approval matches the file's SHA1. The evaluator's and the search's numbers exist only after their GPU run (the job
+scripts in `docs/object-reconstruction-loop.md` are written for PACE), so beat 24 shows only numbers that have been
+produced, and beat 26 says HiPerGator only if that is where the agent ran.
+
