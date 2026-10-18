@@ -60,8 +60,8 @@ Then the room becomes social:
 - **Roblox:** the same room becomes a life-size Roblox map. Friends without a headset join from a laptop and play tag
   with the person in VR, who sees them as ghosts. The Infinity Hall Game Lawn is rebuilt by hand from its scan, at
   real size, with its real ping pong and foosball tables to play on.
-- **Notes that stay:** click the room on the DeepSpace map and type a note. It pops up in the headset as a sticky note
-  where you clicked and stays for the next visitor.
+- **Notes that stay:** leave a note in a room and it pops up in the headset as a sticky note where you left it, and
+  stays for the next visitor.
 - **A visit, not a game:** for someone who is forgetting, the same world becomes a place to sit with family. Put the
   old listing photos of the house and the birthday clips on one board, then walk in together: Grandpa in the headset
   or at the laptop, the grandkids beside him in Roblox, and the room answering "whose birthday was this?" out loud.
@@ -75,16 +75,13 @@ DeepSpace storage and hands it to our server, and the card it shows puts everyon
 writes the caption the world model uses to imagine what the camera never saw, then makes the room interactive with
 labels and spoken answers. **HiPerGator** and a **Vultr** cloud GPU, working in parallel, build a world in seconds,
 which is the only reason a judge can make one live at the table. The **reality check**, built for **Vobile**,
-separates what was captured from what was imagined. **Roblox** lets friends without a headset be there, and
-**DeepSpace** remembers who was there and what they said, with live presence and notes that persist. Our own domain,
+separates what was captured from what was imagined. **Roblox** lets friends without a headset be there. Our own domain,
 **deja-view.photo**, gives Roblox, the headset and every phone one link that never changes.
 
 ### Sponsor challenges: what each one does and where to see it
 
-- **DeepSpace:** "Add a memory" keeps the photo or clip in DeepSpace storage and sends it to our server; the card
-  comes back with the world, Roblox and map links. The live map shows everyone (headset, Roblox, browser) moving with
-  trails, and a note typed on the map appears in the headset within a couple of seconds. *See it:* Seb's DeepSpace
-  app on the table laptop, and the sticky note in the headset.
+- **DeepSpace:** how a memory gets in. "Add a memory" in the DeepSpace app takes the photo or clip someone adds and
+  hands it to our pipeline, which turns it into the world; the card comes back with the links to walk in.
 - **Gemini (MLH):** writes the caption the world model imagines from, pins labels on things in the room, greets you,
   and answers spoken questions out loud. *See it:* in the headset or at `/view`: the labels, then hold the button
   and ask "who won?".
@@ -180,8 +177,7 @@ the floor and walls to flat planes, and projecting the photos onto them as textu
 sides. It is one textured mesh plus simple collision boxes, centred, at 3.57 studs per metre so the room is life size.
 (Generated worlds use a faster voxelizer: greedy-merged, colour-quantised boxes, 2,000 to 6,000 parts in under 2 s.) A presence relay
 moves everyone at 4 Hz in metres or studs, and the headset draws other people about 0.3 s in the past so nobody
-teleports. Notes live in DeepSpace; the server polls them every 2 s and pushes new ones to the headset over a
-WebSocket, so a note typed on the map shows up within a couple of seconds. The reality check reprojects every splat
+teleports. New notes reach the headset over a WebSocket within a couple of seconds. The reality check reprojects every splat
 into the input camera and checks it against depth: anything behind the camera, outside the frame or hidden behind
 something the camera saw is marked as imagined.
 
@@ -270,5 +266,5 @@ Meta Quest, Roblox and Fortnite are trademarks of their owners; Déjà View is n
 - **Shivin:** the Roblox experience (room loader, room picker, VR ghost, tag rounds), automatic walk zones,
   listing photos to a home, and the one-command video memory chain
 - **Brianna:** the Gemini guide: captions, labels, narration, spoken answers
-- **Seb:** the DeepSpace app ("Add a memory", live map, trails, notes, gallery), the Roblox games on the real
+- **Seb:** the DeepSpace app ("Add a memory": a photo or clip into our pipeline), the Roblox games on the real
   furniture, the object maker and its censor gate for Roblox uploads, the Vultr GPU
