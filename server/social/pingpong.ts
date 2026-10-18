@@ -20,6 +20,7 @@ const BODY_MAX = 16 * 1024;
 const WAIT_MS = 15_000;
 const KEEP_EVENTS = 64;
 const PADDLE_FRESH_MS = 1500;
+const EVENT_TTL_MS = 10_000;
 
 export interface HeadsetEvent {
   seq: number;
@@ -51,15 +52,18 @@ export class PingPongRelay {
   private scene(id: string): SceneRelay {
     let s = this.scenes.get(id);
     if (!s) {
-      s = { seq: 0, events: [], waiters: new Set(), paddle: null, latest: null };
+      // numbered from the clock, so a game server keeps seeing higher numbers across a restart of this server
+      s = { seq: Date.now(), events: [], waiters: new Set(), paddle: null, latest: null };
       this.scenes.set(id, s);
     }
     return s;
   }
 
-  /** Headset events after `after` (all kept ones when `after` is older than the oldest kept). */
+  /** Headset events after `after`, from the last EVENT_TTL_MS only: a game server that starts later does not replay
+   *  an old join or hit. */
   since(sceneId: string, after: number): HeadsetEvent[] {
-    return this.scene(sceneId).events.filter((e) => e.seq > after);
+    const old = Date.now() - EVENT_TTL_MS;
+    return this.scene(sceneId).events.filter((e) => e.seq > after && e.at > old);
   }
 
   seqOf(sceneId: string): number {

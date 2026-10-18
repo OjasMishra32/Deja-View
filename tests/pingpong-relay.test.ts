@@ -17,9 +17,22 @@ describe('ping pong relay', () => {
     const waiting = r.wait('the-courts', 0, 2000);
     expect(r.fromHeadset('the-courts', { kind: 'join', id: 'quest-1', name: 'Judge', side: 'B' })).toBeNull();
     const evs = await waiting;
-    expect(evs.map((e) => [e.kind, e.side, e.seq])).toEqual([['join', 'B', 1]]);
-    expect(r.since('the-courts', 1)).toEqual([]);
-    expect(await r.wait('the-courts', 1, 50)).toEqual([]);
+    expect(evs.map((e) => [e.kind, e.side])).toEqual([['join', 'B']]);
+    expect(evs[0]!.seq).toBeGreaterThan(1e12); // numbered from the clock
+    expect(r.since('the-courts', evs[0]!.seq)).toEqual([]);
+    expect(await r.wait('the-courts', evs[0]!.seq, 50)).toEqual([]);
+  });
+
+  test('an old event is not replayed to a game server that starts later', () => {
+    const r = new PingPongRelay(() => {});
+    r.fromHeadset('s', { kind: 'join', id: 'q', side: 'B' });
+    const realNow = Date.now;
+    Date.now = () => realNow() + 11_000;
+    try {
+      expect(r.since('s', 0)).toEqual([]);
+    } finally {
+      Date.now = realNow;
+    }
   });
 
   test('shots need a time, a place, an aim and a pace; aim and pace are clamped', () => {

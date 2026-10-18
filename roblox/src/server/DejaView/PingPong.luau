@@ -1020,7 +1020,8 @@ local function applyRelay(data: any)
 end
 
 local function startRelay()
-	-- post the table when it changes (at most ~3 a second), and every third of a second while a headset plays
+	-- post the table when it changes (at most ~3 a second), every third of a second while a headset plays, and every 2 s
+	-- anyway, so a headset that loads later (or a restarted server) sees the table
 	task.spawn(function()
 		local lastPost = 0
 		while true do
@@ -1031,7 +1032,7 @@ local function startRelay()
 					remoteLeave()
 				end
 				local since = os.clock() - lastPost
-				if (relayDirty and since >= 0.3) or (remote and since >= 0.34) then
+				if (relayDirty and since >= 0.3) or (remote and since >= 0.34) or since >= 2 then
 					relayDirty = false
 					lastPost = os.clock()
 					local ok, data = Backend.pingpong(sceneId, relayPayload())
