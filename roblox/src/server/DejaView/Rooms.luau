@@ -10,9 +10,16 @@ local MapBuilder = require(script.Parent.MapBuilder)
 local ObjectLayer = require(script.Parent.ObjectLayer)
 local World = require(script.Parent.World)
 local GameLawn = require(script.Parent.GameLawn)
+local ChessRoom = require(script.Parent.ChessRoom)
 local Fixtures = require(game:GetService("ReplicatedStorage").Shared.Fixtures)
 
 local Rooms = {}
+
+-- The builder for each room in Config.BUILT_ROOMS (each has build(parent)).
+local BUILDERS: { [string]: { build: (Instance) -> Folder } } = {
+	["the-courts"] = GameLawn,
+	["chess-room"] = ChessRoom,
+}
 
 type Entry = {
 	map: any?,
@@ -501,7 +508,7 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 	if not map and visual then
 		info = MapBuilder.buildFromModel(sceneId, name, visual, mi, box, stored ~= nil)
 	elseif map then
-		local handBuilt = Config.BUILT_ROOMS[sceneId] == true
+		local handBuilt = Config.BUILT_ROOMS[sceneId] == true and BUILDERS[sceneId] ~= nil
 		if handBuilt then
 			-- a room built by hand: the block map gives its frame, bounds and spawn, not its blocks
 			map = table.clone(map)
@@ -520,7 +527,7 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 		end
 		local room = workspace:FindFirstChild("Room")
 		if handBuilt and room then
-			GameLawn.build(room)
+			BUILDERS[sceneId].build(room)
 		end
 		if visual then
 			local placed = MapBuilder.attachModel(visual, box, stored ~= nil)

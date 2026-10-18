@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TextService = game:GetService("TextService")
 local HttpService = game:GetService("HttpService")
 local Backend = require(script.Parent.Backend)
+local Config = require(script.Parent.Config)
 local MapBuilder = require(script.Parent.MapBuilder)
 local World = require(script.Parent.World)
 local Theme = require(ReplicatedStorage.Shared.Theme)
@@ -121,6 +122,30 @@ local function buildLabels()
 	workspace:SetAttribute("LabelCount", #labels)
 end
 
+-- Whether `pos` (studs) lies on the room's chess board (Config.CHESS_BOARDS): the game starts its pieces afresh, so
+-- labels the scan put on the pieces it saw there would point at the wrong ones.
+local function onChessBoard(sceneId: string, pos: Vector3): boolean
+	local b = Config.CHESS_BOARDS[sceneId]
+	if type(b) ~= "table" or type(b.centre) ~= "table" or pos.Y > (b.centre[2] or 0) + 4 then
+		return false -- not a piece: pieces stand under 4 studs (a giant king is 2.3)
+	end
+	local frame = CFrame.new(b.centre[1], 0, b.centre[3]) * CFrame.Angles(0, b.yaw or 0, 0)
+	local rel = frame:PointToObjectSpace(Vector3.new(pos.X, 0, pos.Z))
+	local half = (b.size or 32) / 2 + 0.5
+	return math.abs(rel.X) <= half and math.abs(rel.Z) <= half
+end
+
+-- Whether `pos` is on the screen the chess game shows its turn on (a hand-built room's ChessScreen): a pill there
+-- would hide the game.
+local function onGameScreen(pos: Vector3): boolean
+	local room = workspace:FindFirstChild("Room")
+	local screen = room and room:FindFirstChild("ChessScreen", true)
+	if not (screen and screen:IsA("BasePart")) then
+		return false
+	end
+	return (pos - screen.Position).Magnitude <= math.max(screen.Size.X, screen.Size.Y) / 2 + 1
+end
+
 local function refreshLabels(sceneId: string): boolean
 	local ok, res = Backend.hotspots(sceneId)
 	if not ok or type(res) ~= "table" or type(res.hotspots) ~= "table" then
@@ -129,7 +154,7 @@ local function refreshLabels(sceneId: string): boolean
 	local fresh = {}
 	for _, h in res.hotspots do
 		local pos = type(h) == "table" and toStuds(h)
-		if pos then
+		if pos and not onChessBoard(sceneId, pos) and not onGameScreen(pos) then
 			table.insert(fresh, { label = tostring(h.label or "?"), blurb = tostring(h.blurb or ""), pos = pos })
 		end
 	end

@@ -42,14 +42,19 @@ local Config = {
 	BLOCK_ROOMS = true,
 	-- Rooms built by hand from parts instead of their block map, at the scan's real size and in its frame. The games
 	-- draw their own real tables in these.
-	BUILT_ROOMS = { ["the-courts"] = true } :: { [string]: boolean },
+	BUILT_ROOMS = { ["the-courts"] = true, ["chess-room"] = true } :: { [string]: boolean },
 	-- Rooms always listed first on the picker, in this order (Update 8: "the-courts loads first in your picker").
 	PINNED_SCENES = { "the-courts" } :: { string },
 	-- Auto-join on boot. Set false for the skit (everyone waits in the lobby until JOIN).
 	AUTO_JOIN_DEFAULT = true,
 	-- Hand-tuned chess boards per scene until /model sends features.chessBoard (Update 5):
 	-- ["chess-room"] = { centre = { x, y, z }, yaw = 0, size = 32 }   (studs; yaw = the way white looks)
-	CHESS_BOARDS = {} :: { [string]: any },
+	-- `auto`: placed as soon as the room loads.
+	CHESS_BOARDS = {
+		-- The real rubber mat in the giant chess corner (features.json: 3.0 m, 0.376 m squares, white looking along
+		-- (0.571, -0.821)), drawn in full with giant pieces: the room is built by hand.
+		["chess-room"] = { centre = { -1.449, 0, -10.497 }, yaw = -0.6079, size = 10.73, auto = true },
+	} :: { [string]: any },
 	-- Hand-tuned ping pong tables until features.pingPongTable (studs; centre = table top centre; yaw: long axis):
 	-- ["the-courts"] = { centre = { x, y, z }, yaw = 0, length = 14, width = 8, visible = false }
 	PINGPONG_TABLES = {
