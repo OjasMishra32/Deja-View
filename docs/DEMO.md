@@ -89,6 +89,10 @@ ready.
 
 ### An hour before
 
+- [ ] **The site keeps itself up:** `screen -dmS dv-watch scripts/serve-demo.sh watch` runs the server, the Gemini
+  guide and the deja-view.photo tunnel in their own screen sessions, keeps the Mac awake and restarts any piece that
+  stops answering (checks every 30 s). `scripts/serve-demo.sh status` shows what is up. Keep the Mac plugged in with
+  the lid open.
 - [ ] **Quest 3S** and both controllers charged. Volume up, lenses wiped, guardian drawn around the table area.
 - [ ] **Secure origin for the Quest**, either:
   - Wi-Fi: `bun run cert` (again if the Mac's IP changed) then `bun run https`, with the certificate accepted once
