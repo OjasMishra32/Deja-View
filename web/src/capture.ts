@@ -378,7 +378,7 @@ const COPY: Record<UploadMode, {
       ['Lights on, no zoom, landscape.', 'Hold still for a beat before you tap.'],
       ['Using a clip?', 'Keep the camera calm. The sharpest, steadiest frame is the one that gets used.'],
     ],
-    note: 'What happens next: the rest of the room is generated around your photo, including what was behind you. Seconds on the warm GPU, a few minutes on a backup.',
+    note: 'What happens next: the rest of the room is generated around your photo, including what was behind you. It joins the queue and is ready in about 40 minutes.',
   },
   video: {
     eyebrow: 'New world',

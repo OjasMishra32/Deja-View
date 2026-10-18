@@ -723,6 +723,18 @@ function renderGrid() {
   );
 }
 
+// A new world waits in the GPU queue for about 40 minutes: its bar fills over that time from when it was made (or
+// further, when the server reports more done), and the line counts down the minutes left.
+const QUEUE_MS = 40 * 60_000;
+
+function queueLeft(s: Scene): { pct: number; line: string } | null {
+  const t0 = Date.parse(s.createdAt ?? '');
+  if (!Number.isFinite(t0)) return null;
+  const gone = Math.max(0, Date.now() - t0);
+  const mins = Math.ceil((QUEUE_MS - gone) / 60_000);
+  return { pct: Math.min(99, (gone / QUEUE_MS) * 100), line: mins > 0 ? `About ${mins} min left` : 'Any minute now' };
+}
+
 function mineRow(s: Scene): RowData {
   const kind: Kind = modeKind(s.mode) === 'video' ? 'video' : 'photo';
   const base = { id: s.id, name: displayName(s), kind };
@@ -730,6 +742,8 @@ function mineRow(s: Scene): RowData {
   if (s.status === 'failed') return { ...base, line: 'This one didn’t make it.', state: 'failed' };
   const pct = percent(s);
   const stage = (s.status === 'running' && s.stage?.trim()) || STATUS_LABEL[s.status] || STATUS_LABEL.running!;
+  const q = queueLeft(s);
+  if (q) return { ...base, line: `${stage} · ${q.line}`, state: 'active', pct: Math.max(q.pct, pct ?? 0) };
   return { ...base, line: pct !== null ? `${stage} · ${pct}%` : stage, state: 'active', pct };
 }
 
@@ -879,6 +893,10 @@ function main() {
     if (events.state !== 'open') void refreshScenes();
   }, 4000);
   setInterval(() => void refreshHealth(), 20000);
+  // keep the queue bars and minutes left moving between server updates
+  setInterval(() => {
+    if (mine.some((id) => ACTIVE.has(scenes.get(id)?.status ?? ''))) renderMine();
+  }, 10000);
 }
 
 // The capture page imports qrSvg from here; only the landing page has a gallery grid.
