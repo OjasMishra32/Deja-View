@@ -4,6 +4,19 @@ Read `START-HERE.md` first (the short spec), then `plan.md` (the story), then th
 `contracts.md` has the wiring for the whole team. If this page ever disagrees with `START-HERE.md` or `contracts.md`,
 they win: say so in the team chat.
 
+> **Update 24 (Sat ~10:30 PM): your last job is the Auth0 sign-up (about 15 minutes).** Roblox is done (Update 23).
+> 1. auth0.com, free account, a new tenant. Applications → Create Application → **Single Page Application**, name it
+>    "Déjà View".
+> 2. In its settings, **Allowed Callback URLs** and **Allowed Logout URLs**:
+>    `https://deja-view.photo/, https://deja-view.photo/capture, https://deja-view.photo/host, https://deja-view.photo/tab`.
+>    **Allowed Web Origins:** `https://deja-view.photo`. Save.
+> 3. Applications → APIs → Create API, identifier `https://dejaview/api` (signing RS256, the default).
+> 4. Three values: `AUTH0_DOMAIN` (the tenant, like `dejaview.us.auth0.com`), `AUTH0_CLIENT_ID` (the SPA's client id)
+>    and `AUTH0_AUDIENCE` (`https://dejaview/api`). Send the values to Ojasva **in a DM only**: never in the repo, the team chat or a screenshot. He adds them to the
+> server's `.env` and restarts it (`scripts/serve-demo.sh restart`).
+> 5. Check with Ojasva after the restart: on `https://deja-view.photo/capture`, "Sign in" opens Auth0's login and
+>    comes back signed in. What it protects: adding a memory, `/host` cues and the tab (docs/DEVPOST.md, Auth0).
+
 > **Update (Sat early morning):** the Photon group-chat bot is dropped (not a Devpost prize, and it did not work).
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.

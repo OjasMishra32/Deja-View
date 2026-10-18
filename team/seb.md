@@ -4,6 +4,14 @@ Read `START-HERE.md` first (the short spec), then `plan.md` (the story), then th
 `contracts.md` has the wiring for the whole team. If this page ever disagrees with `START-HERE.md` or `contracts.md`,
 they win: say so in the team chat.
 
+> **Update (Sat ~10:30 PM): your last job is the MLH DEV writing challenge.** Make a DEV account (dev.to) and write
+> the build story as a post after we submit on Devpost: what Déjà View is, why we built it (the Alzheimer's memory
+> leads), how it works (photos and phone video to walkable 3D on HiPerGator and Vultr, the headset, the Roblox rooms
+> and cross-play ping pong) and what was hard. `docs/DEVPOST.md` has all of it to draw from; put it in your own
+> words. Follow the challenge page's rules for tags and the deadline, link the Devpost page and
+> `https://deja-view.photo`, and post the link in the team chat. The sign-ups in section E below are now split:
+> Shivin does Auth0, Brianna does Tiger Data, and Nessie and Vultr are done or with Ojasva.
+
 Your work opens the demo (0:00, the clip in the group chat), comes back at 1:40 (the live map, and the note that pops
 up in the headset) and powers the finale (2:00 to 2:25, the judge's own photo becomes a world). Everything marked
 **Verified** was checked against the live docs or live APIs on Friday night (Oct 16, ~11 PM).
