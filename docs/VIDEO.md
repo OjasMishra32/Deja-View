@@ -1,6 +1,5 @@
 # Déjà View: the film (4:00)
 
-**Length:** 4:00 (the organizers OK'd it; the Devpost rules say 2 minutes, so keep that message handy).
 **Shape:** Shivin by the fire with his dad → pulled out of the memory to find him alone in a headset → why we built
 it → the website shows how it works → cross-play ping pong → every way in and every world, with one of us on camera
 → make a world live → how it works, in depth → Shivin goes back in.
