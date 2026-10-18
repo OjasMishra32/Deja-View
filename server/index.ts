@@ -27,6 +27,7 @@ import tabPage from '../web/tab.html';
 import viewPage from '../web/view.html';
 import { createApp } from './app.ts';
 import { auth0ConfigFromEnv, createAuth0Verifier, createAuthRoutes, signInRequired, type Auth0Verifier } from './auth/auth0.ts';
+import { createMemoryKeys, type MemoryKeys, type RequestFacts } from './auth/memory-keys.ts';
 import { nessieFromEnv } from './bank/nessie.ts';
 import { createTab, type TabService } from './bank/tab.ts';
 import { createCueRoute } from './cue.ts';
@@ -53,7 +54,7 @@ import {
 import { BodyTooLarge, MESSAGES } from './app.ts';
 import { isPipelineCaption, isVideoScene, publicScene } from './copy.ts';
 import { CORS_HEADERS } from './files.ts';
-import { guardOptionsFromEnv, hasApiToken } from './guard.ts';
+import { guardOptionsFromEnv, hasApiToken, mutationBlocked, NOT_ALLOWED_MESSAGE } from './guard.ts';
 import { HealthMonitor, publicHealth } from './health.ts';
 import { createHostRoutes } from './host.ts';
 import { hpgConfig } from './hpg.ts';
@@ -118,6 +119,8 @@ interface Core {
   replay?: Replay;
   /** Auth0 access-token checks; null when sign-in is off (no AUTH0_* env). */
   auth?: Auth0Verifier | null;
+  /** Private memories with owners, guests and knocks (server/auth/memory-keys.ts); null while sign-in is off. */
+  memoryKeys?: MemoryKeys | null;
 }
 
 // State that must survive `bun --hot` re-evaluation lives on globalThis: one runner, one server.
@@ -236,6 +239,8 @@ function attachLive(core: Core): void {
       get: (id) => social.presence.snapshot(id),
     }),
     publish: (m) => core.publish(m),
+    viewerAccess: (req, id) =>
+      core.memoryKeys ? core.memoryKeys.guideAccess(req, id, requestFacts(req, core.server)) : Promise.resolve(undefined),
   });
   core.reality ??= new RealitySplitter({
     python: LOCAL_PYTHON,
@@ -254,6 +259,11 @@ function attachLive(core: Core): void {
       console.warn(`  Sign-in is off: ${(e as Error).message}`);
     }
     core.auth = config ? createAuth0Verifier({ config }) : null;
+  }
+  if (core.memoryKeys === undefined) {
+    core.memoryKeys = core.auth
+      ? createMemoryKeys({ sceneDir: (id) => store.sceneDir(id), sceneExists: async (id) => !!(await store.get(id)), verifier: core.auth })
+      : null;
   }
   // each one starts where it is made (all three are no-ops without their env), so a hot reload into a server made
   // before they existed starts them too; a read-only server signs, pays and records nothing
@@ -288,6 +298,11 @@ function attachLive(core: Core): void {
     });
     core.replay.start();
   }
+}
+
+/** What Memory Keys needs to know about a request besides its sign-in. */
+function requestFacts(req: Request, server?: RequestIpSource): RequestFacts {
+  return { local: isLocalRequest(req, server), trusted: trustedCaller(req) };
 }
 
 /** Callers the sign-in check never asks: the API token or DV_KEY already lets them through. */
@@ -558,6 +573,19 @@ const handlers = {
     if (core.auth && !core.readOnly && SIGN_IN_SCENE_ROUTES.some(([m, re]) => m === req.method && re.test(url.pathname))) {
       const denied = await signInGate(core, req, server);
       if (denied) return denied;
+    }
+    // Memory Keys: its routes, and the world files of a private memory only for its owner and guests
+    if (core.memoryKeys) {
+      const facts = requestFacts(req, server);
+      if (url.pathname.startsWith('/api/memory') && (req.method === 'POST' || req.method === 'PUT')) {
+        if (core.readOnly) return Response.json({ error: MESSAGES.readOnly }, { status: 503 });
+        const why = mutationBlocked(req, GUARD);
+        if (why) return Response.json({ error: NOT_ALLOWED_MESSAGE }, { status: 403 });
+      }
+      const mk = await core.memoryKeys.handle(req, facts);
+      if (mk) return mk;
+      const gated = await core.memoryKeys.gate(req, facts);
+      if (gated) return gated;
     }
     // a body sent without a length (chunked) is cut off where a declared one would have been refused
     if (req.body && !req.headers.get('content-length')) {

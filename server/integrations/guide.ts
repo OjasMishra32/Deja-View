@@ -44,6 +44,12 @@ export interface GuideScene {
   mode?: 'photo' | 'video';
   caption?: string;
   hotspots?: GuideHotspotRef[];
+  /**
+   * Who is asking, in a private memory (server/auth/memory-keys.ts): the family (owner and guests) may hear who is
+   * who and how the moment ended; a visitor only about the place. Set by this server from the request's sign-in,
+   * never taken from the client. Absent for a public memory.
+   */
+  viewer?: { access: 'family' | 'visitor' };
 }
 
 /** Messages a person may read (the `error` strings are the contract's exact words). */
@@ -331,6 +337,8 @@ export interface GuideProxyDeps {
   sceneDir?: (id: string) => string;
   /** Labels already pinned in a world ([{label, blurb}]). Default: <sceneDir>/hotspots.json when it exists. */
   getHotspots?: (id: string) => Promise<unknown>;
+  /** Memory Keys: what the guide may tell this request about a private memory (undefined: a public one). */
+  viewerAccess?: (req: Request, sceneId: string) => Promise<'family' | 'visitor' | undefined>;
   log?: Logger;
 }
 
@@ -467,6 +475,10 @@ export function createGuideProxy(deps: GuideProxyDeps): GuideProxy {
       delete body.scene; // contract: {image} only
     } else {
       const ctx = await sceneContext(body.scene);
+      if (ctx && deps.viewerAccess) {
+        const access = await deps.viewerAccess(req, ctx.id).catch(() => 'visitor' as const);
+        if (access) ctx.viewer = { access };
+      }
       if (ctx) body.scene = ctx;
       else delete body.scene;
       if (body.image === undefined && ctx && (name === 'narrate' || name === 'ask')) {

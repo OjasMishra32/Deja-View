@@ -201,6 +201,8 @@ export interface IntegrationsOptions {
   guard?: (req: Request) => string | null;
   /** Labels already pinned in a world, [{label, blurb}]. Default: <sceneDir>/hotspots.json. */
   getHotspots?: (sceneId: string) => Promise<unknown>;
+  /** Memory Keys: what the guide may tell a request about a private memory (server/auth/memory-keys.ts). */
+  viewerAccess?: (req: Request, sceneId: string) => Promise<'family' | 'visitor' | undefined>;
   now?: () => number;
   log?: Pick<Console, 'log' | 'warn'>;
 }
@@ -255,6 +257,7 @@ export function createIntegrations(opts: IntegrationsOptions): Integrations {
     getScene: (id) => opts.store.get(id),
     sceneDir: (id) => opts.store.sceneDir(id),
     getHotspots: opts.getHotspots,
+    viewerAccess: opts.viewerAccess,
     log: guideLog,
   });
   const routeDeps: IntegrationRoutesDeps = {
