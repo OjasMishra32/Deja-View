@@ -444,7 +444,7 @@ const CURATED: readonly Curated[] = [
   { id: 'old-house-kitchen', name: 'The old house kitchen', kind: 'photo', line: 'From four photos of its old real-estate listing, a home in Pennsylvania.' },
   { id: 'tilted-towers', name: 'Tilted Towers', kind: 'photo', line: `From stills of ${TILTED_CREDIT}.` },
   { id: 'brick-apartment', name: 'Brick House apartment', kind: 'photo', line: `From 71 frames of ${TILTED_CREDIT}.` },
-  { id: 'alzheimers-memory', name: "Alzheimer's memory", kind: 'video', line: 'From one phone video: a grandfather and his grandchild by the fire, two moments in one memory.' },
+  { id: 'alzheimers-memory', name: "Alzheimer's memory", kind: 'video', line: "From one phone video: Shivin's dad by the fire, two moments in one memory." },
   { id: 'courts-foosball', name: 'Foosball at the Game Lawn', kind: 'video', line: 'From one phone video: two friends at the foosball table.' },
   { id: 'kitchen-cooking', name: 'Sebastian cooking', kind: 'video', line: 'From one phone video: Seb at the counters, the stove and the sink.' },
   { id: 'chess-match', name: 'Giant chess match', kind: 'video', line: 'From one phone video: two friends playing on the giant board.' },

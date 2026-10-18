@@ -9,7 +9,7 @@ friends in Roblox, in a VR headset or a browser, or sitting next to someone who 
 
 ## Inspiration
 
-One of our teammates' grandfather has Alzheimer's. The disease usually takes the newest memories first; the old
+Our teammate Shivin's dad has struggled with Alzheimer's. The disease usually takes the newest memories first; the old
 places and the old faces tend to stay the longest. Families already know what helps on a good day: you sit together
 with the old photos and ask "do you remember this?" But a photo is flat. You can't turn around in it, and you can't
 sit back down at that table.
@@ -48,7 +48,7 @@ Déjà View has two modes.
   them from behind, or step back to where the phone was and see the original video line up with them. In the
   kitchen, Seb opens the fridge and carries the milk out, and the door and the jug move with him. At the giant chess
   board, both players stand there mid-game. That's 4D reconstruction from one phone clip: the room in 3D, and the
-  people in it in 3D, moving through time. The video of our teammate's grandfather by the fire is one of these
+  people in it in 3D, moving through time. The video of Shivin's dad by the fire is one of these
   memories now, "Alzheimer's memory": two moments of it, played in one room, and you can sit beside them while they
   talk.
 
@@ -64,8 +64,8 @@ Then the room becomes social:
 - **Notes that stay:** leave a note in a room and it pops up in the headset as a sticky note where you left it, and
   stays for the next visitor.
 - **A visit, not a game:** for someone who is forgetting, the same world becomes a place to sit with family. Put the
-  old listing photos of the house and the birthday clips on one board, then walk in together: Grandpa in the headset
-  or at the laptop, the grandkids beside him in Roblox, and the room answering "whose birthday was this?" out loud.
+  old listing photos of the house and the birthday clips on one board, then walk in together: Dad in the headset
+  or at the laptop, the kids beside him in Roblox, and the room answering "whose birthday was this?" out loud.
 - **Memories have keys:** a family's kitchen is theirs. The owner can make a memory private, and then anyone
   else meets a closed door and has to sign in and knock. The owner sees the knock and lets them in, or doesn't. Even the
   guide keeps the family's secrets: it tells family about the people and the stories, and a stranger only about the
@@ -75,7 +75,7 @@ Then the room becomes social:
 
 ### The sponsor chain: one memory, start to finish
 
-Follow the grandfather's fire video through Déjà View and every sponsor does one job:
+Follow the fire video of Shivin's dad through Déjà View and every sponsor does one job:
 
 1. **DeepSpace brings it in.** The family adds the clip with "Add a memory", and DeepSpace hands it to our pipeline.
 2. **HiPerGator and Vultr build it.** Two GPUs working in parallel lift the people out of every frame into 3D and build
@@ -88,7 +88,7 @@ Follow the grandfather's fire video through Déjà View and every sponsor does o
    tints everything the AI imagined, so the family always knows what the camera really saw.
 5. **Auth0 keeps it in the family.** With Memory Keys a memory has an owner; a private one opens only for the people
    they let in, and the guide only tells family the family stories.
-6. **Roblox brings everyone else.** The grandkids join the same place from a laptop or phone at life size, and can play
+6. **Roblox brings everyone else.** The rest of the family joins the same place from a laptop or phone at life size, and can play
    the real ping pong table against whoever is in the headset.
 7. **Tiger Data remembers every visit.** Who walked in, when, for how long and where they stood goes into a time-series
    record, so the family can see which places he goes back to most.
@@ -247,7 +247,7 @@ in our credits fill in what the camera never saw.
 
 - Memory visits for families living with dementia, designed with caregivers and memory-care staff instead of
   guessed at: a calm mode with no games and no labels, a family member's recorded voice in place of the guide's, and
-  a way to keep each visit. We've tried it with our teammate's grandfather (it's in our video); the next step is to
+  a way to keep each visit. We built one for Shivin's dad (it's in our video); the next step is to
   build it with caregivers and memory-care staff, not on our own.
 - Live Video builds in under a minute, so the "now do it" moment works for clips too.
 - More of the GPU work on Vultr, so we're not borrowing a class's GPUs.

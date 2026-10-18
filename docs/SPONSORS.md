@@ -1,8 +1,8 @@
 # Déjà View: why each sponsor is in it
 
 One sentence holds it together: **Déjà View turns the photos and videos a family already has into places they can walk
-back into, together, and every sponsor does one real job in that.** The story we lead with is our teammate's
-grandfather, who has Alzheimer's: the old places last longest, so we give them back.
+back into, together, and every sponsor does one real job in that.** The story we lead with is our teammate
+Shivin's dad, who has struggled with Alzheimer's: the old places last longest, so we give them back.
 
 Each section: what it does, why it matters, where a judge sees it, and whether it is live tonight. Add your own notes
 under each one.
@@ -36,7 +36,7 @@ under each one.
   and the giant chess room built by hand from their measurements). The games are played on the real furniture: ping
   pong, foosball and giant chess. **Cross-play:** the headset player rallies on the real ping pong table against a
   Roblox player on a computer, with late hits allowed.
-- **Why it matters:** the grandkids don't need a headset. They join the same place from a laptop or phone and play
+- **Why it matters:** the rest of the family doesn't need a headset. They join the same place from a laptop or phone and play
   with whoever is in the headset.
 - **See it:** https://www.roblox.com/games/2942475849 (version 16) next to the headset.
 - **Live:** yes.
@@ -78,7 +78,7 @@ under each one.
 - **What it does:** every position from the headset, Roblox and the browser (up to 5 a second per world) goes into a
   TimescaleDB hypertable with a one-second rollup and compression; Roblox moments go in beside it. The server answers
   replay questions: each visit (when, how long, who), everyone's paths over time, and a heatmap of where people stood.
-- **Why it matters:** each memory keeps its own history. The family can see which places Grandpa goes back to most
+- **Why it matters:** each memory keeps its own history. The family can see which places Dad goes back to most
   and where he lingers.
 - **See it:** `/api/replay/<world>/sessions`, `/api/replay/<world>`, `/api/replay/<world>/heat`, and the tables in the
   Tiger Cloud console.
@@ -89,7 +89,7 @@ under each one.
 
 - **What it does:** https://deja-view.photo is the site, the headset's address and Roblox's server, on the table card,
   the QR codes and the Devpost.
-- **Why it matters:** one link that never changes, which a grandparent can bookmark.
+- **Why it matters:** one link that never changes, which anyone in the family can bookmark.
 - **See it:** everywhere.
 - **Live:** yes. (Check the domain qualifies for the challenge before entering.)
 - **Your notes:**
@@ -105,7 +105,7 @@ under each one.
 
 - **What it does:** the Apple-style redesign of the site and the headset UI: the landing, the gallery, the viewer's
   controls and cards.
-- **Why it matters:** it has to be calm and simple for a grandparent, not just for gamers.
+- **Why it matters:** it has to be calm and simple for a parent with Alzheimer's, not just for gamers.
 - **See it:** https://deja-view.photo
 - **Your notes:**
 
