@@ -58,8 +58,9 @@ Then the room becomes social:
 - **Talk to the room:** Gemini pins floating labels on the interesting things. Hold a button, ask "who won?", and the
   room answers out loud.
 - **Roblox:** the same room becomes a life-size Roblox map. Friends without a headset join from a laptop and play tag
-  with the person in VR, who sees them as ghosts. The Infinity Hall Game Lawn is rebuilt by hand from its scan, at
-  real size, with its real ping pong and foosball tables to play on.
+  with the person in VR, who sees them as ghosts. The Infinity Hall Game Lawn and the giant chess room are rebuilt by
+  hand from their scans, at real size, with the real tables to play on, and the person in the headset can play the
+  real ping pong table against someone on a laptop in Roblox.
 - **Notes that stay:** leave a note in a room and it pops up in the headset as a sticky note where you left it, and
   stays for the next visitor.
 - **A visit, not a game:** for someone who is forgetting, the same world becomes a place to sit with family. Put the
@@ -70,7 +71,7 @@ Then the room becomes social:
   guide keeps the family's secrets: it tells family about the people and the stories, and a stranger only about the
   room.
 - **It starts on the memory board:** add a photo or clip with "Add a memory" in the DeepSpace app, and the card comes
-  back with the world link, the Roblox link and the map link.
+  back with the world link and the Roblox link.
 
 ### The sponsor chain: one memory, start to finish
 
@@ -80,8 +81,9 @@ Follow the grandfather's fire video through Déjà View and every sponsor does o
 2. **HiPerGator and Vultr build it.** Two GPUs working in parallel lift the people out of every frame into 3D and build
    the room around them. A photo becomes a walkable world in about 10 seconds, which is why a judge can make one live
    at the table.
-3. **Gemini understands it.** It writes the caption the world model imagines from, puts gentle labels on what matters
-   in the room, and answers out loud when someone asks about it.
+3. **Gemini works with our other models to fill the gaps.** It describes each scene, and the world model uses that
+   description to imagine everything the camera never saw; then it labels what matters in the room and answers out
+   loud when someone asks about it.
 4. **Vobile keeps it honest.** For someone whose memory is slipping, a made-up detail is worse than a gap. One toggle
    tints everything the AI imagined, so the family always knows what the camera really saw.
 5. **Auth0 keeps it in the family.** With Memory Keys a memory has an owner; a private one opens only for the people
@@ -96,7 +98,8 @@ Follow the grandfather's fire video through Déjà View and every sponsor does o
 
 - **DeepSpace:** how a memory gets in. "Add a memory" in the DeepSpace app takes the photo or clip someone adds and
   hands it to our pipeline, which turns it into the world; the card comes back with the links to walk in.
-- **Gemini (MLH):** writes the caption the world model imagines from, pins labels on things in the room, greets you,
+- **Gemini (MLH):** works with our other models to fill the gaps: it writes the caption the world model imagines
+  everything outside the photo from. It also inspects our 3D reconstructions, pins labels on things in the room, greets you,
   and answers spoken questions out loud. *See it:* in the headset or at `/view`: the labels, then hold the button
   and ask "who won?".
 - **HiPerGator and Vultr, in parallel:** GPU work ran on both at once, on HiPerGator's GPUs and a rented Vultr cloud GPU,
@@ -182,16 +185,19 @@ had couldn't do it.
 collider so you can't walk through walls, and adds smooth locomotion, snap turn, a teleport arc, a comfort vignette,
 72 Hz with a performance step-down on the Quest, and a desktop and phone fallback.
 
-**The social layer:** a real place becomes a Roblox room by fusing depth from every camera into one surface, snapping
-the floor and walls to flat planes, and projecting the photos onto them as textures, with a sky beyond the open
-sides. It is one textured mesh plus simple collision boxes, centred, at 3.57 studs per metre so the room is life size.
-(Generated worlds use a faster voxelizer: greedy-merged, colour-quantised boxes, 2,000 to 6,000 parts in under 2 s.) A presence relay
+**The social layer:** a real place becomes a Roblox room generated from its own splats, at 3.57 studs per metre so the
+room is life size: a voxelizer turns the splats into greedy-merged, colour-quantised boxes (2,000 to 6,000 parts in
+under 2 s), and the Game Lawn and the giant chess room are rebuilt by hand from measurements taken from the splats
+(the walls found from a histogram of splat positions, the tables fitted to within 1% of their real size). Cross-play
+ping pong runs one physics model in both places: the headset flies the ball with a line-for-line port of the Roblox
+physics (gravity, drag, Magnus spin, 240 Hz steps), and the Roblox server accepts the headset's late hits by checking
+them against the ball's recent path, holding a point against the headset for 0.8 s. A presence relay
 moves everyone at 4 Hz in metres or studs, and the headset draws other people about 0.3 s in the past so nobody
 teleports. New notes reach the headset over a WebSocket within a couple of seconds. The reality check reprojects every splat
 into the input camera and checks it against depth: anything behind the camera, outside the frame or hidden behind
 something the camera saw is marked as imagined.
 
-**Testing:** more than 850 TypeScript tests and more than 450 Python tests pass, plus opt-in headless-Chrome checks
+**Testing:** more than 930 TypeScript tests and more than 450 Python tests pass, plus opt-in headless-Chrome checks
 of the viewer and the guide, and a WebXR emulator for the headset code paths. We also built mock versions of the
 guide and DeepSpace services so every hop could be tested before the real ones existed.
 

@@ -88,7 +88,7 @@ except the splats themselves.
   splats (a voxelizer over the splats; the Game Lawn and the giant chess room rebuilt from measurements taken from
   them; table positions fitted from the splats to within 1%), with games on the real furniture and cross-play ping
   pong against the headset.
-- **Gemini:** it understands each memory, and it is our quality inspector. It writes the scene description the world
+- **Gemini:** it works with our other models to fill the gaps, and it is our quality inspector. It writes the scene description the world
   model imagines the rest of a room from (most of each generated world lies outside the photo); it inspects our 3D
   reconstructions and scores what is wrong with them (shape, texture, scale, artifacts) from a sheet of mesh, splat,
   mask and difference views; and it runs the guide: labels, narration and spoken answers.
