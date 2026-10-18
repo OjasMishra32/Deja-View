@@ -16,32 +16,66 @@ muted demo is worse than a different song.
 
 ## The cut, beat by beat
 
-| # | Time | Picture | Voice-over (Ojasva) | Sponsor on screen | Source |
-|---|---|---|---|---|---|
-| 1 | 0:00–0:12 | Black. Fire crackle. The real grandfather clip fades up, 1.5 s. | (none) | | have it |
-| 2 | 0:12–0:25 | **First scene in VR:** headset POV inside the Alzheimer's memory. The frame starts exactly where the phone stood (the real footage), then the camera drifts and the flat video becomes a room: the two of them in 3D by the fire. | "My grandfather has Alzheimer's. He doesn't always remember this week. But he remembers the places." | | Quest capture (film) |
-| 3 | 0:25–0:32 | Title on black, letter by letter: **Déjà View**. Under it: *walk back in.* | | | render |
-| 4 | 0:32–0:50 | The website (deja-view.photo) on a laptop: hero, gallery of worlds scrolling slowly. Cut to the same site on a phone in a hand. | "Every family has photos and phone videos of places they can't go back to. Déjà View turns them into places you can walk into again: in a headset, a browser, or Roblox." | GoDaddy Registry: the URL types itself in the address bar | screen capture (render) + phone (film) |
-| 5 | 0:50–1:02 | Three inputs fly in from the left (a photo, a video, a sentence), three ways in on the right (headset, phone, Roblox), one line between them that becomes a splat cloud. | "One photo, one video, or just a few words." | DeepSpace: "Add a memory" card dropping in | render |
-| | | **THE ENGINE (1:02–2:12): music dips, the visuals take over** | | | |
-| 6 | 1:02–1:16 | **What a Gaussian splat is.** One 3D Gaussian drawn as an ellipsoid with its parameters labelled: mean μ, covariance Σ = R S Sᵀ Rᵀ, opacity α, colour as spherical harmonics. Then thousands, then the Game Lawn assembling from 1.3 million of them. The compositing equation writes itself: C = Σ cᵢ αᵢ Πⱼ<ᵢ (1 − αⱼ). | "A world is made of Gaussians: millions of soft, coloured blobs in 3D that a GPU blends into a picture sixty times a second." | | render (real splats from `the-courts`) |
-| 7 | 1:16–1:32 | **Photo to world in ~10 s.** A single photo; Gemini's caption types out beside it; a video diffusion model (FlashWorld, a distilled Wan2.2-5B) imagines a camera path around it and decodes Gaussians directly. Pie chart: only 14 to 23% of a Tilted Towers world was in the screenshot. A GPU grid lights up: HiPerGator RTX PRO 6000 Blackwell (96 GB) and Vultr cloud GPUs running at once. Bar: 5–7.5 s generation, ~10 s on a warm worker. | "Gemini tells the world model what it's looking at. The model imagines everything the camera never saw. On a warm GPU, a photo becomes a world in about ten seconds." | **Gemini**, **Vultr** (cloud GPUs in parallel with HiPerGator) | render (real numbers) |
-| 8 | 1:32–1:46 | **Real places, trained from scratch.** COLMAP camera frustums popping in around the Game Lawn (305 views). Then our own training: the PSNR curve climbing from 10.6 dB to 25 dB over 30,000 steps while the render sharpens beside it; overlays for metric depth regularisation (Depth Anything V2), per-photo appearance, camera pose refinement, densification to 1.3 M Gaussians. | "For real places we train our own: camera poses from structure-from-motion, then thirty thousand optimisation steps, guided by metric depth, on HiPerGator." | Vultr / HiPerGator GPU strip | render (real `metrics.json`) |
-| 9 | 1:46–1:56 | **Filling what nobody filmed.** A view looking up at the palm trees: holes and smears glow magenta (found from where people actually stand, 189 view-direction bins per splat); a vision-language model describes what continues into the gap; an image-edit model paints the crowns; depth lifts the paint back into 3D as new Gaussians. | "Look up, and photos run out. We find every gap from where you'll stand, paint what belongs there, and lift it back into 3D." | | render (genfill outputs) |
-| 10 | 1:56–2:04 | **The reality check.** Toggle: everything imagined tints, everything captured stays clean. Diagram: each splat reprojected into the input camera and depth-tested. | "And you can always see which parts are real." | **Vobile** | render + viewer capture |
-| 11 | 2:04–2:12 | **4D: people from a phone video.** A frame from the foosball clip → a body mesh estimate per frame (Multi-HMR 2 on the Anny body model) → tracked, put on the floor, textured from the real frames → the two players in 3D, walking round them while the clip plays. Side panel: the packed stream (RGB, metric depth in inverse-depth, person mask). | "From one phone video, the people come back too: in 3D, in time with their voices." | | render (avatar turntables) + viewer capture |
-| | | **TOGETHER (2:12–3:12): music back up** | | | |
-| 12 | 2:12–2:30 | **Roblox from splats.** The Game Lawn's splats collapse into coloured voxels (greedy-merged boxes, 2,000 to 6,000 parts in under 2 s), then the hand-built patio measured from them (walls found at 41° from a histogram of the splats), then the live Roblox room with the real tables, fitted to within 1% of a real 2.74 × 1.525 m table. | "The same place becomes a Roblox room, at life size, built from the splats themselves, with the real tables in the real spots." | **Roblox** | render + Roblox capture (film) |
-| 13 | 2:30–2:48 | **Cross-play ping pong.** Split screen: left, headset POV swinging the controller; right, a laptop in Roblox. The ball crosses between them. Overlay: shared physics (gravity, drag, Magnus spin, 240 Hz steps), and "hits arrive late: checked against the ball's path, 0.8 s grace". | "Someone in the headset and someone on a laptop, on the same real table." | **Roblox** | film (both screens) |
-| 14 | 2:48–2:58 | Quick montage: giant chess against the bot, foosball, Tilted Towers in VR, the old house kitchen, Seb cooking with the fridge door opening. | (music only) | | film + viewer capture |
-| 15 | 2:58–3:12 | The guide: labels pop onto the room; someone holds a button, asks a question, the room answers out loud. Then a note left on the map pops up in the headset. | "Ask the room what happened here, and it answers." | **Gemini**, **DeepSpace** (our Supabase: storage, data and realtime for the memory board) | Quest capture (film) |
-| | | **THE FAMILY (3:12–3:46): music swells** | | | |
-| 16 | 3:12–3:26 | **Memory Keys.** A private memory: a phone shows a closed door; "Knock"; on the laptop, "Let in"; the door opens. | "A family's memories stay with the family. You decide who walks in." | **Auth0** | film (phone + laptop) |
-| 17 | 3:26–3:36 | **Every visit remembered.** A heatmap fades onto the floor plan: where people stood longest; a timeline of visits. | "And every visit is remembered: which places he goes back to, and where he lingers." | **Tiger Data** | render (`/api/replay/<id>/heat`) |
-| 18 | 3:36–3:46 | Back to the fire. The real interaction footage of the grandfather trying Déjà View (only with the family's OK). | "So his family can take him back. And sit there with him." | | have it |
-| 19 | 3:46–4:00 | Numbers, one at a time on black: 10 worlds · 1.3 M Gaussians · ~10 s photo to world · 930+ tests. Then the team. End card: **Déjà View**, *deja-view.photo*. | "Déjà View. Walk back in." | all sponsor logos, small, in one row | render |
+Music: "deja vu" low under everything; it dips to a hum under ACT 3 and comes back up for ACT 4 and the end.
 
-Timing totals 4:00. If it runs long, cut beat 14 first, then trim 9.
+### ACT 0 · The website first (0:00–0:30). Judges may never open the link, so the film opens on it.
+
+| # | Time | Picture | Voice-over (Ojasva) | Sponsor | Source |
+|---|---|---|---|---|---|
+| 1 | 0:00–0:06 | Black. A cursor blinks in an empty address bar and types **deja-view.photo**; Enter; the page fades up. | "This is Déjà View." | **GoDaddy Registry** (the domain typing itself) | render |
+| 2 | 0:06–0:22 | One slow, continuous scroll through the landing page: the hero with the Quest 3S, the "Step inside" row of looping flights through each world, the gallery cards (Alzheimer's memory, the Game Lawn, giant chess, the kitchen, Tilted Towers). | "The photos and phone videos you already have, turned into places you can walk back into: in a headset, on your phone, or in Roblox." | | render (screen capture) |
+| 3 | 0:22–0:30 | The scroll stops on the **Alzheimer's memory** card. The cursor rests, clicks. Cut to black. | "Let me show you why we built it." | | render |
+
+### ACT 1 · The memory (0:30–0:55)
+
+| # | Time | Picture | Voice-over | Sponsor | Source |
+|---|---|---|---|---|---|
+| 4 | 0:30–0:42 | The real fire footage, 2 s. Then **headset POV**: the frame starts exactly where the phone stood, then drifts a metre and the flat video becomes a room: grandfather and grandchild in 3D by the fire. | "My grandfather has Alzheimer's. He doesn't always remember this week. But he remembers the places, and the people in them." | | Quest capture (film) |
+| 5 | 0:42–0:50 | Still in the headset: the second moment, "Your father must be proud", in the same room. No voice; the song lifts. | (silence) | | Quest capture (film) |
+| 6 | 0:50–0:55 | Title on black, letter by letter: **Déjà View**, then *walk back in.* | | | render |
+
+### ACT 2 · Every way in (0:55–1:20)
+
+| # | Time | Picture | Voice-over | Sponsor | Source |
+|---|---|---|---|---|---|
+| 7 | 0:55–1:05 | The same memory on a phone in a hand, dragged around with a thumb. Then the same place in Roblox on a laptop. | "No headset? It runs on a phone. Your friends can walk in from Roblox." | **Roblox** | film (phone, laptop) |
+| 8 | 1:05–1:20 | Seb's DeepSpace app: "Add a memory", a photo drops in, the card comes back with "Walk in". Small diagram beside it: DeepSpace (storage, data, realtime) → our pipeline → the world. | "It starts where families already share things. DeepSpace is our backbone, like our Supabase: it holds the photos and clips, and hands each one to our pipeline." | **DeepSpace** | film (app) + render (diagram) |
+
+### ACT 3 · The machine (1:20–2:35). Music down; the visuals carry it. Every number is from our logs.
+
+| # | Time | Picture | Voice-over | Sponsor | Source |
+|---|---|---|---|---|---|
+| 9 | 1:20–1:35 | **What a Gaussian splat is.** One 3D Gaussian as an ellipsoid with its parameters labelled: mean μ, covariance Σ = R S Sᵀ Rᵀ, opacity α, colour as spherical harmonics. It multiplies into thousands, then the Game Lawn assembles from 1.3 million of them. The compositing equation writes itself: C = Σᵢ cᵢ αᵢ Πⱼ<ᵢ (1 − αⱼ). | "Every world is made of Gaussians: millions of soft, coloured ellipsoids that a GPU blends into a picture, sixty times a second." | | render (real splats) |
+| 10 | 1:35–1:52 | **Photo to world in about ten seconds.** A single photo; Gemini's description types out beside it; a video diffusion model (FlashWorld, a distilled Wan2.2-5B) sweeps a camera around it and decodes Gaussians directly. Pie: only 14% to 23% of a Tilted Towers world was in the screenshot. A GPU grid lights up, HiPerGator's RTX PRO 6000 Blackwells and **Vultr** cloud GPUs running side by side; bars: 5 to 7.5 s generation, about 10 s end to end on a warm worker. | "Gemini tells the world model what it's looking at, and the model imagines everything the camera never saw. We ran it on HiPerGator and on Vultr cloud GPUs at the same time, so a photo becomes a world in about ten seconds." | **Gemini**, **Vultr** | render (real numbers) |
+| 11 | 1:52–2:07 | **Real places, trained from scratch.** Camera frustums pop in around the Game Lawn (305 views solved by structure-from-motion). Our training run: the PSNR curve climbs from 10.6 dB to 25 dB over 30,000 steps while the render sharpens beside it; overlays for metric depth supervision (Depth Anything V2), per-photo appearance, camera-pose refinement and densification to 1.3 M Gaussians. | "For real places we train our own: camera poses from structure-from-motion, then thirty thousand optimisation steps, guided by metric depth." | **Vultr** / HiPerGator GPU strip | render (`metrics.json`) |
+| 12 | 2:07–2:17 | **Filling what nobody filmed.** Looking up at the palm trees: holes and smears glow magenta, found from where people will actually stand. Gemini and a vision-language model describe what belongs there, an image-edit model paints the crowns, and depth lifts the paint back into 3D as new Gaussians. | "Look up, and the photos run out. Gemini works with our other models to fill the gaps: find them, describe what belongs there, paint it, and lift it back into 3D." | **Gemini** | render (genfill outputs) |
+| 13 | 2:17–2:24 | **The reality check.** Toggle: everything imagined tints, everything captured stays clean. Diagram: each splat reprojected into the input camera and depth-tested. | "And you can always see which parts are real." | **Vobile** | render + viewer capture |
+| 14 | 2:24–2:35 | **4D: people from one phone video.** A frame → a body estimate per frame (Multi-HMR 2 on the Anny body model) → tracked, grounded, textured from the real frames → the players in 3D, walked around mid-game. Side panel: the packed stream (colour, metric inverse depth aligned to the empty-room plate, person mask). | "From one phone video, the people come back too: in 3D, in time with their voices." | | render (avatar turntables) + viewer capture |
+
+### ACT 4 · Together (2:35–3:20). Music back up.
+
+| # | Time | Picture | Voice-over | Sponsor | Source |
+|---|---|---|---|---|---|
+| 15 | 2:35–2:48 | **Roblox from our splats.** The Game Lawn's splats collapse into coloured voxels (greedy-merged boxes, 2,000 to 6,000 parts in under 2 s), then the hand-built patio measured from them (walls found at 41° from a histogram of the splats), then the live Roblox room with the real tables, fitted to within 1% of a real 2.74 × 1.525 m table. | "The same place becomes a life-size Roblox world, generated from our splats, with the real tables in the real spots." | **Roblox** | render + Roblox capture (film) |
+| 16 | 2:48–3:03 | **Cross-play ping pong.** Split screen: left, headset POV swinging the controller; right, a laptop in Roblox. The ball crosses between them. Overlay: one physics model in both (gravity, drag, Magnus spin, 240 Hz steps); "late hits checked against the ball's path, 0.8 s grace". | "Someone in the headset and someone on a laptop, on the same real table." | **Roblox** | film (both screens, synced with a clap) |
+| 17 | 3:03–3:12 | Quick montage: giant chess against the bot, foosball, Tilted Towers in VR, Seb cooking with the fridge door opening, the old house kitchen. | (music only) | | film + viewer capture |
+| 18 | 3:12–3:20 | The guide: labels pop onto the room; someone holds the button and asks a question; the room answers out loud. | "Ask the room what happened here, and it answers." | **Gemini** | Quest capture (film) |
+
+### ACT 5 · The family (3:20–3:50). Music swells.
+
+| # | Time | Picture | Voice-over | Sponsor | Source |
+|---|---|---|---|---|---|
+| 19 | 3:20–3:30 | **Memory Keys.** A private memory on a phone shows a closed door; "Knock"; on the laptop, "Let in"; the door opens. | "A family's memories stay with the family. You decide who walks in." | **Auth0** | film (phone + laptop) |
+| 20 | 3:30–3:38 | **Every visit remembered.** A heatmap fades onto the floor plan, where people stood longest, then a timeline of visits. | "And every visit is remembered: which places he goes back to, and where he lingers." | **Tiger Data** | render (`/api/replay/<id>/heat`) |
+| 21 | 3:38–3:50 | Back to the fire: the real footage of the grandfather trying Déjà View (only with the family's OK). | "So his family can take him back. And sit there with him." | | have it |
+
+### ACT 6 · The end (3:50–4:00)
+
+| # | Time | Picture | Voice-over | Sponsor | Source |
+|---|---|---|---|---|---|
+| 22 | 3:50–4:00 | Numbers on black, one at a time: 10 worlds · 1.3 M Gaussians · ~10 s photo to world · 930+ tests. The team. One row of sponsor logos. End card: **Déjà View**, *deja-view.photo*. | "Déjà View. Walk back in." | all, small | render |
+
+If it runs long, cut beat 17 first, then trim 12 and 14.
 
 ---
 
