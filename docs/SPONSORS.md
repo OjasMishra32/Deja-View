@@ -85,24 +85,6 @@ under each one.
 - **Live:** yes (Brianna's Tiger Cloud service; connected and recording).
 - **Your notes:**
 
-## Capital One (Nessie): a night out gets a tab
-
-- **What it does:** every memory of a night out gets a tab (`/tab?scene=<world>`): purchases at the place are booked
-  as Nessie purchases, "Settle up" pays people back as Nessie transfers, and the Roblox loser covers the table.
-- **Why it matters:** the practical side of a shared memory: who paid for what on the night.
-- **See it:** `/tab?scene=the-courts`.
-- **Live:** runs on a built-in demo bank; with `NESSIE_API_KEY` set it uses Nessie's sandbox.
-- **Your notes:**
-
-## MLH Solana: results that last
-
-- **What it does:** each finished Roblox match the game reports (`game.result`) is written to Solana devnet as one
-  signed memo, listed with explorer links on `/scores`.
-- **Why it matters:** the games played in a memory become a permanent, public record that nobody can edit later.
-- **See it:** `/scores`.
-- **Live:** off until `SOLANA_SCOREBOARD=1` is set and the devnet wallet has faucet SOL (devnet only, no real money).
-- **Your notes:**
-
 ## MLH GoDaddy Registry (best domain): one link forever
 
 - **What it does:** https://deja-view.photo is the site, the headset's address and Roblox's server, on the table card,
@@ -114,7 +96,7 @@ under each one.
 
 ## MLH DEV Writing Challenge: the story told
 
-- **What it does:** the build story as a post on DEV, written by Seb after we submit (`team/seb.md`).
+- **What it does:** the build story as a post on DEV, written by Ojasva after we submit.
 - **Why it matters:** the Alzheimer's story and how we built it, for people who weren't in the room.
 - **Live:** after submission.
 - **Your notes:**

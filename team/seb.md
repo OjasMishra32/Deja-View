@@ -4,7 +4,10 @@ Read `START-HERE.md` first (the short spec), then `plan.md` (the story), then th
 `contracts.md` has the wiring for the whole team. If this page ever disagrees with `START-HERE.md` or `contracts.md`,
 they win: say so in the team chat.
 
-> **Update (Sat ~10:30 PM): your last job is the MLH DEV writing challenge.** Make a DEV account (dev.to) and write
+> **Update (Sat ~11 PM): Ojasva is writing the DEV post now; nothing waits on you.** (The note below is kept for
+> reference.)
+>
+> **Update (Sat ~10:30 PM): was the MLH DEV writing challenge.** Make a DEV account (dev.to) and write
 > the build story as a post after we submit on Devpost: what Déjà View is, why we built it (the Alzheimer's memory
 > leads), how it works (photos and phone video to walkable 3D on HiPerGator and Vultr, the headset, the Roblox rooms
 > and cross-play ping pong) and what was hard. `docs/DEVPOST.md` has all of it to draw from; put it in your own

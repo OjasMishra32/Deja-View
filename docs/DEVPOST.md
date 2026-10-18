@@ -90,9 +90,7 @@ Follow the grandfather's fire video through Déjà View and every sponsor does o
    the real ping pong table against whoever is in the headset.
 7. **Tiger Data remembers every visit.** Who walked in, when, for how long and where they stood goes into a time-series
    record, so the family can see which places he goes back to most.
-8. **Solana and Capital One make the nights out count.** A game played in a room is written to Solana as a permanent
-   result, and a night out at a place gets its own tab through Capital One's Nessie.
-9. **deja-view.photo ties it together:** one link that never changes, for the headset, Roblox and every phone.
+8. **deja-view.photo ties it together:** one link that never changes, for the headset, Roblox and every phone.
 
 ### Sponsor challenges: what each one does and where to see it
 
@@ -112,21 +110,6 @@ Follow the grandfather's fire video through Déjà View and every sponsor does o
   ghosts. Nothing from a real place reaches Roblox unchecked: every texture is scanned for text, faces, logos and QR
   codes, a person approves that exact file (the approval is tied to its hash), and only then is it uploaded. *See
   it:* the Roblox app on a laptop or phone, next to the headset.
-- **Solana (devnet):** when a Roblox match ends and the game reports it (`game.result`), the server writes it to
-  Solana devnet as one signed Memo transaction: world, game, round, winner, loser, score, time, and whether it was a
-  draw. A retry from Roblox never writes a second memo, the transaction signature is saved before it is sent, and the
-  server checks the cluster's genesis hash before signing anything, so it only writes to devnet. No real money. On with
-  `SOLANA_SCOREBOARD=1`. *See it:* `/scores` lists the latest 50 matches across all worlds, each with a Solana
-  Explorer link to its transaction, plus a link to the account that signs them all and a leaderboard (draws and
-  games against the computer don't count). JSON at `/api/scores`. [Confirm before submitting: the devnet account
-  has SOL from the faucet, and the Roblox games send `game.result`.]
-- **Capital One Nessie:** every memory of a night out gets a tab. A purchase at the place is booked as a Nessie
-  purchase on the payer's checking account (each friend gets a Nessie customer and checking account the first time),
-  split evenly; the page shows who owes whom and the fewest transfers that even it out, and "Settle up" makes them as
-  Nessie transfers between the friends' accounts. With "loser covers the table" on, a Roblox match result moves the
-  table fee onto the loser (a draw or a game against the computer moves nothing). Mock money only; no account number
-  is stored. Needs `NESSIE_API_KEY` (without it the same page runs on a built-in demo bank). *See it:*
-  `/tab?scene=the-courts`, seeded with `bun scripts/nessie-seed.ts`.
 - **Tiger Data:** with `TIGER_DATA_URL` set, every presence update (headset, Roblox and browser, up to 5 a second per
   world) is stored as one row per person in a TimescaleDB hypertable, with a one-second continuous aggregate and
   compression of older data; Roblox moments (tags, rounds, match results) go in a moments table next to it. The
@@ -269,7 +252,7 @@ in our credits fill in what the camera never saw.
 
 bun, typescript, three.js, spark, webxr, python, pytorch, flashworld, wan2.2, anysplat, vggt, depth-anything-v2,
 deeplabv3, big-lama, gsplat, colmap, multi-hmr, anny, gltf, hugging-face, diffusers, opencv, ffmpeg, hipergator, slurm, cloudflare-tunnel, gemini,
-roblox, luau, deepspace, meta-quest-3s, solana, capital-one-nessie, tiger-data, timescaledb, postgresql, auth0
+roblox, luau, deepspace, meta-quest-3s, tiger-data, timescaledb, postgresql, auth0
 
 ## Credits
 
@@ -285,15 +268,15 @@ https://deja-view.photo/credits.html. The main pieces:
 - **Media:** the "Quest 3S with controllers" 3D model by OG_MATTER (CC BY 4.0); "Tilted Towers Tour | Fortnite OG S2"
   free-camera footage by woodinjake (the Tilted Towers and Brick House worlds); a public greyscale demo room. The
   Game Lawn, the giant chess board, the kitchen and the fire video are our own photos and clips.
-- **Services:** UF HiPerGator, Vultr, Hugging Face, Google Gemini, Cloudflare Tunnel, DeepSpace, Roblox, Auth0, Solana,
-  Capital One Nessie and Tiger Data.
+- **Services:** UF HiPerGator, Vultr, Hugging Face, Google Gemini, Cloudflare Tunnel, DeepSpace, Roblox, Auth0
+  and Tiger Data.
 
 Meta Quest, Roblox and Fortnite are trademarks of their owners; Déjà View is not affiliated with or endorsed by them.
 
 ## Team
 
 - **Ojasva:** server, viewer, GPU pipelines on HiPerGator, Roblox map voxelizer, presence and notes relays, reality
-  check, the Solana scoreboard, the Nessie tab, Tiger Data replays, Auth0 sign-in, the deja-view.photo domain
+  check, Tiger Data replays, Auth0 sign-in, the deja-view.photo domain
 - **Shivin:** the Roblox experience (room loader, room picker, VR ghost, tag rounds), automatic walk zones,
   listing photos to a home, the one-command video memory chain, and Memory Keys (private memories, knock-to-enter,
   the family-or-visitor guide)
