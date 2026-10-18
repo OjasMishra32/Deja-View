@@ -72,15 +72,27 @@ Then the room becomes social:
 - **It starts on the memory board:** add a photo or clip with "Add a memory" in the DeepSpace app, and the card comes
   back with the world link, the Roblox link and the map link.
 
-### The sponsor chain
+### The sponsor chain: one memory, start to finish
 
-Each sponsor makes the next moment possible. **DeepSpace** brings the memory in: "Add a memory" keeps the clip in
-DeepSpace storage and hands it to our server, and the card it shows puts everyone one tap from the room. **Gemini**
-writes the caption the world model uses to imagine what the camera never saw, then makes the room interactive with
-labels and spoken answers. **HiPerGator** and a **Vultr** cloud GPU, working in parallel, build a world in seconds,
-which is the only reason a judge can make one live at the table. The **reality check**, built for **Vobile**,
-separates what was captured from what was imagined. **Roblox** lets friends without a headset be there. Our own domain,
-**deja-view.photo**, gives Roblox, the headset and every phone one link that never changes.
+Follow the grandfather's fire video through Déjà View and every sponsor does one job:
+
+1. **DeepSpace brings it in.** The family adds the clip with "Add a memory", and DeepSpace hands it to our pipeline.
+2. **HiPerGator and Vultr build it.** Two GPUs working in parallel lift the people out of every frame into 3D and build
+   the room around them. A photo becomes a walkable world in about 10 seconds, which is why a judge can make one live
+   at the table.
+3. **Gemini understands it.** It writes the caption the world model imagines from, puts gentle labels on what matters
+   in the room, and answers out loud when someone asks about it.
+4. **Vobile keeps it honest.** For someone whose memory is slipping, a made-up detail is worse than a gap. One toggle
+   tints everything the AI imagined, so the family always knows what the camera really saw.
+5. **Auth0 keeps it in the family.** With Memory Keys a memory has an owner; a private one opens only for the people
+   they let in, and the guide only tells family the family stories.
+6. **Roblox brings everyone else.** The grandkids join the same place from a laptop or phone at life size, and can play
+   the real ping pong table against whoever is in the headset.
+7. **Tiger Data remembers every visit.** Who walked in, when, for how long and where they stood goes into a time-series
+   record, so the family can see which places he goes back to most.
+8. **Solana and Capital One make the nights out count.** A game played in a room is written to Solana as a permanent
+   result, and a night out at a place gets its own tab through Capital One's Nessie.
+9. **deja-view.photo ties it together:** one link that never changes, for the headset, Roblox and every phone.
 
 ### Sponsor challenges: what each one does and where to see it
 
