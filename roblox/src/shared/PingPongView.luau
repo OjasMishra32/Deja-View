@@ -1,7 +1,8 @@
 -- Local visuals for the real ping pong: the other paddles and a trail on the server ball (team/seb.md Update 5, B).
 local PingPongView = {}
 
-local paddles: { [number]: { part: Model, target: CFrame } } = {}
+local paddles: { [number]: { part: Model, target: CFrame, seen: number } } = {}
+local STALE = 3 -- seconds without a pose before a paddle is taken away
 local trail: Trail? = nil
 local trailBall: BasePart? = nil
 
@@ -55,12 +56,13 @@ end
 function PingPongView.paddle(userId: number, cf: CFrame)
 	local entry = paddles[userId]
 	if not entry then
-		entry = { part = blade(userId), target = cf }
+		entry = { part = blade(userId), target = cf, seen = os.clock() }
 		paddles[userId] = entry
 		place(entry.part, cf)
 		return
 	end
 	entry.target = cf
+	entry.seen = os.clock()
 end
 
 -- A player left: their paddle goes with them.
@@ -86,15 +88,19 @@ local function dropTrail()
 	trail, trailBall = nil, nil
 end
 
-function PingPongView.update(dt: number)
-	for _, entry in paddles do
-		if entry.part.Parent then
+function PingPongView.update(dt: number, shownBall: BasePart?)
+	local t = os.clock()
+	for id, entry in paddles do
+		if t - entry.seen > STALE then
+			entry.part:Destroy()
+			paddles[id] = nil
+		elseif entry.part.Parent then
 			local at = (entry.part:GetAttribute("At") :: CFrame?) or entry.target
 			place(entry.part, at:Lerp(entry.target, math.clamp(dt * 12, 0, 1)))
 		end
 	end
 	-- search the workspace only when the ball we know is gone, not every frame
-	local ball = if trailBall and trailBall.Parent then trailBall else workspace:FindFirstChild("PPBall", true)
+	local ball = shownBall or (if trailBall and trailBall.Parent then trailBall else workspace:FindFirstChild("PPBall", true))
 	if ball and ball:IsA("BasePart") then
 		if trailBall ~= ball then
 			dropTrail()

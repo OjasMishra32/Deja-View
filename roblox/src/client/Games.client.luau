@@ -34,6 +34,7 @@ local function dbg(text: string)
 end
 
 local PingPongView = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PingPongView"))
+local PPSim = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PingPongSim"))
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local function need(name: string, class: string): any
@@ -56,12 +57,17 @@ dbg("remotes ready")
 
 local GRIP = CFrame.new(0, 0, -0.35) * CFrame.Angles(math.rad(-20), 0, 0)
 local PADDLE_SEND = 1 / 30
-local ASSIST_SEND = 1 / 5
+local ASSIST_SEND = 1 / 15
 local CHARGE_MAX = 0.8 -- seconds from min to max; then back down and up again
 local CHARGE_MIN = 0.06
 
 local lastSend = 0
 local lastAssist = 0
+local swingUntil = 0 -- a desktop hit swings the paddle forward until then
+local flight: any = nil -- the server's last shot, flown here (PingPongSim state)
+local flightT = 0 -- server time the local flight has reached
+local sides: { A: number?, B: number? } = {} -- who holds each end (user ids); an empty end is the bot's
+local shownBall: Part? = nil -- the ball drawn on this screen while a flight is flown here
 local hand = Enum.UserCFrame.RightHand
 local active = false
 local mySide: string? = nil
@@ -266,6 +272,7 @@ local function endCharge()
 		end
 	else
 		PPHit:FireServer({ charge = held, dir = dir })
+		swingUntil = os.clock() + 0.18
 	end
 	refreshHitButton()
 end
@@ -332,11 +339,83 @@ local function clampToScope()
 	end
 end
 
+-- The ball as you see it: this client flies it from the server's last shot with the same physics as the server
+-- (PingPongSim), so it moves smoothly instead of jumping with the server's network updates. The server's ball is
+-- hidden on this screen while a flight is being flown here, and shown again for serves and between points.
+local function tableFrame(): CFrame?
+	return if tableC then CFrame.new(tableC) * CFrame.Angles(0, tableYaw, 0) else nil
+end
+
+local function shownBallFor(server: BasePart): Part
+	if not shownBall or not shownBall.Parent then
+		local b = Instance.new("Part")
+		b.Name = "PPBallShown"
+		b.Shape = Enum.PartType.Ball
+		b.Size = server.Size
+		b.Color = server.Color
+		b.Material = server.Material
+		b.Anchored, b.CanCollide, b.CanQuery, b.CanTouch, b.CastShadow = true, false, false, false, false
+		b.Parent = workspace
+		shownBall = b
+	end
+	return shownBall :: Part
+end
+
+local function updateBall(): BasePart?
+	local server = workspace:FindFirstChild("PPBall", true)
+	local tf = tableFrame()
+	if not (server and server:IsA("BasePart")) or not tf or not flight or not flight.live or flight.serving then
+		if shownBall then
+			shownBall.Transparency = 1
+		end
+		if server and server:IsA("BasePart") then
+			server.LocalTransparencyModifier = 0
+			return server
+		end
+		return nil
+	end
+	local now = workspace:GetServerTimeNow()
+	local steps = 0
+	while flightT < now and flight.live and steps < 600 do
+		local h = math.min(1 / 240, now - flightT)
+		PPSim.step(flight, h, tableLen, tableWid)
+		flightT += h
+		steps += 1
+	end
+	local b = shownBallFor(server)
+	b.Transparency = 0
+	b.CFrame = tf * CFrame.new(flight.p)
+	server.LocalTransparencyModifier = 1
+	return b
+end
+
+-- Against the bot (one end empty), a paddle at that end meets the ball where it will cross the end line.
+local BOT_ID = -1
+local function updateBotPaddle()
+	local tf = tableFrame()
+	local botSide = if sides.A and not sides.B then "B" elseif sides.B and not sides.A then "A" else nil
+	if not tf or not botSide then
+		PingPongView.remove(BOT_ID)
+		return
+	end
+	local sgn = if botSide == "A" then -1 else 1
+	local endZ = sgn * (tableLen / 2 + 0.9)
+	local want = Vector3.new(0, 1.2, endZ)
+	if flight and flight.live and not flight.serving and flight.to == botSide then
+		local p = flight.p
+		want = Vector3.new(math.clamp(p.X, -tableWid / 2 - 0.5, tableWid / 2 + 0.5), math.clamp(p.Y, 0.4, 3), endZ)
+	end
+	-- blade face to the net, handle down
+	PingPongView.paddle(BOT_ID, tf * CFrame.lookAt(want, want + Vector3.new(0, 0, -sgn)) * CFrame.Angles(math.rad(90), 0, 0))
+end
+
 RunService.RenderStepped:Connect(function(dt)
 	if not active then
 		return
 	end
-	PingPongView.update(dt)
+	local shown = updateBall()
+	updateBotPaddle()
+	PingPongView.update(dt, shown)
 	local t = os.clock()
 	if UserInputService.VREnabled then
 		local cf = bladeCframe()
@@ -346,17 +425,26 @@ RunService.RenderStepped:Connect(function(dt)
 				paddleVel = (bladeCf.Position - lastBlade.Position) / math.max(0.008, dt)
 			end
 			lastBlade = bladeCf
-			if t - lastSend >= PADDLE_SEND then
-				lastSend = t
-				PPPaddle:FireServer(bladeCf)
+			if mySide then
+				-- your own paddle is drawn here at once; the others get it through the server
+				PingPongView.paddle(player.UserId, bladeCf)
+				if t - lastSend >= PADDLE_SEND then
+					lastSend = t
+					PPPaddle:FireServer(bladeCf)
+				end
 			end
 		end
-	elseif t - lastAssist >= ASSIST_SEND then
-		lastAssist = t
+	elseif mySide then
 		local char = player.Character
 		local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if hrp then
-			PPPaddle:FireServer(hrp.CFrame * CFrame.new(1.4, -0.2, -1.1) * GRIP)
+			local swing = if t < swingUntil then CFrame.new(-0.8, 0.3, -0.9) * CFrame.Angles(0, math.rad(50), 0) else CFrame.identity
+			local cf = hrp.CFrame * CFrame.new(1.4, -0.2, -1.1) * swing * GRIP
+			PingPongView.paddle(player.UserId, cf)
+			if t - lastAssist >= ASSIST_SEND then
+				lastAssist = t
+				PPPaddle:FireServer(cf)
+			end
 		end
 	end
 	if charging then
@@ -370,7 +458,7 @@ RunService.RenderStepped:Connect(function(dt)
 end)
 
 PPPaddle.OnClientEvent:Connect(function(userId, cf)
-	if type(userId) == "number" and typeof(cf) == "CFrame" then
+	if type(userId) == "number" and userId ~= player.UserId and typeof(cf) == "CFrame" then
 		PingPongView.paddle(userId, cf)
 	end
 end)
@@ -381,6 +469,11 @@ end)
 -- The table closed: no side, no charge, no paddles.
 local function deactivate()
 	mySide = nil
+	flight = nil
+	sides = {}
+	if shownBall then
+		shownBall.Transparency = 1
+	end
 	if charging then
 		stopCharge()
 	end
@@ -409,7 +502,22 @@ PPState.OnClientEvent:Connect(function(msg)
 	if type(msg) ~= "table" then
 		return
 	end
+	-- a shot: fly it here from where and when the server launched it
+	if msg.shot ~= nil then
+		local st = msg.state
+		if type(st) == "table" and typeof(st.p) == "Vector3" and typeof(st.v) == "Vector3" and type(st.t) == "number" then
+			flight = PPSim.newState(st.p, st.v, st.t)
+			flight.w = if typeof(st.w) == "Vector3" then st.w else Vector3.zero
+			flight.to = st.to
+			flight.live = st.live ~= false
+			flight.serving = st.serving == true
+			flightT = st.t
+		else
+			flight = nil
+		end
+	end
 	if type(msg.sides) == "table" then
+		sides = { A = msg.sides.A, B = msg.sides.B }
 		if msg.sides.A == player.UserId then
 			mySide = "A"
 		elseif msg.sides.B == player.UserId then

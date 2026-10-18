@@ -111,7 +111,15 @@ end
 local function broadcastState()
 	if PPState then
 		PPState:FireAllClients({
-			state = state and { p = state.p, v = state.v, t = state.t, to = state.to } or nil,
+			state = state and {
+				p = state.p,
+				v = state.v,
+				w = state.w,
+				t = state.t,
+				to = state.to,
+				live = state.live == true,
+				serving = state.serving == true,
+			} or nil,
 			shot = state and state.shot or 0,
 		})
 	end
