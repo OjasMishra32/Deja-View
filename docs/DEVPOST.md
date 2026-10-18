@@ -48,8 +48,9 @@ Déjà View has two modes.
   them from behind, or step back to where the phone was and see the original video line up with them. In the
   kitchen, Seb opens the fridge and carries the milk out, and the door and the jug move with him. At the giant chess
   board, both players stand there mid-game. That's 4D reconstruction from one phone clip: the room in 3D, and the
-  people in it in 3D, moving through time. The video of our teammate's grandfather by the fire is two of these
-  memories now: you can sit beside the two of them while they talk.
+  people in it in 3D, moving through time. The video of our teammate's grandfather by the fire is one of these
+  memories now, "Alzheimer's memory": two moments of it, played in one room, and you can sit beside them while they
+  talk.
 
 Then the room becomes social:
 
