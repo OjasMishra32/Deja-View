@@ -9,6 +9,7 @@ local Backend = require(script.Parent.Backend)
 local MapBuilder = require(script.Parent.MapBuilder)
 local ObjectLayer = require(script.Parent.ObjectLayer)
 local World = require(script.Parent.World)
+local GameLawn = require(script.Parent.GameLawn)
 local Fixtures = require(game:GetService("ReplicatedStorage").Shared.Fixtures)
 
 local Rooms = {}
@@ -479,7 +480,9 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 	-- room the server no longer has (404) gets neither.
 	local visual, box = nil, nil
 	local gone = not map and entry(sceneId).gone == true
-	if stored and not gone then
+	if Config.BLOCK_ROOMS then
+		-- blocks only: no room mesh
+	elseif stored and not gone then
 		visual = stored:Clone()
 		local smi = modelInfo(sceneId)
 		box = smi and smi.bounds
@@ -498,6 +501,12 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 	if not map and visual then
 		info = MapBuilder.buildFromModel(sceneId, name, visual, mi, box, stored ~= nil)
 	elseif map then
+		local handBuilt = Config.BUILT_ROOMS[sceneId] == true
+		if handBuilt then
+			-- a room built by hand: the block map gives its frame, bounds and spawn, not its blocks
+			map = table.clone(map)
+			map.parts = {}
+		end
 		info = MapBuilder.build(map, function(built, total)
 			if mySwitch == switching then
 				workspace:SetAttribute("LoadProgress", built / math.max(total, 1))
@@ -509,9 +518,13 @@ function Rooms.switchTo(sceneId: string, opts: { moveRoom: boolean?, joinLobby: 
 		if not info then
 			return -- cancelled by a newer switch
 		end
+		local room = workspace:FindFirstChild("Room")
+		if handBuilt and room then
+			GameLawn.build(room)
+		end
 		if visual then
 			local placed = MapBuilder.attachModel(visual, box, stored ~= nil)
-			if placed and ProxyRoom.has(sceneId) then
+			if placed and Config.PAINTED_ROOMS[sceneId] and ProxyRoom.has(sceneId) then
 				ProxyRoom.build(sceneId, workspace:FindFirstChild("Room") or workspace, skyImage)
 			end
 			if placed and Config.SPHERE_ROOMS[sceneId] then

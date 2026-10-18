@@ -160,6 +160,9 @@ local function step(dt: number)
 			part.CFrame = world(rod.men[i] + rod.offset, MAN_H / 2, rod.z)
 		end
 		rod.bar.CFrame = world(rod.offset, ROD_Y, rod.z)
+		if rod.grip then
+			rod.grip.CFrame = world(rod.offset + rod.gripX, ROD_Y, rod.z)
+		end
 	end
 	if paused then
 		return
@@ -273,22 +276,33 @@ function Foosball.place(centre: Vector3, yaw: number, length: number?, width: nu
 	f.Name = "Foosball"
 	f.Parent = room
 	folder = f
-	local green, wood = Color3.fromRGB(46, 120, 70), Color3.fromRGB(120, 84, 52)
+	-- a real cabinet's proportions at any size: light wood walls up to the rim, a deep box under the field, dark
+	-- corner caps and four legs down to the floor (y = 0)
+	local wood, field, dark = Color3.fromRGB(196, 170, 128), Color3.fromRGB(62, 108, 146), Color3.fromRGB(34, 34, 38)
+	local rimH, depth, t = 0.195 * WID, 0.3 * WID, 0.04 * WID
 	if visible ~= false then
-		part(f, "Pitch", Vector3.new(WID, 0.3, LEN), world(0, -0.15, 0), green)
+		part(f, "Pitch", Vector3.new(WID, 0.04 * WID, LEN), world(0, -0.02 * WID, 0), field)
 		for _, sx in { -1, 1 } do
-			part(f, "Side", Vector3.new(0.4, 1.4, LEN), world(sx * (WID / 2 + 0.2), 0.5, 0), wood)
+			part(f, "Side", Vector3.new(t, rimH + depth, LEN + 2 * t), world(sx * (WID / 2 + t / 2), (rimH - depth) / 2, 0), wood)
 		end
 		for _, sz in { -1, 1 } do
-			-- end walls with the goal mouth left open
+			-- end walls with the goal mouth left open, a lintel over it and the dark goal box behind it
 			local w = (WID - GOAL_HALF * 2) / 2
 			for _, sx in { -1, 1 } do
-				part(f, "End", Vector3.new(w, 1.4, 0.4), world(sx * (GOAL_HALF + w / 2), 0.5, sz * (LEN / 2 + 0.2)), wood)
+				part(f, "End", Vector3.new(w, rimH + depth, t), world(sx * (GOAL_HALF + w / 2), (rimH - depth) / 2, sz * (LEN / 2 + t / 2)), wood)
 			end
+			part(f, "Lintel", Vector3.new(GOAL_HALF * 2, rimH * 0.35, t), world(0, rimH * 0.825, sz * (LEN / 2 + t / 2)), wood)
+			part(f, "Goal", Vector3.new(GOAL_HALF * 2, depth, t), world(0, -depth / 2, sz * (LEN / 2 + t * 1.5)), dark)
+			-- the penalty box lines
+			part(f, "Line", Vector3.new(GOAL_HALF * 3, 0.01, 0.012 * WID), world(0, 0.005, sz * (LEN / 2 - 0.12 * WID)), Color3.new(1, 1, 1))
 		end
-		for _, x in { -WID / 2 + 0.5, WID / 2 - 0.5 } do
-			for _, z in { -LEN / 2 + 0.5, LEN / 2 - 0.5 } do
-				part(f, "Leg", Vector3.new(0.5, 2.8, 0.5), world(x, -1.6, z), wood)
+		local legH = math.max(0.5, tableCf.Position.Y - depth)
+		for _, sx in { -1, 1 } do
+			for _, sz in { -1, 1 } do
+				part(f, "Cap", Vector3.new(t * 1.6, rimH + depth + 0.02 * WID, t * 1.6),
+					world(sx * (WID / 2 + t / 2), (rimH - depth) / 2, sz * (LEN / 2 + t / 2)), dark)
+				part(f, "Leg", Vector3.new(0.09 * WID, legH, 0.09 * WID),
+					world(sx * (WID / 2 - 0.03 * WID), -depth - legH / 2, sz * (LEN / 2 - 0.08 * WID)), wood)
 			end
 		end
 	end
@@ -318,9 +332,18 @@ function Foosball.place(centre: Vector3, yaw: number, length: number?, width: nu
 		local rod = { team = teamsOrder[i], z = zs[i], men = men, offset = 0, parts = {},
 			range = math.max(0, WID / 2 - 0.05 * WID - outer - MAN_HALF) }
 		local colour = if rod.team == "A" then Theme.Accent else Color3.fromRGB(255, 77, 109)
-		rod.bar = part(f, "Rod", Vector3.new(WID + 1.2 * k + 0.6, 0.07 + 0.11 * k, 0.07 + 0.11 * k), world(0, ROD_Y, zs[i]),
-			Color3.fromRGB(200, 200, 205))
+		local d = 0.07 + 0.11 * k
+		local over = t + 0.12 * WID -- how far a rod reaches past the field's edge
+		rod.bar = part(f, "Rod", Vector3.new(WID + 2 * over, d, d), world(0, ROD_Y, zs[i]), Color3.fromRGB(200, 200, 205))
+		rod.bar.Shape = Enum.PartType.Cylinder
+		rod.bar.Material = Enum.Material.Metal
 		rod.bar.CanCollide = false
+		-- team A stands on -X, team B on +X
+		rod.gripX = (if rod.team == "A" then -1 else 1) * (WID / 2 + over + 0.06 * WID)
+		rod.grip = part(f, "Grip", Vector3.new(0.14 * WID, d * 2.2, d * 2.2), world(rod.gripX, ROD_Y, zs[i]),
+			Color3.fromRGB(112, 70, 40))
+		rod.grip.Shape = Enum.PartType.Cylinder
+		rod.grip.CanCollide = false
 		for _, mx in men do
 			local man = part(f, "Man", Vector3.new(MAN_HALF * 2, MAN_H, 0.12 + 0.38 * k), world(mx, MAN_H / 2, zs[i]), colour)
 			man.CanCollide = false
@@ -384,8 +407,8 @@ local function placeFromFeature(ft: any): boolean
 	end
 	-- the table's own frame: y = 0 is the pitch (corners and height are the field)
 	local sceneId = workspace:GetAttribute("SceneId")
-	local sphere = type(sceneId) == "string" and Config.SPHERE_ROOMS[sceneId] == true
-	Foosball.place(centre, math.atan2(-long.X, -long.Z), long.Magnitude, short.Magnitude, sphere, extra)
+	local drawn = type(sceneId) == "string" and (Config.SPHERE_ROOMS[sceneId] == true or Config.BUILT_ROOMS[sceneId] == true)
+	Foosball.place(centre, math.atan2(-long.X, -long.Z), long.Magnitude, short.Magnitude, drawn, extra)
 	return true
 end
 
@@ -397,7 +420,7 @@ function Foosball.placeForRoom(host: Player?, features: any?, cameraLook: Vector
 	local tuned = type(sceneId) == "string" and Config.FOOSBALL_TABLES[sceneId]
 	if tuned then
 		Foosball.place(Vector3.new(tuned.centre[1], tuned.centre[2], tuned.centre[3]), tuned.yaw or 0, tuned.length,
-			tuned.width, tuned.visible)
+			tuned.width, tuned.visible, tuned.extra)
 		return
 	end
 	local hrp = host and host.Character and host.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
@@ -458,6 +481,19 @@ function Foosball.start()
 		end
 		folder, scoreLabel, ballPart, rods = nil, nil, nil, {}
 		workspace:SetAttribute("FoosActive", false)
+	end)
+	-- rooms whose real table is part of the room get it as soon as they load
+	workspace:GetAttributeChangedSignal("Phase"):Connect(function()
+		local sceneId = workspace:GetAttribute("SceneId")
+		local tuned = type(sceneId) == "string" and Config.FOOSBALL_TABLES[sceneId]
+		if workspace:GetAttribute("Phase") ~= "room" or not (tuned and tuned.auto) then
+			return
+		end
+		task.delay(1, function()
+			if folder == nil and workspace:GetAttribute("SceneId") == sceneId and workspace:GetAttribute("Phase") == "room" then
+				Foosball.placeForRoom(nil, nil, nil)
+			end
+		end)
 	end)
 end
 

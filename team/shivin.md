@@ -8,6 +8,18 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 22 (Sat ~8:30 PM): Roblox is yours again, and it's blocks.** `git pull`, then Rojo sync as usual.
+> - **Rooms are block maps only** (`Config.BLOCK_ROOMS = true`): the uploaded room meshes, sky-sphere and painted-panel
+>   modes are all switched off (`SPHERE_ROOMS` and `PAINTED_ROOMS` are empty). The meshes stay on the server.
+> - **The Game Lawn is built by hand** (`Config.BUILT_ROOMS`, `DejaView/GameLawn.luau`): the covered patio at its real
+>   size and in the scan's frame, about 195 parts. It has the concrete slab, the plaster walls, the hall's glass front,
+>   the open side with its columns, the ceiling lights, the folded ping pong table, the chairs, and the lawn with trees,
+>   a trash can and the fence. For this room the block map gives only the bounds and spawn, not its blocks.
+> - **Real tables in it:** the ping pong table (paddle unchanged) and a real-size foosball table are drawn in full where
+>   the real ones stand, and foosball is placed as soon as the room loads (`FOOSBALL_TABLES["the-courts"].auto`). The
+>   foosball cabinet now keeps real proportions at any size, with wooden grips that slide with the rods.
+> - Not tried in Studio yet: the build was checked by rendering its parts outside Roblox, and the Lune tests pass.
+
 > **Update 21 (Sat ~8 PM): all three Update 19 jobs are on `main` (`git pull`). Nothing is waiting on you.**
 > - **Automatic walk zones:** merged as you left them.
 > - **Listing photos to a home:** merged, reviewed and fixed: photos are compared only with photos of the same size

@@ -160,7 +160,7 @@ local function buildTable(tableCf: CFrame, length: number, width: number, visibl
 
 	if visible then
 		-- a real table: blue top, white lines, dark apron and four steel legs down to the floor
-		local top = ensurePart("Top", Vector3.new(width, 0.12, length), Color3.fromRGB(26, 74, 150), folder)
+		local top = ensurePart("Top", Vector3.new(width, 0.12, length), Color3.fromRGB(34, 96, 178), folder)
 		top.CFrame = frame * CFrame.new(0, -0.06, 0)
 		local apron = ensurePart("Apron", Vector3.new(width - 0.3, 0.35, length - 0.3), Color3.fromRGB(28, 30, 36), folder)
 		apron.CFrame = frame * CFrame.new(0, -0.3, 0)
@@ -265,9 +265,9 @@ local function placeForScene(host: Player?, features: any?, cameraLook: Vector3?
 	local ft = features and features.pingPongTable
 	local centre, yaw, l, w = Sim.fromCorners(ft and ft.corners or nil)
 	if centre and yaw and l and w then
-		-- a photo-sphere room has no scanned table to play on, so the game builds the real one where it stands
-		local sphere = type(sceneId) == "string" and Config.SPHERE_ROOMS[sceneId] == true
-		buildTable(CFrame.new(centre) * CFrame.Angles(0, yaw, 0), l, w, sphere)
+		-- a photo-sphere or hand-built room has no scanned table to play on, so the game builds the real one there
+		local drawn = type(sceneId) == "string" and (Config.SPHERE_ROOMS[sceneId] == true or Config.BUILT_ROOMS[sceneId] == true)
+		buildTable(CFrame.new(centre) * CFrame.Angles(0, yaw, 0), l, w, drawn)
 		return
 	end
 	local tuned = type(sceneId) == "string" and Config.PINGPONG_TABLES[sceneId]

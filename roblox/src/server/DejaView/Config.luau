@@ -34,7 +34,15 @@ local Config = {
 	DEFAULT_SCENE = "the-courts",
 	-- Rooms shown as a photo sphere: the sky is the whole place seen from the middle, the scanned mesh is hidden, and
 	-- the game builds its own solid tables where the real ones stand (the scan is too thin outdoors to stand in).
-	SPHERE_ROOMS = { ["the-courts"] = true } :: { [string]: boolean }, -- Update 8: the court is the best demo moment; boot there
+	SPHERE_ROOMS = {} :: { [string]: boolean },
+	-- Rooms drawn with painted Decal panels (ProxyTiles.luau) around the game's tables. None: rooms are blocks.
+	PAINTED_ROOMS = {} :: { [string]: boolean },
+	-- Rooms are the block maps only: uploaded room meshes are never loaded (Shivin's call; the meshes stay on the
+	-- server for later).
+	BLOCK_ROOMS = true,
+	-- Rooms built by hand from parts instead of their block map, at the scan's real size and in its frame. The games
+	-- draw their own real tables in these.
+	BUILT_ROOMS = { ["the-courts"] = true } :: { [string]: boolean },
 	-- Rooms always listed first on the picker, in this order (Update 8: "the-courts loads first in your picker").
 	PINNED_SCENES = { "the-courts" } :: { string },
 	-- Auto-join on boot. Set false for the skit (everyone waits in the lobby until JOIN).
@@ -45,12 +53,24 @@ local Config = {
 	-- Hand-tuned ping pong tables until features.pingPongTable (studs; centre = table top centre; yaw: long axis):
 	-- ["the-courts"] = { centre = { x, y, z }, yaw = 0, length = 14, width = 8, visible = false }
 	PINGPONG_TABLES = {
-		-- The real table at the Infinity Hall Game Lawn, found in the block map (blue top, 9.8 x 5.4 studs, 45 degrees).
-		-- Net and lines only: the table itself is the world's. Shared with Seb's real-physics ping pong.
-		["the-courts"] = { centre = { 1.88, 3.0, -17.01 }, yaw = 0.781, length = 9.8, width = 5.4, visible = false },
+		-- The real table at the Infinity Hall Game Lawn (features.json: 2.74 x 1.525 m, top 0.76 m, long side 48.6
+		-- degrees round from +z), drawn in full: the room is built by hand. Shared with Seb's real-physics ping pong.
+		["the-courts"] = { centre = { 1.88, 2.713, -16.885 }, yaw = 0.8484, length = 9.78, width = 5.44, visible = true },
 	} :: { [string]: any },
 	-- Hand-tuned foosball tables until features.foosballTable (same shape as PINGPONG_TABLES; length 16, width 9)
-	FOOSBALL_TABLES = {} :: { [string]: any },
+	-- `auto`: placed as soon as the room loads. `extra`: the measured rod height above the field and rod positions.
+	FOOSBALL_TABLES = {
+		-- The real table at the Game Lawn (features.json: field 1.185 x 0.703 m at 0.74 m, rods 9 cm above it)
+		["the-courts"] = {
+			centre = { -0.543, 2.642, -6.861 },
+			yaw = -2.9173,
+			length = 4.23,
+			width = 2.51,
+			visible = true,
+			auto = true,
+			extra = { rodY = 0.33, rodZs = { 1.839, 1.321, 0.793, 0.261, -0.261, -0.796, -1.296, -1.831 } },
+		},
+	} :: { [string]: any },
 	-- Extra Roblox user ids that get host controls (the owner always does).
 	HOST_USER_IDS = {} :: { number },
 
