@@ -8,7 +8,19 @@ same world is a Roblox place** friends play on the Quest Roblox app or a phone) 
 a room with the real footage standing in it in 3D; headset and browser only, not Roblox). Walk around in a Meta Quest 3S
 or a browser.
 
-**Now (Sat ~4 PM): the site is `https://deja-view.photo`, our own domain, permanent.** Use it everywhere: browser,
+**Now (Sat ~10 PM): what's live and done.**
+- **Site:** `https://deja-view.photo`, served from Ojasva's Mac and kept up by `scripts/serve-demo.sh watch` (it restarts
+  the server, the guide or the tunnel when one stops answering; see `docs/DEMO.md`).
+- **Alzheimer's memory:** `/view?scene=alzheimers-memory`, both moments of the fire video in one room, on the landing.
+  It's the emotional close of the demo and the lead of the Devpost.
+- **Roblox (version 15, Ojasva's experience, place 2942475849):** rooms are block maps; the Game Lawn and the giant
+  chess room are built by hand at real size; ping pong is smooth with both paddles shown, a bot paddle, and
+  **cross-play**: the headset player walks to an empty end of the real table and plays someone on a computer in Roblox
+  (or the bot). Giant chess plays against a friend or the bot.
+- **Devpost:** `docs/DEVPOST.md`, with credits, Vultr used alongside HiPerGator, and the Alzheimer's story first.
+- **Left:** each person's sponsor sign-ups (Ojasva has them).
+
+**Sat ~4 PM: the site is `https://deja-view.photo`, our own domain, permanent.** Use it everywhere: browser,
 Quest browser, DeepSpace `baseUrl`, Roblox `dejaview_base`. The old `trycloudflare` link is only a backup.
 
 Live on it:

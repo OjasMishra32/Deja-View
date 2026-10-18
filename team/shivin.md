@@ -8,6 +8,12 @@ they win: say so in the team chat.
 > Memories now come in through Seb's DeepSpace app ("Add a memory"). Wherever this page says "the bot" or "the group
 > chat", read "Seb's app". Nothing else changes for you.
 
+> **Update 23 (Sat ~10 PM): Ojasva took Roblox over; nothing waits on you.** Version 15 is live. On top of Update 22:
+> the giant chess room is built by hand (`ChessRoom.luau`, giant chess against a friend or the bot); ping pong flies
+> the ball on every client (smooth), draws a bot paddle and both players' paddles; and the headset in the Déjà View
+> viewer can play the ping pong table against a Roblox player (`team/contracts.md` 6.7). The ping pong panel now closes
+> when you switch rooms.
+
 > **Update 22 (Sat ~8:30 PM): Roblox is yours again, and it's blocks.** `git pull`, then Rojo sync as usual.
 > - **Rooms are block maps only** (`Config.BLOCK_ROOMS = true`): the uploaded room meshes, sky-sphere and painted-panel
 >   modes are all switched off (`SPHERE_ROOMS` and `PAINTED_ROOMS` are empty). The meshes stay on the server.

@@ -805,6 +805,7 @@ function PingPong.stop()
 	queue = {}
 	score.A, score.B = 0, 0
 	over = false
+	updateBoard() -- folder is nil now: clients hear active = false and close their ping pong panel
 end
 
 -- ------------------------------------------------------------------------------------------------ cross-play

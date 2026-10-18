@@ -469,6 +469,7 @@ end)
 -- The table closed: no side, no charge, no paddles.
 local function deactivate()
 	mySide = nil
+	version.Visible = false
 	flight = nil
 	sides = {}
 	if shownBall then

@@ -37,6 +37,10 @@ The DeepSpace map runs full screen on the table laptop the whole time.
 
 Photo is the guaranteed live beat. Live Video is a stretch and only happens if a 15 s clip builds in under a minute.
 
+**Optional beat (20 s, any time the judge is at the Game Lawn):** the judge walks to the empty end of the real ping pong
+table in the headset; Player 1 joins the other end in Roblox. They rally: the judge swings the right controller, Player 1
+plays from the laptop, and both see the other's paddle. If nobody is free in Roblox, the bot plays.
+
 **Q&A answers to have ready.** "How much was imagined?" From one OG Tilted Towers screenshot, only 14% to 23% of
 each world was in the picture. "How fast?" 5 to 7.5 s of generation on an RTX PRO 6000, about 10 s on a warm
 worker. "Is that real footage?" Yes: it's the phone video, with per-frame depth, standing in a generated room.
