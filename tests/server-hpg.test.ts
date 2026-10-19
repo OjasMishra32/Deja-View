@@ -55,38 +55,13 @@ describe('configuration', () => {
     expect(c.qos).toBe('acc');
     expect(c.partition).toBe('hpg-b200');
   });
-  test('PACE profile uses its own Slurm and SSH defaults', () => {
-    const c = hpgConfig({ HPG_PROFILE: 'pace' });
-    expect(c.site).toBe('PACE ICE');
-    expect(c.socket).toBe(join(homedir(), '.ssh/cm-pace-ice'));
-    expect(c.user).toBe('bmorgan62');
-    expect(c.host).toBe('login-ice.pace.gatech.edu');
-    expect(c.root).toBe('/home/hice1/bmorgan62/scratch/thirdwheel');
-    expect(c.account).toBe('math');
-    expect(c.qos).toBe('coe-ice');
-    expect(c.partition).toBe('ice-bw-gpu');
-    expect(c.slurm).toBe(true);
-    expect(c.login).toBe('socket');
-    expect(hpgConfig({}).host).toBe('hpg.rc.ufl.edu');
+  test('the PACE lane is gone: HPG_PROFILE=pace is refused', () => {
+    expect(() => hpgConfig({ HPG_PROFILE: 'pace' })).toThrow(/PACE ICE/);
   });
-  test('PACE profile accepts explicit overrides', () => {
-    const c = hpgConfig({
-      HPG_PROFILE: 'pace',
-      PACE_SOCKET: '~/x/pace.sock',
-      PACE_USER: 'pace-user',
-      PACE_HOST: 'pace.example',
-      PACE_ROOT: '/scratch/pace/',
-      PACE_ACCOUNT: 'acct',
-      PACE_QOS: 'qos',
-      PACE_PARTITION: 'gpu',
-    });
-    expect(c.socket).toBe(join(homedir(), 'x/pace.sock'));
-    expect(c.user).toBe('pace-user');
-    expect(c.host).toBe('pace.example');
-    expect(c.root).toBe('/scratch/pace');
-    expect(c.account).toBe('acct');
-    expect(c.qos).toBe('qos');
-    expect(c.partition).toBe('gpu');
+  test('PACE_* values are ignored on the HiPerGator profile', () => {
+    const c = hpgConfig({ PACE_USER: 'bmorgan62', PACE_HOST: 'login-ice.pace.gatech.edu' });
+    expect(c.user).toBe('sbernalorta');
+    expect(c.host).toBe('hpg.rc.ufl.edu');
   });
 });
 
