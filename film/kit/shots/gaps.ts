@@ -14,12 +14,13 @@ let gaps: any;
 let words: ReturnType<typeof story>;
 const ui: Record<string, HTMLElement> = {};
 const raf = () => new Promise((r) => requestAnimationFrame(() => r(null)));
-const EYE = new THREE.Vector3(4.5, 1.6, -2.1); // the gap finder's own spot (+4.5, -2.1), yaw 135
+const CW = 1040, CH = 585, CX = 240, CY = 120;
+const EYE = new THREE.Vector3(-1.4953, 1.6, -3.2976); // the gap finder's worst view: spot 20, yaw 180, pitch 75, 81% missing
 
 async function draw(mesh: SplatMesh, other: SplatMesh, x0: number, x1: number) {
   mesh.visible = true;
   other.visible = false;
-  S.renderer.setScissor(x0, 0, x1 - x0, 1080);
+  S.renderer.setScissor(x0, 0, x1 - x0, CH);
   for (let k = 0; k < 40; k++) {
     S.renderer.render(S.scene, S.camera);
     await raf();
@@ -34,8 +35,11 @@ const shot: Shot = {
     S = stage();
     S.renderer.toneMapping = THREE.NoToneMapping;
     S.renderer.autoClear = false;
-    S.camera.fov = 50;
-    S.camera.setViewOffset(1920, 1080, 0, 120, 1920, 1080);
+    S.camera.fov = 72;
+    S.renderer.setSize(CW, CH);
+    S.camera.aspect = CW / CH;
+    Object.assign(S.renderer.domElement.style, { position: 'absolute', left: `${CX}px`, top: `${CY}px`, borderRadius: '22px' });
+    (document.getElementById('shade') as HTMLElement).style.display = 'none';
     S.camera.updateProjectionMatrix();
     spark = new SparkRenderer({ renderer: S.renderer, maxStdDev: Math.sqrt(8) });
     S.scene.add(spark);
@@ -50,16 +54,16 @@ const shot: Shot = {
     gaps = await json('/film/assets/genfill/gaps2/gaps.json');
 
     ui.line = el('', 0, 0, '');
-    ui.line.style.cssText += 'top:0;height:1080px;width:2px;background:#fff;box-shadow:0 0 12px rgba(0,0,0,.4)';
+    ui.line.style.cssText += `top:${CY}px;height:${CH}px;width:2px;` + 'background:#fff;box-shadow:0 0 12px rgba(0,0,0,.4)';
     ui.knob = el('', 0, 0, '‹›');
-    ui.knob.style.cssText += 'top:400px;width:52px;height:52px;margin-left:-26px;border-radius:50%;background:#fff;color:#1d1d1f;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600;letter-spacing:4px;box-shadow:0 4px 18px rgba(0,0,0,.35)';
-    ui.lB = el('axis', 260, 60, 'Before');
+    ui.knob.style.cssText += `top:${CY + CH / 2 - 26}px;` + 'width:52px;height:52px;margin-left:-26px;border-radius:50%;background:#fff;color:#1d1d1f;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600;letter-spacing:4px;box-shadow:0 4px 18px rgba(0,0,0,.35)';
+    ui.lB = el('axis', CX, CY - 36, 'Before');
     ui.lA = el('axis', 0, 60, 'After');
 
     // Missing, by how far up you look: the gap finder's own numbers
     const by = gaps.summary.byPitch as Record<string, { hole: number }>;
     const rows = Object.entries(by).map(([p, v]) => [Number(p), v.hole] as const).sort((a, b) => a[0] - b[0]);
-    const chart = el('', 1340, 120, '');
+    const chart = el('', 1330, 120, '');
     chart.style.cssText += 'width:420px;height:470px;border-radius:24px;background:rgba(29,29,31,.72);backdrop-filter:blur(18px)';
     const max = 0.2;
     chart.innerHTML = `<div class="callout" style="position:absolute;left:32px;top:28px">Missing, by how far up you look</div>` +
@@ -80,22 +84,23 @@ const shot: Shot = {
     const tilt = ease.site(seg(t, 0, 3.2));
     S.camera.position.copy(EYE);
     S.camera.rotation.order = 'YXZ';
-    S.camera.rotation.set(THREE.MathUtils.degToRad(lerp(4, 40, tilt)), THREE.MathUtils.degToRad(135 + 6 * seg(t, 0, DUR)), 0);
+    S.camera.rotation.set(THREE.MathUtils.degToRad(lerp(8, 72, tilt)), THREE.MathUtils.degToRad(180 + 8 * seg(t, 0, DUR)), 0);
     S.camera.updateMatrixWorld();
 
     // the slider: everything left of it is the world before the fill
     const w = t < 3.3 ? 1 : 1 - 0.62 * ease.site(seg(t, 3.3, 6.3)) + 0.04 * Math.sin(seg(t, 6.3, 8) * Math.PI);
-    const xw = Math.round(1920 * w);
+    const xw = Math.round(CW * w);
     S.renderer.setScissorTest(true);
     S.renderer.clear();
     await draw(before, after, 0, xw);
-    if (xw < 1920) await draw(after, before, xw, 1920);
+    if (xw < CW) await draw(after, before, xw, CW);
     S.renderer.setScissorTest(false);
     const show = t >= 3.3 ? 1 : 0;
-    ui.line.style.left = ui.knob.style.left = `${xw}px`;
+    ui.line.style.left = ui.knob.style.left = `${CX + xw}px`;
     ui.line.style.opacity = ui.knob.style.opacity = String(show * ease.site(seg(t, 3.3, 3.6)));
     ui.lB.style.opacity = String(ease.site(seg(t, 3.3, 3.7)));
-    ui.lA.style.left = `${Math.min(xw + 20, 1860)}px`;
+    ui.lA.style.left = `${CX + Math.min(xw + 20, CW - 60)}px`;
+    ui.lA.style.top = `${CY - 36}px`;
     ui.lA.style.opacity = String(ease.site(seg(t, 3.9, 4.3)));
 
     // the chart grows

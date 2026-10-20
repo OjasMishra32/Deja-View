@@ -1,291 +1,166 @@
-# Déjà View: Devpost draft
+# Deja View: Devpost fields
 
-**Tagline:** You've seen this before. Now walk around in it.
+Paste each section into the field of the same name.
 
-**Short description:** Turn the photos and phone videos you already have into places you can walk back into: with
-friends in Roblox, in a VR headset or a browser, or sitting next to someone who is starting to forget them.
+## Project name
 
----
+Deja View
 
-## Inspiration
+## Elevator pitch
 
-Our teammate Shivin's dad has struggled with Alzheimer's. The disease usually takes the newest memories first; the old
-places and the old faces tend to stay the longest. Families already know what helps on a good day: you sit together
-with the old photos and ask "do you remember this?" But a photo is flat. You can't turn around in it, and you can't
-sit back down at that table.
+Gaussian splatting and generative world models turn your photos and phone videos into 3D places you can walk back into, in VR, a browser or Roblox, beside someone starting to forget them.
 
-So we asked what it would take to give him the room back. Take the photos and phone clips his family already has,
-rebuild the place and the people in it in 3D, and let him sit inside it next to the people who love him, in a
-headset or just on a laptop. Then we tried it with him, and filmed it.
+## Thumbnail
 
-Then we saw the same thing works for everyone, with less at stake. Every group chat has a camera roll full of nights you weren't at. You get a 12-second clip, a blurry photo and "you
-had to be there." We wanted the next best thing to having been there: to actually stand in the room, turn around, and
-see who was sitting where.
+`film/out/thumb/deja-view-thumbnail-3x2.jpg` (2400 x 1600, 3:2, 485 KB)
 
-It goes further than a night out. Most of us have a home we can't go back to: the house you grew up in, sold years
-ago, still up on a real-estate site with its old listing photos. One of us rebuilt his family's old kitchen in
-Pennsylvania from four of those photos and walked around it again. And a phone clip can hold someone who isn't here
-any more: Video mode stands them back in the room where it was filmed, so you can see them where they were.
+## Try it out links
 
-Two other things pushed us. World models have gotten good enough to imagine the part of a room behind the camera from
-a single photo, and a Meta Quest 3S is cheap enough to have one sitting on the table. Our host sponsor protects real
-content, which raised a question we couldn't drop: if the AI made up most of the room, shouldn't you be able to see
-which parts it made up?
+- https://deja-view.photo
+- https://github.com/OjasMishra32/Deja-View
 
-## What it does
+## Video demo link
 
-Déjà View has two modes.
+The YouTube link of `film/out/dejaview-film.mp4` (3:58), once uploaded.
 
-- **Photo:** walk around a real place from the photos you took there. We rebuilt the Infinity Hall Game Lawn, a
-  giant chess room and a kitchen from phone photos and clips: each one is levelled, set to real scale with the floor
-  at zero, and you can walk wherever the camera went. A single photo, a game screenshot or just a sentence also
-  works: the model generates everything the camera missed. We built three worlds from single OG Tilted Towers
-  screenshots, and only 14%, 21.7% and 22.9% of each world's million splats were actually in the screenshot.
-  Old real-estate listing photos work too: the watermarks and logos are found and removed on their own, and our
-  teammate's old family kitchen in Pennsylvania came back from four of them.
-- **Video:** the people in a clip become full 3D people standing in the rebuilt room, moving in time with the
-  footage and its sound. Walk all the way around your friends at the foosball table, pause mid-game and look at
-  them from behind, or step back to where the phone was and see the original video line up with them. In the
-  kitchen, Seb opens the fridge and carries the milk out, and the door and the jug move with him. At the giant chess
-  board, both players stand there mid-game. That's 4D reconstruction from one phone clip: the room in 3D, and the
-  people in it in 3D, moving through time. The video of Shivin's dad by the fire is one of these
-  memories now, "Alzheimer's memory": two moments of it, played in one room, and you can sit beside them while they
-  talk.
+## About the project
 
-Then the room becomes social:
+### Walk in first
 
-- **Reality check:** one toggle tints everything the AI imagined, so what the camera captured stays honest.
-- **Talk to the room:** Gemini pins floating labels on the interesting things. Hold a button, ask "who won?", and the
-  room answers out loud.
-- **Roblox:** the same room becomes a life-size Roblox map. Friends without a headset join from a laptop and play tag
-  with the person in VR, who sees them as ghosts. The Infinity Hall Game Lawn and the giant chess room are rebuilt by
-  hand from their scans, at real size, with the real tables to play on, and the person in the headset can play the
-  real ping pong table against someone on a laptop in Roblox.
-- **Notes that stay:** leave a note in a room and it pops up in the headset as a sticky note where you left it, and
-  stays for the next visitor.
-- **A visit, not a game:** for someone who is forgetting, the same world becomes a place to sit with family. Put the
-  old listing photos of the house and the birthday clips on one board, then walk in together: Dad in the headset
-  or at the laptop, the kids beside him in Roblox, and the room answering "whose birthday was this?" out loud.
-- **Memories have keys:** a family's kitchen is theirs. The owner can make a memory private, and then anyone
-  else meets a closed door and has to sign in and knock. The owner sees the knock and lets them in, or doesn't. Even the
-  guide keeps the family's secrets: it tells family about the people and the stories, and a stranger only about the
-  room.
-- **It starts on the memory board:** add a photo or clip with "Add a memory" in the DeepSpace app, and the card comes
-  back with the world link and the Roblox link.
+Open **https://deja-view.photo**, scroll to All worlds and press Walk in. Everything there was built from photos and phone videos, and it runs in a browser on a laptop or a phone. On a Meta Quest, open the same link in the headset's browser and press Enter VR.
 
-### The sponsor chain: one memory, start to finish
+A few to start with:
 
-Follow the fire video of Shivin's dad through Déjà View and every sponsor does one job:
+- The Infinity Hall Game Lawn, from 25 photos and two phone clips: https://deja-view.photo/view?scene=the-courts
+- Foosball at the Game Lawn, where both players from one phone video stand in the room in 3D: https://deja-view.photo/view?scene=courts-foosball
+- The old house kitchen in Pennsylvania, from four photos in its old real-estate listing: https://deja-view.photo/view?scene=old-house-kitchen
+- Tilted Towers, from Fortnite gameplay footage: https://deja-view.photo/view?scene=tilted-towers
 
-1. **DeepSpace brings it in.** The family adds the clip with "Add a memory", and DeepSpace hands it to our pipeline.
-2. **HiPerGator and Vultr build it.** Two GPUs working in parallel lift the people out of every frame into 3D and build
-   the room around them. A photo becomes a walkable world in about 10 seconds, which is why a judge can make one live
-   at the table.
-3. **Gemini works with our other models to fill the gaps.** It describes each scene, and the world model uses that
-   description to imagine everything the camera never saw; then it labels what matters in the room and answers out
-   loud when someone asks about it.
-4. **Vobile keeps it honest.** For someone whose memory is slipping, a made-up detail is worse than a gap. One toggle
-   tints everything the AI imagined, so the family always knows what the camera really saw.
-5. **Auth0 keeps it in the family.** With Memory Keys a memory has an owner; a private one opens only for the people
-   they let in, and the guide only tells family the family stories.
-6. **Roblox brings everyone else.** The rest of the family joins the same place from a laptop or phone at life size, and can play
-   the real ping pong table against whoever is in the headset.
-7. **Tiger Data remembers every visit.** Who walked in, when, for how long and where they stood goes into a time-series
-   record, so the family can see which places he goes back to most.
-8. **deja-view.photo ties it together:** one link that never changes, for the headset, Roblox and every phone.
+Hold X in the headset (or the talk button on a laptop) and ask about anything you can see. Gemini answers out loud.
 
-### Sponsor challenges: what each one does and where to see it
+### Inspiration
 
-- **DeepSpace:** how a memory gets in. "Add a memory" in the DeepSpace app takes the photo or clip someone adds and
-  hands it to our pipeline, which turns it into the world; the card comes back with the links to walk in.
-- **Gemini (MLH):** works with our other models to fill the gaps: it writes the caption the world model imagines
-  everything outside the photo from. It also inspects our 3D reconstructions, pins labels on things in the room, greets you,
-  and answers spoken questions out loud. *See it:* in the headset or at `/view`: the labels, then hold the button
-  and ask "who won?".
-- **HiPerGator and Vultr, in parallel:** GPU work ran on both at once, on HiPerGator's GPUs and a rented Vultr cloud GPU,
-  with the same worker code on each. A warm worker turns a photo into a finished world in about 10 seconds. *See it:* the live build at the table and the GPU tile on `/host`.
-- **Vobile (reality check):** one toggle tints every part of the world the AI imagined. *See it:* "Reality check" on
-  `/host`, in the headset.
-- **Roblox:** each real place is also a Roblox room built from the same scan: a block map of the place at life size
-  (3.57 studs per metre) with proper collisions, and the Game Lawn rebuilt by hand from its measurements. The server also
-  tells the game where the real ping-pong table, foosball table and chessboard are, so the games are played on the
-  real furniture. Friends join from the Roblox app and play tag with the person in the headset, who sees them as
-  ghosts. Nothing from a real place reaches Roblox unchecked: every texture is scanned for text, faces, logos and QR
-  codes, a person approves that exact file (the approval is tied to its hash), and only then is it uploaded. *See
-  it:* the Roblox app on a laptop or phone, next to the headset.
-- **Tiger Data:** with `TIGER_DATA_URL` set, every presence update (headset, Roblox and browser, up to 5 a second per
-  world) is stored as one row per person in a TimescaleDB hypertable, with a one-second continuous aggregate and
-  compression of older data; Roblox moments (tags, rounds, match results) go in a moments table next to it. The
-  server answers replay questions from it: each visit to a memory (when, how long, who), everyone's path over a time
-  range with the Roblox moments in it, and a heatmap of person-seconds per 0.5 m floor cell. *See it:* the JSON at
-  `/api/replay/status`, `/api/replay/<world>/sessions`, `/api/replay/<world>` and `/api/replay/<world>/heat`, and
-  the tables in the Tiger Cloud console. There is no replay page yet.
-- **Auth0 (MLH):** with `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID` and `AUTH0_AUDIENCE` set, anyone with the public link can
-  still walk into a memory, but adding or rebuilding one, sending headset cues from `/host` and changing a tab need
-  a signed-in person. Nobody can delete a memory through the website at all. The pages use Auth0 Universal Login (authorization code with PKCE, no
-  client secret), and the server checks the access token's RS256 signature against the tenant's key set, plus its
-  issuer, audience and expiry, without an SDK. The host laptop itself, and scripts holding the API token or the
-  event key, are not asked. *See it:* the "Sign in" button on `/capture` and `/host` (and on `/tab` when a change
-  needs it); `/api/auth/config` says whether sign-in is on.
+Shivin's dad has struggled with Alzheimer's. The disease usually takes the newest memories first, and the old places and faces stay longest. Families already do the thing that helps on a good day: they sit together with old photos and ask "do you remember this?" A photo is flat, though. You can't turn around in it or sit back down at that table.
 
-  **Memory Keys** is where Auth0 decides who gets to walk into whose memory, not just who can upload. The person a memory
-  belongs to claims it, and can make it private. A visitor to a private memory sees a closed door, signs in with
-  Auth0, and knocks; the owner gets the knock on `/capture` with the person's name and taps "Let in" or "Not now". A
-  guest gets a memory pass, an HttpOnly cookie signed by the server and checked against the guest list on every
-  request, so the world's files themselves (the splats, the photos, the 3D people) answer 403 to anyone who isn't
-  family, and taking someone off the list locks them out at once. The Gemini guide is told by the server, from the
-  verified token, whether it is talking to family or a visitor (the page can't claim to be family): family hear who is
-  in the photos and what happened that day, and a visitor about the room only. *See it:* make the kitchen private on
-  `/capture`, open `/view?scene=old-house-kitchen` on a phone, knock, and let yourself in from the laptop. The details
-  are in `docs/memory-keys.md`.
+We wanted to give him the room back. The family already had the photos and the phone clips, so we rebuilt the place and the people in it in 3D and let him sit inside it next to the people who love him, in a headset or on a laptop. We tried it with him and filmed it; the first 16 seconds of our video are that moment.
 
-## How we built it
+The same idea works with less at stake. Every group chat has a camera roll full of nights someone missed, a 12 second clip and "you had to be there." Most of us also have a home we can't go back to, still online with its old listing photos. One of us rebuilt his family's old kitchen from four of those photos and walked around it again.
 
-**The hub** is a Bun + TypeScript server on a Mac. It stores scenes, runs jobs, pushes live updates over WebSocket,
-serves video with HTTP range requests (the Quest needs them to seek), and is the only thing every other piece talks
-to. Four of us built in parallel against one written contract (`team/contracts.md`) that specifies every endpoint,
-unit and coordinate frame.
+Two technical shifts made this possible this year: world models can now imagine the part of a room behind the camera from a single photo, and a Meta Quest 3S is cheap enough to leave on the table. Vobile, our host sponsor, protects real content, which raised a question we couldn't let go of. If a model invents most of a room, you should be able to see which parts it invented.
 
-**Photo worlds** come from FlashWorld, a distilled Wan2.2-5B video diffusion model that decodes 3D Gaussians, running
-on UF's HiPerGator on an RTX PRO 6000 Blackwell. Generation takes 5 to 7.5 s. A warm worker keeps the model loaded and
-turns a photo into a finished world in about 9 to 11 s, compared with about 6 minutes just to load the model cold. We
-level each world, scale it, find the floor, put the spawn at the input camera, and trim its roughly 4 million splats
-to 1,000,000 (15 to 17 MB as SPZ). For many photos of one place there is an AnySplat path (3 s inference). With no warm
-worker, jobs fall back to a batch Slurm job, then the public FlashWorld Space, then the Mac.
+### What it does
 
-**Real places** go through our own reconstruction pipeline on HiPerGator. We keep the sharpest frame in each window of
-a clip and mask people out, COLMAP 3.11 solves the cameras, and our own gsplat training loop (MCMC densification, a
-depth term, per-clip colour, pose refinement for video frames) trains the splats in about 12 minutes on one RTX PRO
-6000. Then we measure the floor and the real scale on the splats themselves, put the floor at zero, crop to the room,
-and let you walk only where the camera actually went, so you never step into a part nobody photographed. The walk
-zone is found automatically: we render the world from a grid of spots at eye height in eight directions, keep the
-spots that look good, and build the fence and collider around them. The surprise
-was symmetric furniture: a ping-pong table looks the same from either end, and COLMAP put whole stretches of video on
-a mirrored copy of the room until we limited matching to nearby frames.
+Photo mode rebuilds a real place from the photos you took there. Each world is levelled, set to real scale with the floor at zero, and fenced to where the cameras actually went, so you never walk into a part nobody photographed. A single photo, a game screenshot or one sentence also works: a world model generates everything the camera missed. In three worlds built from single Tilted Towers screenshots, only 14%, 21.7% and 22.9% of the roughly one million splats were in the screenshot.
 
-**People in 3D:** Multi-HMR 2 estimates every person's body in every frame. We track each person, nudge the bodies to
-match their outlines, and fit them to the Anny body model. The texture is then fitted to the footage itself, with the
-parts the camera never saw filled from the clothes' colours, and each person is exported as a skinned glTF (163
-joints) whose animation is keyed to the video's clock. The viewer plays it with the video's current time, so the
-people stay in sync when you pause, seek or play. A last pass keeps people out of measured furniture: from one moving
-phone, a body's distance is its least certain coordinate, so a foosball player could end up inside the table. We push
-them back along the camera's ray until they clear it. On frames of the clip held out from fitting, the final people
-overlap the real outlines by 84 to 87% (IoU), up from 72%.
+Video mode puts the people from a phone clip back in the rebuilt room as full 3D people, moving in time with the footage and its sound. You can walk around your friends at the foosball table, pause mid game and look at them from behind, or step back to where the phone was and watch the original video line up with them. This is 4D reconstruction from one handheld clip. The video of Shivin's dad by the fire is one of these memories, with two moments of it played in one room.
 
-**Video rooms** run a five-pass pipeline. It samples frames to build an empty-room background plate (Big LaMa fills
-the spots nobody ever moved out of), runs Depth Anything V2 on every frame, unites a DeepLabV3 person mask with
-change-from-plate detection, aligns each frame's depth to the plate and smooths it over time, and packs RGB, depth and
-mask into one video with the original audio. The
-viewer draws that video as a relief mesh in a custom shader. It drops triangles that would stretch across depth
-jumps, adds a back sheet behind occluders, and composites the result with the splats so people stand in the room
-instead of floating in front of it. iPhone HDR clips are tone-mapped with our own LUTs, because the ffmpeg build we
-had couldn't do it.
+On top of the worlds:
 
-**The viewer** is three.js + Spark for splat rendering + WebXR. It estimates the floor from the splats, builds a voxel
-collider so you can't walk through walls, and adds smooth locomotion, snap turn, a teleport arc, a comfort vignette,
-72 Hz with a performance step-down on the Quest, and a desktop and phone fallback.
+- Reality check tints everything the model imagined, so you always know what a camera really saw.
+- Gemini pins labels on what matters in each room and answers spoken questions out loud ("who won?").
+- Roblox: every place is also a life size Roblox room. Friends on a laptop or phone play with the person in the headset, including cross-play ping pong on the real table.
+- Memory Keys make a memory private. A stranger signs in and knocks, and the owner decides whether to let them in. The guide tells family the family stories and tells a visitor only about the room.
+- Add a memory in the DeepSpace app, or drop a clip on the site, and the world joins a queue. A full rebuild from a phone video takes about 40 minutes.
+- Notes left in a room appear in the headset where they were left, and every visit is recorded so a family can see which places someone returns to.
 
-**The social layer:** a real place becomes a Roblox room generated from its own splats, at 3.57 studs per metre so the
-room is life size: a voxelizer turns the splats into greedy-merged, colour-quantised boxes (2,000 to 6,000 parts in
-under 2 s), and the Game Lawn and the giant chess room are rebuilt by hand from measurements taken from the splats
-(the walls found from a histogram of splat positions, the tables fitted to within 1% of their real size). Cross-play
-ping pong runs one physics model in both places: the headset flies the ball with a line-for-line port of the Roblox
-physics (gravity, drag, Magnus spin, 240 Hz steps), and the Roblox server accepts the headset's late hits by checking
-them against the ball's recent path, holding a point against the headset for 0.8 s. A presence relay
-moves everyone at 4 Hz in metres or studs, and the headset draws other people about 0.3 s in the past so nobody
-teleports. New notes reach the headset over a WebSocket within a couple of seconds. The reality check reprojects every splat
-into the input camera and checks it against depth: anything behind the camera, outside the frame or hidden behind
-something the camera saw is marked as imagined.
+### How we built it
 
-**Testing:** more than 930 TypeScript tests and more than 450 Python tests pass, plus opt-in headless-Chrome checks
-of the viewer and the guide, and a WebXR emulator for the headset code paths. We also built mock versions of the
-guide and DeepSpace services so every hop could be tested before the real ones existed.
+#### Gaussian splatting from phone footage
 
-**AI tools used:** Claude Code (Anthropic) for engineering help while we built it: code, tests and docs. Inside the
-product, Google Gemini writes the captions and labels and answers spoken questions, and the generative models listed
-in our credits fill in what the camera never saw.
+A scene is a set of anisotropic 3D Gaussians. Each has a mean, a covariance built from a scale and a rotation, an opacity and spherical harmonic colour. To render a pixel, the Gaussians are projected to 2D, sorted by depth and alpha composited front to back along the ray. Every step is differentiable, so the whole scene is fitted by gradient descent on a photometric loss (L1 plus D-SSIM) against the real photos.
 
-## Challenges we ran into
+Our pipeline on UF HiPerGator keeps the sharpest frame in each window of a clip, masks out people, and solves camera poses with COLMAP 3.11. For the Game Lawn, 163 views registered (25 photos and 138 video frames) with 57,048 triangulated points and a mean reprojection error of 1.0 px. Symmetric furniture was the hardest part of the solve. A ping pong table looks the same from either end, and COLMAP placed whole stretches of video on a mirrored copy of the room until we limited matching to nearby frames.
 
-- **Blackwell GPUs.** The RTX PRO 6000 is sm_120, so we needed CUDA 12.8 PyTorch builds and had to compile gsplat for
-  three GPU architectures on a cluster where nothing heavy may run on the login node.
-- **Two GPUs for an entire class.** We had to be good citizens: one warm worker that exits after 20 idle minutes,
-  atomic job claiming, and requeueing the jobs a killed worker left behind.
-- **Coordinate frames.** OpenCV vs OpenGL axes, worlds with no real scale, a floor nobody told us about, and Roblox
-  studs. The headset, Roblox and the map all have to agree on where you are to within 30 cm.
-- **The imagined parts drift.** Ask for a Fortnite street and the parts behind you turn photoreal unless the prompt
-  insists on the art style.
-- **Video in 3D is mostly edge cases.** An arm in front of a torso, a blender in front of a cook, flickering depth.
-  Each one made a rubber sheet until we handled it.
-- **Privacy that holds all the way down.** Hiding a private memory's page isn't enough when its world is a set of
-  plain files a viewer has to download. We gate the files themselves, with a pass the server signs and checks against
-  the current guest list, and the guide's answers too, so a stranger can't learn a family's stories by asking.
-- **Networking at a hackathon.** WebXR needs HTTPS, the Quest needs to reach the laptop, campus Wi-Fi can block
-  device-to-device traffic, and Roblox servers can't reach a LAN at all. We ended up with self-signed certificates,
-  `adb reverse` and a Cloudflare tunnel that watches itself.
+Training is our own gsplat loop with MCMC densification (Gaussians are treated as samples and dead ones are relocated instead of cloned), a depth term, a per clip colour correction and pose refinement for video frames. 30,000 steps take 11.1 minutes on one RTX PRO 6000 Blackwell and reach about 30 dB PSNR on training views and 18.6 dB PSNR / 0.71 SSIM on held-out frames. We then measure the floor and the real scale on the splats themselves, crop to the room, and render a grid of eye-height viewpoints in eight directions to find where a person can stand. The fence and the collider are built from the viewpoints that render cleanly.
 
-## Accomplishments that we're proud of
+#### One photo, one world model
 
-- A walkable world from one screenshot in about 10 seconds, with roughly 80% of it imagined, and a toggle that shows
-  you exactly which 80%.
-- Real places rebuilt from phone photos at real scale, and the people from a phone clip standing in them as full 3D
-  people you can walk around, in sync with the video and its sound.
-- One room, three ways in: a headset, a browser, Roblox.
-- Private memories with a door you knock on, where the AI guide itself knows who it may tell what.
-- More than 1,300 automated tests across TypeScript and Python, written during the event.
+Photo mode uses FlashWorld, a model distilled from the Wan2.2-TI2V-5B video diffusion model that decodes 3D Gaussians directly instead of frames. Gemini writes the scene caption that conditions it, which matters more than we expected: ask for a Fortnite street without stating the art style and the parts behind you drift photoreal. Generation takes 5 to 7.5 s on an RTX PRO 6000. We keep a warm worker so the model never pays its six minute cold load, then level the result, find the floor, put the spawn at the input camera and prune about 4 million splats to 1 million (15 to 17 MB as SPZ). Many photos of one place go through AnySplat, a feed-forward model on a VGGT backbone, in about 3 s.
 
-## What we learned
+#### Reality check
 
-- Camera trajectory matters as much as the model. An orbit trajectory left far fewer holes around the spawn than
-  spinning in place (16.5% empty vs 25.4%).
-- Keeping a model warm beats any amount of batch tuning when a person is waiting.
-- Writing the contract first let four people build four very different things (a GPU pipeline, a Roblox game, a
-  Gemini service and a DeepSpace app) that fit together.
-- People believe a world more when it shows its seams.
+Every splat is projected into the cameras that filmed the room and tested against their depth. A splat that is behind every camera, outside every frame or hidden behind surfaces a camera saw is marked as imagined, and the viewer can tint that set blue. The split is real data: the old house kitchen is 279,024 seen splats and 800,394 imagined ones (26% seen), the chess match 77% seen, foosball 54%, Seb cooking 48%.
 
-## What's next
+#### Filling the gaps
 
-- Memory visits for families living with dementia, designed with caregivers and memory-care staff instead of
-  guessed at: a calm mode with no games and no labels, a family member's recorded voice in place of the guide's, and
-  a way to keep each visit. We built one for Shivin's dad (it's in our video); the next step is to
-  build it with caregivers and memory-care staff, not on our own.
-- Live Video builds in under a minute, so the "now do it" moment works for clips too.
-- More of the GPU work on Vultr, so we're not borrowing a class's GPUs.
-- Several clips of one night stitched into one room.
-- A permanent host instead of a laptop and a tunnel.
+A reconstruction only knows what the footage saw. Look up from where people walk and you find the ceiling past the top of every photo. We measure this directly: 72 standing spots times 32 viewing directions gives 2,304 probe renders. One backward pass gives each splat's blending weight in each training view, so every pixel can be classed as a hole (alpha under 0.5), a smear (mostly made of splats fewer than 3 cameras saw well) or an unseen direction. Missing area grows with pitch, from 0.5% looking 30 degrees down to 18.5% looking 75 degrees up.
+
+To fill a region, Qwen2.5-VL describes only what is hidden and how the visible edges continue, Qwen-Image-Edit-2511 paints it, and metric Depth Anything V2 lifts the painting into 3D, aligned to the rendered depth with RANSAC and Cauchy-weighted least squares. Each new Gaussian is oriented along the depth map's normal and sized from the pixel footprint. A short optimisation then trains only the new splats with everything the cameras saw frozen, and a gate re-renders every training view: if the mean drops under 45 dB or any view under 35 dB against the original, that fill is undone. What the footage saw cannot change.
+
+#### People in 3D from one phone video
+
+Multi-HMR 2 estimates every person's body in every frame. We track each person, refine the bodies against their silhouettes and fit them to the Anny body model, then fit the texture to the footage itself and fill the parts the camera never saw from the clothes' colours. Each person is a skinned glTF (163 joints) whose animation is keyed to the video clock, so pausing and seeking stay in sync. From a single moving phone a person's distance is the least certain coordinate, so a foosball player could end up inside the table. We push bodies back along the camera ray until they clear the measured furniture. On held-out frames the final people overlap the real outlines at 84 to 87% IoU, up from 72%.
+
+The room behind them is built in five passes: an empty-room plate (Big LaMa fills the spots nobody ever moved out of), Depth Anything V2 on every frame, a DeepLabV3 person mask joined with change detection against the plate, and per-frame depth aligned to the plate and smoothed over time. The viewer draws it as a relief mesh in a custom shader that drops triangles across depth jumps and composites the result with the splats.
+
+#### From splat to playable Roblox world
+
+Roblox can't render Gaussians, so every room is converted. A voxelizer turns the splats into greedy-merged, colour-quantised boxes (2,000 to 6,000 parts in under 2 s) at 3.57 studs per metre, so the room is life size. Textured room meshes are baked from the splats (the Game Lawn is 299,000 triangles in 43 chunks with a 1024 px texture each). The Game Lawn and the giant chess room were written as Luau build scripts with a coding agent, part by part, from measurements taken off the splats: walls from a histogram of splat positions, tables fitted to within 1% of their real size. The server also sends where the real ping pong table, foosball table and chessboard stand, so the games are played on the real furniture.
+
+Cross-play ping pong runs one physics model in two engines. The headset flies the ball with a line for line port of the Roblox physics (gravity, air drag and Magnus force from spin, stepped 240 times a second). The Roblox server referees and accepts a headset hit that arrives late if it matches the ball's recorded path, holding a point for 0.8 s before awarding it. Presence moves at 4 Hz in metres or studs, and each client draws others 0.3 s in the past so nobody teleports.
+
+Objects go to Roblox only after a check. Grounding DINO and SAM 2.1 find objects in rendered views, TRELLIS turns them into meshes, and a preflight scans every texture atlas for QR codes, barcodes, text, faces and logos (a teammate's place was banned once over a QR code in a texture). A person then approves that exact file, the approval is tied to its SHA1, and only then is it uploaded.
+
+#### The hub, the viewer and the tests
+
+A Bun and TypeScript server stores scenes, runs the job queue, pushes live updates over WebSocket and serves video with HTTP range requests (the Quest needs them to seek). The viewer is three.js with Spark for splat rendering and WebXR, with a voxel collider, smooth locomotion, snap turn, teleport, a comfort vignette and a 72 Hz step-down on the Quest. Four of us built in parallel against one written contract (`team/contracts.md`) that fixes every endpoint, unit and coordinate frame. 874 TypeScript tests and 444 Python test functions pass, plus headless Chrome checks of the viewer and a WebXR emulator for the headset paths.
+
+### How each sponsor is used
+
+**Vobile:** the reality check. Per-splat provenance (seen by a camera, or imagined by a model) is computed by reprojection against depth and shown with one toggle in the headset, the browser and on `/host`. For someone whose memory is slipping, a made-up detail is worse than a gap.
+
+**DeepSpace:** how a memory gets in. "Add a memory" in Seb's DeepSpace app sends the photo or clip to our pipeline, and the card comes back with the world link and the Roblox link when it is built.
+
+**Gemini (MLH):** writes the caption that conditions the one-photo world model, inspects each reconstruction to pin labels on what matters, greets visitors and answers spoken questions out loud. The server tells it from the verified Auth0 token whether it is talking to family or a visitor, so a stranger can't learn a family's stories by asking.
+
+**Vultr (MLH):** the same GPU worker code runs on a rented Vultr GPU and on HiPerGator at once, with atomic job claiming and requeueing of jobs a killed worker left behind. Two GPU sources mean a live build doesn't depend on one class allocation.
+
+**Auth0 (MLH):** Universal Login with authorization code and PKCE, and RS256 access tokens checked against the tenant's key set (issuer, audience, expiry) on our own server. Anyone with the link can walk into a public memory, but adding or rebuilding one needs a signed-in person. Memory Keys put Auth0 in front of the memory itself: a private memory's files (splats, photos, 3D people) answer 403 to anyone not on the guest list, a guest holds an HttpOnly pass the server signs and re-checks on every request, and removing someone locks them out at once.
+
+**Tiger Data (MLH):** every presence update from the headset, Roblox and the browser (up to 5 a second per world) is a row in a TimescaleDB hypertable on Tiger Cloud, with a one-second continuous aggregate and compression of older chunks. Roblox moments (rounds, match results) sit in a table beside it. The server answers replay queries from it: each visit (when, how long, who), everyone's path over a time range, and a heatmap of person-seconds per 0.5 m floor cell.
+
+**GoDaddy Registry (MLH):** deja-view.photo is the one link for everything: the site, the headset, the Roblox server's base address, the QR codes and this page.
+
+**Roblox:** the place everyone without a headset joins. Rooms built from our splats at real scale, games on the real furniture, cross-play with the person in VR, and the upload gate above.
+
+**UF HiPerGator:** camera solves, splat training, gap filling, people reconstruction and the warm world-model worker all ran on its RTX PRO 6000 Blackwell GPUs.
+
+### Challenges we ran into
+
+The RTX PRO 6000 is sm_120, so we needed CUDA 12.8 PyTorch builds and compiled gsplat for three GPU architectures on a cluster where nothing heavy may run on the login node. Two GPUs were shared by a whole class, so the warm worker exits after 20 idle minutes and jobs are claimed atomically.
+
+Coordinate frames were a constant fight: OpenCV against OpenGL axes, worlds with no real scale, floors nobody told us about, and Roblox studs. The headset, Roblox and the map have to agree on where you stand to within 30 cm.
+
+Video in 3D is mostly edge cases: an arm in front of a torso, a blender in front of a cook, flickering depth. Each one made a rubber sheet until we handled it.
+
+Privacy had to hold all the way down. Hiding a private memory's page isn't enough when the world is a set of files the viewer downloads, so the files themselves are checked, and so are the guide's answers.
+
+WebXR needs HTTPS, the Quest has to reach the laptop, campus Wi-Fi blocks device to device traffic, and Roblox servers can't reach a LAN. We ended up with our own domain behind a Cloudflare tunnel that restarts itself.
+
+### Accomplishments that we're proud of
+
+Shivin's dad sat in a room rebuilt from one video of him by the fire. Real places come back at real scale from phone photos, and the people from a phone clip stand in them as full 3D people you can walk around. One room has three ways in: a headset, a browser and Roblox. The model's guesses are labelled splat by splat, and gap filling is gated so it can never change what a camera saw. More than 1,300 automated tests were written during the event.
+
+### What we learned
+
+Camera trajectory matters as much as the model: an orbit left far fewer holes around the spawn than spinning in place (16.5% empty against 25.4%). Keeping a model warm beats any amount of batch tuning when a person is waiting. Held-out metrics keep you honest: 30 dB on training views and 18.6 dB on held-out frames is the gap between a room that photographs well and one you can walk through. And people trust a world more when it shows its seams.
+
+### What's next
+
+Memory visits for families living with dementia, designed with caregivers and memory-care staff: a calm mode with no games and no labels, a family member's recorded voice in place of the guide's, and a way to keep each visit. Video builds fast enough to make one live at a table. Several clips of one night merged into one room. More of the GPU work on Vultr, and a permanent host instead of a laptop and a tunnel.
+
+### Credits
+
+All of our own code was written during the event. AI tools: Claude Code (Anthropic) helped with code, tests and docs. Inside the product, Gemini writes captions and labels and answers questions, and the generative models below fill in what cameras never saw.
+
+Models: FlashWorld on Wan2.2-TI2V-5B (Wan-AI); AnySplat with VGGT (Meta); Depth Anything V2; DeepLabV3 (torchvision); Big LaMa; Qwen2.5-VL and Qwen-Image-Edit-2511; Multi-HMR 2 and the Anny body model (NAVER); SAM 2.1, Grounding DINO and TRELLIS. Libraries: three.js, Spark, three-mesh-bvh, gsplat (nerfstudio), spz (Niantic), COLMAP, PyTorch, OpenCV, Open3D, Hugging Face transformers and diffusers, ffmpeg, Bun, Rojo, Lune and Playwright. Media: "Quest 3S with controllers" by OG_MATTER (CC BY 4.0); "Tilted Towers Tour | Fortnite OG S2" free-camera footage by woodinjake. The Game Lawn, the chess room, the kitchen and the fire video are our own. Full list with licences: https://deja-view.photo/credits.html
+
+Meta Quest, Roblox and Fortnite are trademarks of their owners; Deja View is not affiliated with or endorsed by them.
+
+### Team
+
+Ojasva built the server, the viewer, the GPU pipelines on HiPerGator, the Roblox map voxelizer, the presence relay, the reality check, Tiger Data replays, Auth0 sign-in and the domain. Shivin built the Roblox experience, automatic walk zones, listing photos to a home, the video memory chain and Memory Keys. Brianna built the Gemini guide: captions, labels, narration and spoken answers. Seb built the DeepSpace app, the Roblox games on the real furniture, the object maker and its upload gate, and the Vultr GPU.
 
 ## Built with
 
-bun, typescript, three.js, spark, webxr, python, pytorch, flashworld, wan2.2, anysplat, vggt, depth-anything-v2,
-deeplabv3, big-lama, gsplat, colmap, multi-hmr, anny, gltf, hugging-face, diffusers, opencv, ffmpeg, hipergator, slurm, cloudflare-tunnel, gemini,
-roblox, luau, deepspace, meta-quest-3s, tiger-data, timescaledb, postgresql, auth0
-
-## Credits
-
-All of our own code was written during the event. It stands on open-source work, credited in full, with licences, at
-https://deja-view.photo/credits.html. The main pieces:
-
-- **Models:** FlashWorld (imlixinyang) on Wan2.2-TI2V-5B (Wan-AI) for Photo mode; AnySplat (InternRobotics) with VGGT
-  (Meta) for many-photo worlds; Depth Anything V2; DeepLabV3 (torchvision); Big LaMa (advimman/lama); Qwen-Image-Edit
-  for painting what the photos never saw; Multi-HMR 2 and the Anny body model (NAVER) for the 3D people; SAM 2.1,
-  Grounding DINO and TRELLIS for objects.
-- **Libraries and tools:** three.js, Spark, three-mesh-bvh, gsplat (nerfstudio), spz (Niantic), COLMAP, PyTorch,
-  OpenCV, Open3D, Hugging Face transformers and diffusers, ffmpeg, Bun, rojo, lune, iwer and Playwright.
-- **Media:** the "Quest 3S with controllers" 3D model by OG_MATTER (CC BY 4.0); "Tilted Towers Tour | Fortnite OG S2"
-  free-camera footage by woodinjake (the Tilted Towers and Brick House worlds); a public greyscale demo room. The
-  Game Lawn, the giant chess board, the kitchen and the fire video are our own photos and clips.
-- **Services:** UF HiPerGator, Vultr, Hugging Face, Google Gemini, Cloudflare Tunnel, DeepSpace, Roblox, Auth0
-  and Tiger Data.
-
-Meta Quest, Roblox and Fortnite are trademarks of their owners; Déjà View is not affiliated with or endorsed by them.
-
-## Team
-
-- **Ojasva:** server, viewer, GPU pipelines on HiPerGator, Roblox map voxelizer, presence and notes relays, reality
-  check, Tiger Data replays, Auth0 sign-in, the deja-view.photo domain
-- **Shivin:** the Roblox experience (room loader, room picker, VR ghost, tag rounds), automatic walk zones,
-  listing photos to a home, the one-command video memory chain, and Memory Keys (private memories, knock-to-enter,
-  the family-or-visitor guide)
-- **Brianna:** the Gemini guide: captions, labels, narration, spoken answers
-- **Seb:** the DeepSpace app ("Add a memory": a photo or clip into our pipeline), the Roblox games on the real
-  furniture, the object maker and its censor gate for Roblox uploads, the Vultr GPU
+bun, typescript, three.js, spark, webxr, python, pytorch, cuda, gsplat, 3d-gaussian-splatting, colmap, flashworld, wan2.2, anysplat, vggt, depth-anything-v2, qwen2.5-vl, qwen-image-edit, deeplabv3, big-lama, multi-hmr, anny, sam2, grounding-dino, trellis, gltf, hugging-face, diffusers, opencv, open3d, ffmpeg, hipergator, slurm, vultr, gemini, roblox, luau, rojo, deepspace, auth0, tiger-data, timescaledb, postgresql, cloudflare-tunnel, godaddy-registry, meta-quest-3s

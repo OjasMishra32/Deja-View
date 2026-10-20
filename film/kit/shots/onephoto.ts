@@ -57,7 +57,7 @@ const shot: Shot = {
     ui.cap = el('', 1080, 210, '');
     ui.cap.style.cssText += 'width:600px;white-space:normal;font-size:30px;line-height:1.42;font-weight:500;letter-spacing:-0.01em;color:#F5F5F7';
     ui.ring = el('', 1500, 120, '');
-    ui.gpu = el('axis', 1236, 470, 'Made in about 10 s on <img src="/film/assets/logos/vultr-white.svg" style="height:20px;vertical-align:-4px;margin:0 8px"> and UF HiPerGator');
+    ui.gpu = el('axis', 1236, 470, 'Made on <img src="/film/assets/logos/vultr-white.svg" style="height:20px;vertical-align:-4px;margin:0 8px"> and UF HiPerGator');
     words = story('One photo', 'The rest is imagined.',
       'Gemini describes the photo; a video diffusion model generates the views nobody filmed and decodes them straight into 3D. <b>74%</b> of this kitchen was never in the picture.');
   },
